@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
     if args.command == "generate-qa":
-        from docs2synth import qa
+        from Docs2Synth import qa
 
         docs = qa.load_documents(args.input)
         qa_pairs = qa.generate_qa_pairs(docs)
@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover
         print("Generated QA pairs, but writing is not yet implemented.")
 
     elif args.command == "train-retriever":
-        from docs2synth import retriever
+        from Docs2Synth import retriever
 
         qa_pairs = retriever.load_qa_pairs(args.qa_path)
         model_dir = retriever.train_retriever(

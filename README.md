@@ -42,6 +42,17 @@ Run tests with:
 pytest
 ```
 
+## Quick start (Conda)
+
+```bash
+# create and activate env (Python 3.10)
+conda env create -f environment.yml
+conda activate Docs2Synth
+
+# verify installation
+pytest
+```
+
 ## License
 
 [MIT](LICENSE) 

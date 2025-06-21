@@ -45,3 +45,6 @@ coverage.xml
 
 # VS Code
 .vscode/ 
+
+*.egg-info/
+.pytest_cache/

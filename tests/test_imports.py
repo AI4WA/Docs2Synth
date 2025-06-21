@@ -4,9 +4,9 @@ import importlib
 import pytest
 
 @pytest.mark.parametrize("module_name", [
-    "docs2synth",
-    "docs2synth.qa",
-    "docs2synth.retriever",
+    "Docs2Synth",
+    "Docs2Synth.qa",
+    "Docs2Synth.retriever",
 ])
 def test_import_module(module_name):
     assert importlib.import_module(module_name) is not None 

@@ -22,7 +22,7 @@ classifiers = [
 "Bug Tracker" = "https://github.com/AI4WA/Docs2Synth/issues"
 
 [project.scripts]
-docs2synth = "docs2synth.cli:main"
+docs2synth = "Docs2Synth.cli:main"
 
 [project.optional-dependencies]
 dev = [
