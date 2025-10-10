@@ -1,6 +1,10 @@
 # Docs2Synth
 
-Docs2Synth is a Python package aimed at helping you convertt, synthesise and train a retriever for your document datasets.
+[![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://ai4wa.github.io/Docs2Synth/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+
+Docs2Synth is a Python package aimed at helping you convert, synthesise and train a retriever for your document datasets.
 
 The workflow typically involves:
 
@@ -68,6 +72,22 @@ conda activate Docs2Synth
 # verify installation
 pytest
 ```
+
+## Documentation
+
+Full documentation is available at: **https://ai4wa.github.io/Docs2Synth/**
+
+Topics covered:
+- [Quick Start Guide](https://ai4wa.github.io/Docs2Synth/)
+- [Document Processing](https://ai4wa.github.io/Docs2Synth/workflow/document-processing/)
+- [QA Generation](https://ai4wa.github.io/Docs2Synth/workflow/qa-generation/)
+- [Retriever Training](https://ai4wa.github.io/Docs2Synth/workflow/retriever-training/)
+- [RAG Path](https://ai4wa.github.io/Docs2Synth/workflow/rag-path/)
+- [API Reference](https://ai4wa.github.io/Docs2Synth/api-reference/)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
