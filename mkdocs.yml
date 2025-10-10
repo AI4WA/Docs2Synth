@@ -1,0 +1,63 @@
+site_name: Docs2Synth
+site_description: A Python package for synthesizing and working with document data
+site_author: AI4WA
+site_url: https://github.com/AI4WA/Docs2Synth
+
+repo_name: AI4WA/Docs2Synth
+repo_url: https://github.com/AI4WA/Docs2Synth
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Workflow:
+      - Document Processing: workflow/document-processing.md
+      - QA Generation: workflow/qa-generation.md
+      - Retriever Training: workflow/retriever-training.md
+      - RAG Path: workflow/rag-path.md
+  - API Reference: api-reference.md

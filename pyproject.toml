@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "A Python package for synthesizing and working with document data."
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = []
+dependencies = [
+    "click>=8.0",
+]
 authors = [{ name = "AI4WA" }]
 license = { text = "MIT" }
 classifiers = [
@@ -28,6 +30,9 @@ docs2synth = "Docs2Synth.cli:main"
 dev = [
     "pytest>=7.0",
     "black>=23.0",
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.24.0",
 ]
 
 qa = [

@@ -1,14 +1,30 @@
 # Docs2Synth
 
-Docs2Synth is a Python package aimed at helping you synthesise and transform document data. It now includes tooling for generating question-answer pairs and training retrievers over your document corpus.
+Docs2Synth is a Python package aimed at helping you convertt, synthesise and train a retriever for your document datasets.
 
-## Features (planned)
+The workflow typically involves:
 
-* Generate QA pairs from document sets.
-* Train and evaluate dense/embedding-based retrievers.
-* Clean, well-tested Python APIs for working with document sets.
-* Command-line interface for common synthesis tasks.
-* Extensible plugin system.
+- Document processing
+  - MinerU or Other OCR methods
+- Agent based QA generation
+  - QA Pair generation
+    - For now, given content, generate a question and answer
+    - Later we can extend to multiple page contexts in a single QA pair.
+  - Two step verification
+    - Meaningful verifier
+    - Correctness checker
+  - Human judgement
+    - Human quickly annotate keep/discard
+- Retriever training
+  - Train LayoutLMv3 as a retriever
+  - Extend to bert, etc
+- RAG Path
+  - Other out-of-box retriever strageties without training
+- Framework pipeline
+  - Combine all the above steps into a single pipeline and control flow based on parameters
+  - Benchmarking
+    - Retrieveral Hit@K Performance
+    - End to end latency metrics
 
 ## Installation
 
@@ -55,4 +71,4 @@ pytest
 
 ## License
 
-[MIT](LICENSE) 
+[MIT](LICENSE)
