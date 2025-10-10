@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["train_retriever"]
 
+
 def train_retriever(
     qa_pairs: Iterable[Mapping[str, str]],
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
@@ -23,4 +24,4 @@ def train_retriever(
     # TODO: implement actual training; integrate with sentence-transformers Trainer.
 
     logger.warning("Retriever training not yet implemented; returning output_dir")
-    return output_dir 
+    return output_dir

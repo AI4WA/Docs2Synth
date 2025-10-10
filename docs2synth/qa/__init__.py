@@ -10,4 +10,4 @@ from .generator import generate_qa_pairs
 __all__: list[str] = [
     "load_documents",
     "generate_qa_pairs",
-] 
+]

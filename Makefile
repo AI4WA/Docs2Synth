@@ -1,4 +1,4 @@
-.PHONY: help install format lint type-check test clean pre-commit-install pre-commit-run
+.PHONY: help install format lint type-check test clean pre-commit-install pre-commit-run check
 
 help:
 	@echo "Available commands:"
@@ -7,10 +7,10 @@ help:
 	@echo "  make lint                 Run flake8 linter"
 	@echo "  make type-check           Run mypy type checker"
 	@echo "  make test                 Run pytest tests"
+	@echo "  make check                Run all checks (same as CI)"
 	@echo "  make clean                Remove build artifacts and cache files"
 	@echo "  make pre-commit-install   Install pre-commit hooks"
 	@echo "  make pre-commit-run       Run pre-commit on all files"
-	@echo "  make all                  Run format, lint, type-check, and test"
 
 install:
 	pip install -e ".[dev]"
@@ -50,5 +50,5 @@ pre-commit-run:
 	@echo "Running pre-commit on all files..."
 	pre-commit run --all-files
 
-all: format lint type-check test
-	@echo "All checks completed!"
+check: format lint type-check test
+	@echo "✅ All checks passed! Ready to push."

@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def timer(name: str = "operation", log_level: int = logging.INFO) -> Generator[dict[str, Any], None, None]:
+def timer(
+    name: str = "operation", log_level: int = logging.INFO
+) -> Generator[dict[str, Any], None, None]:
     """Context manager for timing code blocks.
 
     Args:

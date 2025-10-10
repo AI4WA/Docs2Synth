@@ -11,7 +11,10 @@ __all__ = [
     "generate_qa_pairs",
 ]
 
-def generate_qa_pairs(documents: Iterable[Mapping[str, str]]) -> Iterable[dict[str, str]]:  # pragma: no cover
+
+def generate_qa_pairs(
+    documents: Iterable[Mapping[str, str]]
+) -> Iterable[dict[str, str]]:  # pragma: no cover
     """Generate QA pairs from an iterable of `documents`.
 
     Parameters
@@ -35,4 +38,4 @@ def generate_qa_pairs(documents: Iterable[Mapping[str, str]]) -> Iterable[dict[s
         yield {
             "question": "<generated question>",
             "answer": "<generated answer>",
-        } 
+        }

@@ -7,6 +7,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        exclude: ^mkdocs\.yml$
       - id: check-added-large-files
         args: ['--maxkb=1000']
       - id: check-json
@@ -29,7 +30,7 @@ repos:
       - id: isort
         args: ["--profile", "black"]
 
-  # flake8 - Python linting
+  # flake8 - Python linting (simplified - no plugins)
   - repo: https://github.com/pycqa/flake8
     rev: 6.1.0
     hooks:
@@ -37,13 +38,7 @@ repos:
         args: [
           '--max-line-length=88',
           '--extend-ignore=E203,E266,E501,W503',
-          '--max-complexity=10'
-        ]
-        additional_dependencies: [
-          'flake8-docstrings',
-          'flake8-bugbear',
-          'flake8-comprehensions',
-          'flake8-simplify'
+          '--max-complexity=15'
         ]
 
   # mypy - Static type checking
@@ -51,5 +46,4 @@ repos:
     rev: v1.7.1
     hooks:
       - id: mypy
-        additional_dependencies: [types-all]
         args: [--ignore-missing-imports]

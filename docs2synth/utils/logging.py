@@ -14,7 +14,9 @@ from typing import Any
 # Default format for log messages
 DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 SIMPLE_FORMAT = "%(levelname)s: %(message)s"
-DETAILED_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
+DETAILED_FORMAT = (
+    "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
+)
 
 
 def setup_logging(
@@ -228,9 +230,7 @@ class ProgressLogger:
 
         # Log at intervals
         if percent >= self.last_logged_percent + self.log_interval:
-            self.logger.info(
-                f"{self.name}: {self.current}/{self.total} ({percent}%)"
-            )
+            self.logger.info(f"{self.name}: {self.current}/{self.total} ({percent}%)")
             self.last_logged_percent = percent
 
     def complete(self) -> None:

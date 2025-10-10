@@ -16,12 +16,7 @@ from Docs2Synth.utils.logging import (
     setup_cli_logging,
     setup_logging,
 )
-from Docs2Synth.utils.timer import (
-    Timer,
-    format_time,
-    timer,
-    timeit,
-)
+from Docs2Synth.utils.timer import Timer, format_time, timeit, timer
 
 __all__ = [
     # Logging

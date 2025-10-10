@@ -5,10 +5,10 @@ for dense/embedding-based retrieval systems.
 """
 
 from .dataloaders import load_qa_pairs
+from .evaluation import evaluate_retriever
+from .inference import retrieve
 from .models import Retriever
 from .train import train_retriever
-from .inference import retrieve
-from .evaluation import evaluate_retriever
 
 __all__: list[str] = [
     "load_qa_pairs",
@@ -16,4 +16,4 @@ __all__: list[str] = [
     "train_retriever",
     "retrieve",
     "evaluate_retriever",
-] 
+]

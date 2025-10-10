@@ -203,7 +203,7 @@ def train_retriever(
 
             click.echo(
                 click.style(
-                    f"✓ Retriever training completed (implementation pending)",
+                    "✓ Retriever training completed (implementation pending)",
                     fg="green",
                 )
             )
