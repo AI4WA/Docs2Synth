@@ -1,18 +1,81 @@
 # Docs2Synth
 
-Welcome to **Docs2Synth** - a Python package designed to help you convert, synthesize, and train retrievers for your document datasets.
+<div style="text-align: center; margin: 2rem 0;">
+  <h2 style="font-size: 2rem; font-weight: 700; margin-bottom: 1rem;">
+    Document Processing & Retriever Training Toolkit
+  </h2>
+  <p style="font-size: 1.2rem; color: var(--md-default-fg-color--light);">
+    A complete pipeline for converting, synthesizing, and training retrievers for your document datasets
+  </p>
+</div>
 
-## Overview
+---
 
-Docs2Synth provides a complete pipeline for working with document data, from OCR processing to retriever training and RAG (Retrieval-Augmented Generation) deployment.
+## :sparkles: Key Features
 
-### Key Features
+<div class="feature-grid" markdown>
 
-- **Document Processing**: Convert raw documents using MinerU or other OCR methods
-- **Agent-Based QA Generation**: Automatically generate high-quality question-answer pairs with verification
-- **Retriever Training**: Train custom retrievers (LayoutLMv3, BERT, etc.)
-- **RAG Path**: Out-of-box retriever strategies without training
-- **Benchmarking**: Track retrieval performance (Hit@K) and latency metrics
+<div class="feature-card" markdown>
+
+### :page_facing_up: Document Processing
+
+Convert raw documents using **MinerU** or other OCR methods. Supports PDFs, images, and complex layouts.
+
+[Learn more →](workflow/document-processing.md){ .md-button .md-button--primary }
+
+</div>
+
+<div class="feature-card" markdown>
+
+### :robot: Agent-Based QA Generation
+
+Automatically generate high-quality **question-answer pairs** with two-step verification (meaningfulness + correctness).
+
+[Learn more →](workflow/qa-generation.md){ .md-button .md-button--primary }
+
+</div>
+
+<div class="feature-card" markdown>
+
+### :brain: Retriever Training
+
+Train custom retrievers using **LayoutLMv3**, BERT, or sentence transformers on your domain-specific data.
+
+[Learn more →](workflow/retriever-training.md){ .md-button .md-button--primary }
+
+</div>
+
+<div class="feature-card" markdown>
+
+### :rocket: RAG Path
+
+Deploy immediately with **out-of-box strategies** (BM25, dense, hybrid) - no training required.
+
+[Learn more →](workflow/rag-path.md){ .md-button .md-button--primary }
+
+</div>
+
+<div class="feature-card" markdown>
+
+### :chart_with_upwards_trend: Benchmarking
+
+Track retrieval performance with **Hit@K**, MRR, NDCG metrics and monitor end-to-end latency.
+
+[Learn more →](workflow/retriever-training.md#evaluation){ .md-button .md-button--primary }
+
+</div>
+
+<div class="feature-card" markdown>
+
+### :gear: Extensible Pipeline
+
+Combine all steps into a **unified pipeline** with flexible control flow based on your requirements.
+
+[Get Started →](#quick-start){ .md-button .md-button--primary }
+
+</div>
+
+</div>
 
 ## Installation
 

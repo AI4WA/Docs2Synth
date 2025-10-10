@@ -1,35 +1,75 @@
 site_name: Docs2Synth
 site_description: A Python package for synthesizing and working with document data
 site_author: AI4WA
-site_url: https://github.com/AI4WA/Docs2Synth
+site_url: https://ai4wa.github.io/Docs2Synth/
 
 repo_name: AI4WA/Docs2Synth
 repo_url: https://github.com/AI4WA/Docs2Synth
+edit_uri: edit/main/docs/
 
 theme:
   name: material
+  language: en
+  # logo: assets/logo.png  # Add your logo later
+  # favicon: assets/favicon.png  # Add favicon later
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+    logo: material/book-open-variant
   palette:
     # Light mode
-    - scheme: default
-      primary: indigo
-      accent: indigo
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
       toggle:
-        icon: material/brightness-7
+        icon: material/weather-sunny
         name: Switch to dark mode
     # Dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
       toggle:
-        icon: material/brightness-4
+        icon: material/weather-night
         name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
   features:
+    # Navigation
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.tracking
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.prune
+    - navigation.indexes
     - navigation.top
+    - navigation.footer
+    # Table of contents
+    - toc.follow
+    - toc.integrate
+    # Search
     - search.suggest
     - search.highlight
+    - search.share
+    # Code blocks
     - content.code.copy
+    - content.code.annotate
+    - content.code.select
+    # Tabs
+    - content.tabs.link
+    # Tooltips
+    - content.tooltips
+    # Actions
+    - content.action.edit
+    - content.action.view
 
 plugins:
   - search
@@ -41,18 +81,84 @@ plugins:
   #           docstring_style: google
 
 markdown_extensions:
+  # Admonitions
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  # Code highlighting
   - pymdownx.highlight:
       anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
+  # Tabbed content
   - pymdownx.tabbed:
       alternate_style: true
+  # Task lists
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  # Emojis and icons
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  # Keys and marks
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.caret
+  - pymdownx.tilde
+  # Smart symbols
+  - pymdownx.smartsymbols
+  # Abbreviations
+  - abbr
+  - attr_list
+  - md_in_html
+  # Footnotes
+  - footnotes
+  # Metadata
+  - meta
+  # Definition lists
+  - def_list
+  # Tables
   - tables
+  # Table of contents
   - toc:
       permalink: true
+      permalink_title: Anchor link to this section
+      toc_depth: 3
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AI4WA/Docs2Synth
+      name: GitHub Repository
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/Docs2Synth/
+      name: PyPI Package
+  analytics:
+    feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/emoticon-happy-outline
+          name: This page was helpful
+          data: 1
+          note: >-
+            Thanks for your feedback!
+        - icon: material/emoticon-sad-outline
+          name: This page could be improved
+          data: 0
+          note: >-
+            Thanks for your feedback! Help us improve by
+            <a href="https://github.com/AI4WA/Docs2Synth/issues/new" target="_blank" rel="noopener">opening an issue</a>.
+  version:
+    provider: mike
+
+extra_css:
+  - stylesheets/extra.css
 
 nav:
   - Home: index.md
