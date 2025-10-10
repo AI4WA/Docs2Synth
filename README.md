@@ -2,7 +2,7 @@
 
 [![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://ai4wa.github.io/Docs2Synth/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 **Docs2Synth** is a Python package aimed at helping you convert, synthesise and train a retriever for your document datasets.
 
@@ -56,10 +56,29 @@ $ python -m venv .venv && source .venv/bin/activate
 $ pip install -e ".[dev]"
 ```
 
-Run tests with:
+### Code Quality Checks
+
+Before pushing, run all checks:
 
 ```bash
-pytest
+# Option 1: Using Make
+make check
+
+# Option 2: Using script
+./scripts/check.sh
+```
+
+This will run:
+- **isort** - Sort imports
+- **black** - Format code
+- **flake8** - Lint code
+- **pytest** - Run tests
+
+Individual commands:
+```bash
+make format    # Auto-format code (isort + black)
+make lint      # Check with flake8
+make test      # Run tests
 ```
 
 ## Quick start (Conda)
