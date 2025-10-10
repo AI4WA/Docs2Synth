@@ -49,7 +49,7 @@ class Config:
 
         Example:
             >>> config = Config.from_yaml("config.yml")
-            >>> print(config.get("datasets.output_dir"))
+            >>> print(config.get("data.datasets_dir"))
         """
         yaml_path = Path(yaml_path)
 
@@ -176,12 +176,24 @@ _global_config: Config | None = None
 def get_config() -> Config:
     """Get global configuration instance.
 
+    If not set, tries to load from config.yml in current directory,
+    otherwise uses defaults.
+
     Returns:
         Global Config instance
     """
     global _global_config
     if _global_config is None:
-        _global_config = Config()
+        # Try to load from default config.yml
+        config_path = Path("config.yml")
+        if config_path.exists():
+            try:
+                _global_config = Config.from_yaml(config_path)
+            except Exception as e:
+                logger.warning(f"Failed to load config.yml: {e}, using defaults")
+                _global_config = Config()
+        else:
+            _global_config = Config()
     return _global_config
 
 

@@ -16,6 +16,7 @@ from docs2synth.utils.logging import (
     log_function_call,
     setup_cli_logging,
     setup_logging,
+    setup_logging_from_config,
 )
 from docs2synth.utils.timer import Timer, format_time, timeit, timer
 
@@ -27,6 +28,7 @@ __all__ = [
     "set_config",
     # Logging
     "setup_logging",
+    "setup_logging_from_config",
     "get_logger",
     "LoggerContext",
     "configure_third_party_loggers",

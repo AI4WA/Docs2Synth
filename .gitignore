@@ -50,3 +50,5 @@ coverage.xml
 .pytest_cache/
 .claude/
 data/
+
+logs/
