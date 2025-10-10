@@ -2,30 +2,24 @@
 
 Complete API documentation for Docs2Synth modules.
 
+!!! note "Documentation Status"
+    This API reference will be automatically generated from docstrings as modules are implemented. Currently showing manual documentation for implemented modules.
+
 ## Preprocess
 
 Document preprocessing and OCR functionality.
 
 ### `Docs2Synth.preprocess.ocr`
 
-::: Docs2Synth.preprocess.ocr
-    options:
-      show_root_heading: true
-      show_source: true
+Functions for OCR processing using various engines (MinerU, Tesseract, Cloud APIs).
+
+**Coming soon** - See [Document Processing](workflow/document-processing.md) for usage examples.
 
 ### `Docs2Synth.preprocess.mineru`
 
-::: Docs2Synth.preprocess.mineru
-    options:
-      show_root_heading: true
-      show_source: true
+MinerU-specific OCR implementation for high-quality document extraction.
 
-### `Docs2Synth.preprocess.preprocessing`
-
-::: Docs2Synth.preprocess.preprocessing
-    options:
-      show_root_heading: true
-      show_source: true
+**Coming soon** - See [Document Processing](workflow/document-processing.md) for usage examples.
 
 ---
 
@@ -35,24 +29,15 @@ Question-answer pair generation and verification.
 
 ### `Docs2Synth.qa.generator`
 
-::: Docs2Synth.qa.generator
-    options:
-      show_root_heading: true
-      show_source: true
+Core QA generation functionality using LLMs.
+
+**Coming soon** - See [QA Generation](workflow/qa-generation.md) for usage examples.
 
 ### `Docs2Synth.qa.verification`
 
-::: Docs2Synth.qa.verification
-    options:
-      show_root_heading: true
-      show_source: true
+Two-step verification system (meaningfulness + correctness checking).
 
-### `Docs2Synth.qa.dataloaders`
-
-::: Docs2Synth.qa.dataloaders
-    options:
-      show_root_heading: true
-      show_source: true
+**Coming soon** - See [QA Generation](workflow/qa-generation.md) for usage examples.
 
 ---
 
@@ -62,38 +47,27 @@ Retriever training, inference, and evaluation.
 
 ### `Docs2Synth.retriever.train`
 
-::: Docs2Synth.retriever.train
-    options:
-      show_root_heading: true
-      show_source: true
+Training functionality for custom retrievers.
+
+**Coming soon** - See [Retriever Training](workflow/retriever-training.md) for usage examples.
 
 ### `Docs2Synth.retriever.models`
 
-::: Docs2Synth.retriever.models
-    options:
-      show_root_heading: true
-      show_source: true
+Model architectures (LayoutLMv3, BERT variants, sentence transformers).
+
+**Coming soon** - See [Retriever Training](workflow/retriever-training.md) for usage examples.
 
 ### `Docs2Synth.retriever.inference`
 
-::: Docs2Synth.retriever.inference
-    options:
-      show_root_heading: true
-      show_source: true
+Inference and retrieval functionality for trained models.
+
+**Coming soon** - See [Retriever Training](workflow/retriever-training.md) for usage examples.
 
 ### `Docs2Synth.retriever.evaluation`
 
-::: Docs2Synth.retriever.evaluation
-    options:
-      show_root_heading: true
-      show_source: true
+Evaluation metrics and benchmarking tools.
 
-### `Docs2Synth.retriever.dataloaders`
-
-::: Docs2Synth.retriever.dataloaders
-    options:
-      show_root_heading: true
-      show_source: true
+**Coming soon** - See [Retriever Training](workflow/retriever-training.md) for usage examples.
 
 ---
 
@@ -103,23 +77,9 @@ RAG retrieval strategies and pipelines.
 
 ### `Docs2Synth.rag`
 
-::: Docs2Synth.rag
-    options:
-      show_root_heading: true
-      show_source: true
+Out-of-box retrieval strategies (BM25, dense, hybrid, ColBERT).
 
----
-
-## Integration
-
-Integration utilities and helpers.
-
-### `Docs2Synth.integration`
-
-::: Docs2Synth.integration
-    options:
-      show_root_heading: true
-      show_source: true
+**Coming soon** - See [RAG Path](workflow/rag-path.md) for usage examples.
 
 ---
 
@@ -133,6 +93,12 @@ Utilities for logging, timing, and more.
     options:
       show_root_heading: true
       show_source: true
+      members:
+        - setup_logging
+        - get_logger
+        - setup_cli_logging
+        - LoggerContext
+        - ProgressLogger
 
 ### `Docs2Synth.utils.timer`
 
@@ -140,6 +106,11 @@ Utilities for logging, timing, and more.
     options:
       show_root_heading: true
       show_source: true
+      members:
+        - timer
+        - timeit
+        - Timer
+        - format_time
 
 ---
 
