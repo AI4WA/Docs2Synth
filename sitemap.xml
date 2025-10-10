@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://github.com/AI4WA/Docs2Synth/</loc>
+         <lastmod>2025-10-10</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/AI4WA/Docs2Synth/api-reference/</loc>
+         <lastmod>2025-10-10</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/AI4WA/Docs2Synth/workflow/document-processing/</loc>
+         <lastmod>2025-10-10</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/AI4WA/Docs2Synth/workflow/qa-generation/</loc>
+         <lastmod>2025-10-10</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/AI4WA/Docs2Synth/workflow/rag-path/</loc>
+         <lastmod>2025-10-10</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/AI4WA/Docs2Synth/workflow/retriever-training/</loc>
+         <lastmod>2025-10-10</lastmod>
+    </url>
+</urlset>
