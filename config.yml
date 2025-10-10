@@ -1,0 +1,21 @@
+# Docs2Synth Configuration File
+
+# Data folder settings - where to save all files
+data:
+  # Root data directory
+  root_dir: ./data
+
+  # Downloaded datasets
+  datasets_dir: ./data/datasets
+
+  # Processed data outputs
+  processed_dir: ./data/processed
+
+  # QA pairs
+  qa_pairs_dir: ./data/qa_pairs
+
+  # Models
+  models_dir: ./models
+
+  # Logs
+  logs_dir: ./logs

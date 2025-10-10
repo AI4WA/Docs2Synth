@@ -12,7 +12,7 @@ from pathlib import Path
 
 import click
 
-from Docs2Synth.utils import get_logger, setup_cli_logging, timer
+from docs2synth.utils import get_logger, load_config, setup_cli_logging, timer
 
 logger = get_logger(__name__)
 
@@ -25,8 +25,13 @@ logger = get_logger(__name__)
     count=True,
     help="Increase verbosity (can be repeated: -v, -vv)",
 )
+@click.option(
+    "--config",
+    type=click.Path(exists=True),
+    help="Path to configuration YAML file",
+)
 @click.pass_context
-def cli(ctx: click.Context, verbose: int) -> None:
+def cli(ctx: click.Context, verbose: int, config: str | None) -> None:
     """Docs2Synth - Document processing and retriever training toolkit.
 
     A Python package for converting, synthesizing, and training retrievers
@@ -35,6 +40,16 @@ def cli(ctx: click.Context, verbose: int) -> None:
     # Ensure ctx.obj exists
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
+
+    # Load configuration if provided
+    if config:
+        logger.info(f"Loading configuration from: {config}")
+        cfg = load_config(config)
+        ctx.obj["config"] = cfg
+    else:
+        from docs2synth.utils import get_config
+
+        ctx.obj["config"] = get_config()
 
     # Set up logging based on verbosity
     setup_cli_logging(verbose=verbose)
@@ -92,7 +107,7 @@ def generate_qa(
             logger.info(f"Using model: {model} with temperature: {temperature}")
 
             # TODO: Implement actual QA generation
-            # from Docs2Synth.qa import generator
+            # from docs2synth.qa import generator
             # docs = generator.load_documents(input)
             # qa_pairs = generator.generate_qa_pairs(
             #     docs,
@@ -189,7 +204,7 @@ def train_retriever(
             output_path.mkdir(parents=True, exist_ok=True)
 
             # TODO: Implement actual training
-            # from Docs2Synth.retriever import train
+            # from docs2synth.retriever import train
             # qa_pairs = train.load_qa_pairs(qa_path)
             # model = train.train_retriever(
             #     qa_pairs=qa_pairs,
@@ -246,7 +261,7 @@ def review_qa(
         logger.info(f"Sample rate: {sample_rate * 100}%")
 
         # TODO: Implement review interface
-        # from Docs2Synth.qa import human_review
+        # from docs2synth.qa import human_review
         # reviewed = human_review.annotate(
         #     qa_pairs=qa_path,
         #     output_file=output,
@@ -305,7 +320,7 @@ def benchmark(
             logger.info(f"Metrics: {', '.join(metrics)}")
 
             # TODO: Implement benchmarking
-            # from Docs2Synth.retriever import benchmark
+            # from docs2synth.retriever import benchmark
             # results = benchmark.evaluate_retriever(
             #     model_path=model_path,
             #     test_data=test_data,
@@ -323,6 +338,86 @@ def benchmark(
 
     except Exception as e:
         logger.exception("Benchmarking failed")
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
+@cli.command("datasets")
+@click.argument("action", type=click.Choice(["download", "list"]))
+@click.argument("name", required=False)
+@click.option(
+    "--output-dir",
+    type=click.Path(),
+    default=None,
+    help="Directory to save datasets (default: from config)",
+)
+@click.pass_context
+def datasets(
+    ctx: click.Context, action: str, name: str | None, output_dir: str | None
+) -> None:
+    """Manage datasets.
+
+    ACTION: 'download' or 'list'
+    NAME: Dataset name (required for download, use 'all' to download all)
+
+    Examples:
+        docs2synth datasets list
+        docs2synth datasets download docvqa
+        docs2synth datasets download all
+    """
+    from docs2synth.datasets.downloader import DATASETS, download_dataset
+
+    try:
+        if action == "list":
+            click.echo(click.style("Available datasets:", fg="green", bold=True))
+            for dataset_name in DATASETS.keys():
+                click.echo(f"  - {dataset_name}")
+
+        elif action == "download":
+            if name is None:
+                click.echo(
+                    click.style("✗ Error: NAME required for download", fg="red"),
+                    err=True,
+                )
+                sys.exit(1)
+
+            if name == "all":
+                if output_dir:
+                    click.echo(
+                        click.style(
+                            f"Downloading all datasets to {output_dir}...", fg="blue"
+                        )
+                    )
+                else:
+                    click.echo(click.style("Downloading all datasets...", fg="blue"))
+                for dataset_name in DATASETS.keys():
+                    click.echo(
+                        click.style(f"\nDownloading {dataset_name}...", fg="cyan")
+                    )
+                    dataset_path = download_dataset(dataset_name, output_dir)
+                    click.echo(
+                        click.style(
+                            f"✓ {dataset_name} saved to {dataset_path}", fg="green"
+                        )
+                    )
+                click.echo(click.style("\n✓ All datasets downloaded!", fg="green"))
+            else:
+                if output_dir:
+                    click.echo(
+                        click.style(f"Downloading {name} to {output_dir}...", fg="blue")
+                    )
+                else:
+                    click.echo(click.style(f"Downloading {name}...", fg="blue"))
+                dataset_path = download_dataset(name, output_dir)
+                click.echo(
+                    click.style(f"✓ Dataset saved to {dataset_path}", fg="green")
+                )
+
+    except ValueError as e:
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+    except Exception as e:
+        logger.exception("Dataset operation failed")
         click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
         sys.exit(1)
 

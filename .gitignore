@@ -49,3 +49,4 @@ coverage.xml
 *.egg-info/
 .pytest_cache/
 .claude/
+data/

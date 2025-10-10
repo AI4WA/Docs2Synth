@@ -7,7 +7,8 @@ This module provides common utilities including:
 
 from __future__ import annotations
 
-from Docs2Synth.utils.logging import (
+from docs2synth.utils.config import Config, get_config, load_config, set_config
+from docs2synth.utils.logging import (
     LoggerContext,
     ProgressLogger,
     configure_third_party_loggers,
@@ -16,9 +17,14 @@ from Docs2Synth.utils.logging import (
     setup_cli_logging,
     setup_logging,
 )
-from Docs2Synth.utils.timer import Timer, format_time, timeit, timer
+from docs2synth.utils.timer import Timer, format_time, timeit, timer
 
 __all__ = [
+    # Config
+    "Config",
+    "get_config",
+    "load_config",
+    "set_config",
     # Logging
     "setup_logging",
     "get_logger",
