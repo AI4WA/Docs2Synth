@@ -8,9 +8,9 @@ import pytest
 @pytest.mark.parametrize(
     "module_name",
     [
-        "Docs2Synth",
-        "Docs2Synth.qa",
-        "Docs2Synth.retriever",
+        "docs2synth",
+        "docs2synth.qa",
+        "docs2synth.retriever",
     ],
 )
 def test_import_module(module_name):
