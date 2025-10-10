@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-Docs2Synth is a Python package aimed at helping you convert, synthesise and train a retriever for your document datasets.
+**Docs2Synth** is a Python package aimed at helping you convert, synthesise and train a retriever for your document datasets.
 
 The workflow typically involves:
 

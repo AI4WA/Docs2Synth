@@ -1,22 +1,9 @@
 name: Docs2Synth
 channels:
-  - conda-forge
   - defaults
-
 dependencies:
-  # Core
+  - pytest
+  - black
   - python=3.10
   - pip
-
-  # (Optional) common ML stack via conda for speed; feel free to remove
-  - numpy>=1.22
-  - pytorch::pytorch      # only pulled in if CUDA is configured
-
-  # Dev tooling (tests / formatting)
-  - black>=23.0
-  - pytest>=7.0
-
-  # Anything not available on conda‐forge will be installed by pip
-  - pip:
-      # Install Docs2Synth in editable mode with all extras
-      - "-e .[dev,qa,retriever]" 
+  - pytorch
