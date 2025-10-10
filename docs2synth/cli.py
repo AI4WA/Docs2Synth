@@ -362,7 +362,7 @@ def datasets(
 
     Examples:
         docs2synth datasets list
-        docs2synth datasets download docvqa
+        docs2synth datasets download vrd-iu2024-tracka
         docs2synth datasets download all
     """
     from docs2synth.datasets.downloader import DATASETS, download_dataset
