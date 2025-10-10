@@ -16,11 +16,9 @@ if TYPE_CHECKING:
 class Retriever(Protocol):
     """Simple retriever protocol for typing purposes."""
 
-    def encode(self, texts: list[str]) -> np.ndarray:
-        ...
+    def encode(self, texts: list[str]) -> np.ndarray: ...
 
-    def similarity(self, queries: list[str], documents: list[str]) -> np.ndarray:
-        ...
+    def similarity(self, queries: list[str], documents: list[str]) -> np.ndarray: ...
 
 
 __all__ = ["Retriever"]
