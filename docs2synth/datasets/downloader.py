@@ -15,16 +15,21 @@ DATASETS = {
     "vrd-iu2024-tracka": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/vrd-iu2024-tracka.zip",
     "vrd-iu2024-trackb": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/vrd-iu2024-trackb.zip",
     "funsd": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/funsd.zip",
-    "cord": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/cord.zip"
+    "cord": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/cord.zip",
 }
 
 
-def download_dataset(name: str, output_dir: str | Path | None = None) -> Path:
+def download_dataset(
+    name: str,
+    output_dir: str | Path | None = None,
+    extract_images: bool = True,
+) -> Path:
     """Download a dataset by name to a specific directory.
 
     Args:
-        name: Dataset name (e.g., "vrd-iu2024-tracka", "vrd-iu2024-trackb")
+        name: Dataset name (e.g., "vrd-iu2024-tracka", "vrd-iu2024-trackb", "cord")
         output_dir: Directory to save the dataset. If None, uses config setting.
+        extract_images: If True, automatically extract images from parquet files (default: True)
 
     Returns:
         Path to the downloaded dataset folder
@@ -33,8 +38,8 @@ def download_dataset(name: str, output_dir: str | Path | None = None) -> Path:
         >>> download_dataset("vrd-iu2024-tracka")  # Uses config
         Path('./data/datasets/vrd-iu2024-tracka')
 
-        >>> download_dataset("vrd-iu2024-tracka", "./my_data")  # Custom dir
-        Path('./my_data/vrd-iu2024-tracka')
+        >>> download_dataset("cord", "./my_data")  # Custom dir with parquet extraction
+        Path('./my_data/cord')
     """
     if name not in DATASETS:
         raise ValueError(
@@ -69,6 +74,32 @@ def download_dataset(name: str, output_dir: str | Path | None = None) -> Path:
         with zipfile.ZipFile(download_path, "r") as zip_ref:
             zip_ref.extractall(dataset_dir)
         logger.info("Extraction complete")
+
+    # Auto-detect and extract images from parquet files if they exist
+    if extract_images:
+        # Search for parquet files in the dataset directory
+        parquet_files = list(dataset_dir.rglob("*.parquet"))
+
+        if parquet_files:
+            # Find the common directory containing the parquet files
+            parquet_dir = parquet_files[0].parent
+            logger.info(
+                f"Detected {len(parquet_files)} parquet file(s) in {parquet_dir}"
+            )
+            logger.info("Extracting images from parquet format dataset...")
+
+            from .parquet_loader import load_parquet_dataset
+
+            try:
+                splits_data = load_parquet_dataset(parquet_dir)
+                logger.info(
+                    f"Successfully extracted images from parquet files: "
+                    f"{', '.join(splits_data.keys())}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to extract images from parquet: {e}")
+        else:
+            logger.debug("No parquet files detected in dataset")
 
     logger.info(f"Dataset '{name}' ready at: {dataset_dir}")
     return dataset_dir
