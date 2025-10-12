@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from docs2synth.utils.timer import Timer, format_time, timer, timeit
+from docs2synth.utils.timer import Timer, format_time, timeit, timer
 
 
 class TestTimerContextManager:
@@ -212,7 +212,9 @@ class TestTimerClass:
     def test_timer_elapsed_not_completed_raises_error(self):
         """Test Timer.elapsed raises error if timer not completed."""
         t = Timer()
-        with pytest.raises(KeyError, match="Timer 'operation1' has no recorded results"):
+        with pytest.raises(
+            KeyError, match="Timer 'operation1' has no recorded results"
+        ):
             t.elapsed("operation1")
 
     def test_timer_get_all(self):

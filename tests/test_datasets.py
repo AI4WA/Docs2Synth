@@ -550,14 +550,17 @@ def test_download_dataset_parquet_extraction_failure():
                 mock_load.side_effect = Exception("Parquet extraction failed")
 
                 # Should not raise error, just log warning
-                result = download_dataset("vrd-iu2024-tracka", tmpdir, extract_images=True)
+                result = download_dataset(
+                    "vrd-iu2024-tracka", tmpdir, extract_images=True
+                )
                 assert result.exists()
 
 
 def test_extract_images_from_parquet_with_invalid_image_format():
     """Test extracting images with unexpected image data format (mock test)."""
-    from docs2synth.datasets.parquet_loader import extract_images_from_parquet
     from unittest.mock import patch
+
+    from docs2synth.datasets.parquet_loader import extract_images_from_parquet
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create test parquet file with valid data
@@ -592,11 +595,14 @@ def test_extract_images_from_parquet_with_invalid_image_format():
         with patch("pandas.read_parquet", side_effect=mock_read_parquet):
             with patch("docs2synth.datasets.parquet_loader.logger") as mock_logger:
                 # This should log a warning for the invalid row
-                results = extract_images_from_parquet(parquet_path, output_dir)
+                extract_images_from_parquet(parquet_path, output_dir)
 
                 # Check that warning was logged for invalid format
                 warning_calls = [call for call in mock_logger.warning.call_args_list]
-                assert any("unexpected image data format" in str(call).lower() for call in warning_calls)
+                assert any(
+                    "unexpected image data format" in str(call).lower()
+                    for call in warning_calls
+                )
 
 
 def test_extract_images_from_parquet_progress_logging():

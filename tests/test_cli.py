@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
-from docs2synth.cli import cli, datasets, main
+from docs2synth.cli import cli, main
 
 
 @pytest.fixture
@@ -49,7 +48,9 @@ class TestCLIMain:
 
         with patch("docs2synth.cli.load_config") as mock_load:
             mock_load.return_value = MagicMock()
-            result = runner.invoke(cli, ["--config", str(config_file), "datasets", "list"])
+            result = runner.invoke(
+                cli, ["--config", str(config_file), "datasets", "list"]
+            )
             assert result.exit_code == 0
             mock_load.assert_called_once()
 
@@ -109,7 +110,10 @@ class TestDatasetsCommand:
     def test_datasets_download_all(self, runner, tmp_path):
         """Test downloading all datasets."""
         with patch("docs2synth.datasets.downloader.download_dataset") as mock_download:
-            with patch("docs2synth.datasets.downloader.DATASETS", {"cord": "url1", "funsd": "url2"}):
+            with patch(
+                "docs2synth.datasets.downloader.DATASETS",
+                {"cord": "url1", "funsd": "url2"},
+            ):
                 mock_download.return_value = tmp_path / "dataset"
                 result = runner.invoke(cli, ["datasets", "download", "all"])
                 assert result.exit_code == 0

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 import sys
-import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -78,7 +76,9 @@ class TestSetupLogging:
         root = logging.getLogger("docs2synth")
 
         # Should have no StreamHandler
-        stream_handlers = [h for h in root.handlers if isinstance(h, logging.StreamHandler)]
+        stream_handlers = [
+            h for h in root.handlers if isinstance(h, logging.StreamHandler)
+        ]
         # May have file handlers but not stdout stream handlers
         assert all(h.stream != sys.stdout for h in stream_handlers)
 
@@ -169,6 +169,7 @@ class TestSetupLoggingFromConfig:
         """Test setup_logging_from_config without config loads default."""
         with patch("docs2synth.utils.config.get_config") as mock_get_config:
             mock_config = MagicMock()
+
             # Set up proper return values for all config.get() calls
             def get_side_effect(key, default=None):
                 config_values = {
@@ -381,4 +382,6 @@ class TestFormatStrings:
         # Simple should be simpler than default
         assert len(SIMPLE_FORMAT) < len(DEFAULT_FORMAT)
         # Detailed should have more info than default
-        assert "filename" in DETAILED_FORMAT.lower() or "lineno" in DETAILED_FORMAT.lower()
+        assert (
+            "filename" in DETAILED_FORMAT.lower() or "lineno" in DETAILED_FORMAT.lower()
+        )

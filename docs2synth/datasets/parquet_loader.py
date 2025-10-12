@@ -73,8 +73,8 @@ def extract_images_from_parquet(
 
         # Create output filename
         if isinstance(original_path, str) and "." in original_path:
-            # Use original filename if available
-            filename = Path(original_path).stem + f".{image_format}"
+            # Use original filename with its extension if available
+            filename = Path(original_path).name
         else:
             filename = f"image_{idx:04d}.{image_format}"
 
