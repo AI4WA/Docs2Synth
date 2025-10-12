@@ -28,6 +28,7 @@ htmlcov/
 .tox/
 .nox/
 .cache
+.coverage
 dotcoverage
 coverage.xml
 *.cover
@@ -49,3 +50,6 @@ coverage.xml
 *.egg-info/
 .pytest_cache/
 .claude/
+data/
+
+logs/

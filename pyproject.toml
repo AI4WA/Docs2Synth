@@ -2,8 +2,11 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["docs2synth", "docs2synth.datasets", "docs2synth.qa", "docs2synth.retriever", "docs2synth.utils", "docs2synth.rag"]
+
 [project]
-name = "Docs2Synth"
+name = "docs2synth"
 version = "0.1.0"
 description = "A Python package for synthesizing and working with document data."
 readme = "README.md"
@@ -24,11 +27,12 @@ classifiers = [
 "Bug Tracker" = "https://github.com/AI4WA/Docs2Synth/issues"
 
 [project.scripts]
-docs2synth = "Docs2Synth.cli:main"
+docs2synth = "docs2synth.cli:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "pytest-cov>=4.0",
     "black==24.8.0",
     "isort>=5.12",
     "flake8>=6.0",
@@ -36,6 +40,13 @@ dev = [
     "mkdocs-material>=9.0.0",
     # mkdocstrings will be enabled once modules are implemented
     # "mkdocstrings[python]>=0.24.0",
+    "pandas>=1.5.0",
+    "pyarrow>=10.0.0",
+]
+
+datasets = [
+    "pandas>=1.5.0",
+    "pyarrow>=10.0.0",
 ]
 
 qa = [
@@ -101,4 +112,30 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --cov=docs2synth --cov-report=term-missing --cov-report=html"
+
+# coverage configuration
+[tool.coverage.run]
+source = ["docs2synth"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+precision = 2
+show_missing = true
+
+[tool.coverage.html]
+directory = "htmlcov"
