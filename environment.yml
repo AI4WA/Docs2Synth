@@ -2,8 +2,14 @@ name: Docs2Synth
 channels:
   - defaults
 dependencies:
-  - pytest
-  - black==24.8.0
-  - python=3.10
   - pip
   - pytorch
+  - pytest
+  - python=3.10
+  - black
+  - isort
+  - flake8
+  - yaml
+  - conda=25.9.0
+  - pyyaml
+  - pandas
