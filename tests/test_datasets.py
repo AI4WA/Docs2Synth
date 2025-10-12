@@ -513,3 +513,144 @@ def test_download_dataset_no_parquet_files():
             # Should not raise error, just log a debug message
             result = download_dataset("vrd-iu2024-tracka", tmpdir, extract_images=True)
             assert result.exists()
+
+
+def test_download_dataset_parquet_extraction_failure():
+    """Test download_dataset handles parquet extraction failure gracefully."""
+    from docs2synth.datasets import download_dataset
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset_dir = Path(tmpdir) / "vrd-iu2024-tracka"
+        dataset_dir.mkdir(parents=True)
+
+        # Create a fake parquet file structure
+        data_dir = dataset_dir / "data"
+        data_dir.mkdir()
+
+        test_image_bytes = b"fake image data"
+        test_data = pd.DataFrame({"image": [test_image_bytes]})
+        test_data.to_parquet(data_dir / "train-00000-of-00001.parquet")
+
+        # Create a fake zip file
+        zip_path = Path(tmpdir) / "test.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("data/train-00000-of-00001.parquet", "fake content")
+
+        def fake_urlretrieve(url, path):
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_bytes(zip_path.read_bytes())
+
+        with patch(
+            "docs2synth.datasets.downloader.urlretrieve", side_effect=fake_urlretrieve
+        ):
+            # Mock the parquet extraction to raise an exception
+            with patch(
+                "docs2synth.datasets.parquet_loader.load_parquet_dataset"
+            ) as mock_load:
+                mock_load.side_effect = Exception("Parquet extraction failed")
+
+                # Should not raise error, just log warning
+                result = download_dataset("vrd-iu2024-tracka", tmpdir, extract_images=True)
+                assert result.exists()
+
+
+def test_extract_images_from_parquet_with_invalid_image_format():
+    """Test extracting images with unexpected image data format (mock test)."""
+    from docs2synth.datasets.parquet_loader import extract_images_from_parquet
+    from unittest.mock import patch
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create test parquet file with valid data
+        parquet_path = Path(tmpdir) / "test.parquet"
+        output_dir = Path(tmpdir) / "images"
+
+        test_image_bytes = b"fake image data"
+        test_data = pd.DataFrame(
+            {
+                "image": [test_image_bytes],
+                "ground_truth": [{"key": "value1"}],
+            }
+        )
+        test_data.to_parquet(parquet_path)
+
+        # Mock the dataframe iteration to return an invalid format
+        original_read = pd.read_parquet
+
+        def mock_read_parquet(path):
+            df = original_read(path)
+            # Create a mock dataframe that will have invalid image data
+            mock_df = pd.DataFrame(
+                {
+                    "image": [12345, test_image_bytes],  # First row invalid
+                    "ground_truth": [{"key": "value1"}, {"key": "value2"}],
+                }
+            )
+            # Copy attributes from real df
+            mock_df.columns = df.columns
+            return mock_df
+
+        with patch("pandas.read_parquet", side_effect=mock_read_parquet):
+            with patch("docs2synth.datasets.parquet_loader.logger") as mock_logger:
+                # This should log a warning for the invalid row
+                results = extract_images_from_parquet(parquet_path, output_dir)
+
+                # Check that warning was logged for invalid format
+                warning_calls = [call for call in mock_logger.warning.call_args_list]
+                assert any("unexpected image data format" in str(call).lower() for call in warning_calls)
+
+
+def test_extract_images_from_parquet_progress_logging():
+    """Test that progress is logged every 100 images."""
+    from docs2synth.datasets.parquet_loader import extract_images_from_parquet
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create test parquet file with many rows
+        parquet_path = Path(tmpdir) / "test.parquet"
+        output_dir = Path(tmpdir) / "images"
+
+        test_image_bytes = b"fake image data"
+        # Create 101 rows to trigger progress logging
+        test_data = pd.DataFrame(
+            {
+                "image": [test_image_bytes] * 101,
+            }
+        )
+        test_data.to_parquet(parquet_path)
+
+        # Extract images
+        with patch("docs2synth.datasets.parquet_loader.logger") as mock_logger:
+            results = extract_images_from_parquet(parquet_path, output_dir)
+
+            # Verify progress was logged (should log at index 100)
+            assert len(results) == 101
+            # Check that progress logging occurred
+            info_calls = [str(call) for call in mock_logger.info.call_args_list]
+            progress_logged = any("Processed 100/" in str(call) for call in info_calls)
+            assert progress_logged
+
+
+def test_extract_images_from_parquet_with_json_decode_error():
+    """Test extracting images with ground truth that fails JSON parsing."""
+    from docs2synth.datasets.parquet_loader import extract_images_from_parquet
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create test parquet file
+        parquet_path = Path(tmpdir) / "test.parquet"
+        output_dir = Path(tmpdir) / "images"
+
+        test_image_bytes = b"fake image data"
+        # Create test data with invalid JSON string that can't be parsed
+        test_data = pd.DataFrame(
+            {
+                "image": [test_image_bytes],
+                "ground_truth": ["not valid json {"],
+            }
+        )
+        test_data.to_parquet(parquet_path)
+
+        # Extract images - should keep string as-is when JSON parsing fails
+        results = extract_images_from_parquet(parquet_path, output_dir)
+
+        assert len(results) == 1
+        # Ground truth should remain as string since JSON parsing failed
+        assert results[0]["ground_truth"] == "not valid json {"
