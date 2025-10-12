@@ -16,6 +16,7 @@ DATASETS = {
     "vrd-iu2024-trackb": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/vrd-iu2024-trackb.zip",
     "funsd": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/funsd.zip",
     "cord": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/cord.zip",
+    "docs2synth-dev": "https://ai4wa.s3.us-east-1.amazonaws.com/Docs2Synth/datasets/docs2synth-dev.zip",
 }
 
 
