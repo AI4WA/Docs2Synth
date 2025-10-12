@@ -28,6 +28,7 @@ htmlcov/
 .tox/
 .nox/
 .cache
+.coverage
 dotcoverage
 coverage.xml
 *.cover
