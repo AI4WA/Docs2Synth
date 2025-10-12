@@ -33,25 +33,20 @@ jobs:
       - name: Create conda environment
         run: |
           conda env create -f environment.yml
-          conda activate Docs2Synth
-          pip install -e ".[dev]"
+          conda run -n Docs2Synth pip install -e ".[dev]"
 
       - name: Check code formatting with black
         run: |
-          conda activate Docs2Synth
-          black --check --diff .
+          conda run -n Docs2Synth black --check --diff .
 
       - name: Check import sorting with isort
         run: |
-          conda activate Docs2Synth
-          isort --check-only --diff .
+          conda run -n Docs2Synth isort --check-only --diff .
 
       - name: Lint with flake8
         run: |
-          conda activate Docs2Synth
-          flake8 .
+          conda run -n Docs2Synth flake8 .
 
       - name: Run tests with pytest
         run: |
-          conda activate Docs2Synth
-          pytest --tb=short -v
+          conda run -n Docs2Synth pytest --tb=short -v
