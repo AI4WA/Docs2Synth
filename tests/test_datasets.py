@@ -152,7 +152,7 @@ def test_extract_images_from_parquet_with_dict_format():
 
         # Verify files were created
         assert (output_dir / "test_image.png").exists()
-        assert (output_dir / "another_image.png").exists()
+        assert (output_dir / "another_image.jpg").exists()
 
         # Verify content
         assert (output_dir / "test_image.png").read_bytes() == test_image_bytes
