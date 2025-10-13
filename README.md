@@ -36,7 +36,7 @@ The workflow typically involves:
 pip install git+https://github.com/AI4WA/Docs2Synth.git
 ```
 
-or, once released on PyPI:
+or, once released on PyPI [To be released]:
 
 ```bash
 pip install docs2synth
@@ -51,9 +51,12 @@ $ cd Docs2Synth
 
 # create virtual environment (Python ≥3.8)
 $ python -m venv .venv && source .venv/bin/activate
-
 # install editable package with test dependencies
 $ pip install -e ".[dev]"
+
+# or use conda [recommended]
+$ conda env create -f environment.yml
+$ conda activate Docs2Synth
 ```
 
 ### Code Quality Checks
@@ -61,10 +64,7 @@ $ pip install -e ".[dev]"
 Before pushing, run all checks:
 
 ```bash
-# Option 1: Using Make
-make check
 
-# Option 2: Using script
 ./scripts/check.sh
 ```
 
@@ -74,23 +74,6 @@ This will run:
 - **flake8** - Lint code
 - **pytest** - Run tests
 
-Individual commands:
-```bash
-make format    # Auto-format code (isort + black)
-make lint      # Check with flake8
-make test      # Run tests
-```
-
-## Quick start (Conda)
-
-```bash
-# create and activate env (Python 3.10)
-conda env create -f environment.yml
-conda activate Docs2Synth
-
-# verify installation
-pytest
-```
 
 ## Documentation
 
