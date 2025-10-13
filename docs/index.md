@@ -118,22 +118,6 @@ conda activate Docs2Synth
 pytest
 ```
 
-## Basic Usage
-
-### Generate QA Pairs
-
-```bash
-docs2synth generate-qa /path/to/documents /path/to/output.jsonl
-```
-
-### Train a Retriever
-
-```bash
-docs2synth train-retriever /path/to/qa_pairs.jsonl \
-    --output-dir models/retriever \
-    --model-name sentence-transformers/all-MiniLM-L6-v2
-```
-
 ## Workflow
 
 The typical Docs2Synth workflow follows these stages:
