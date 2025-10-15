@@ -9,27 +9,19 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# Default format for log messages
-DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-SIMPLE_FORMAT = "%(levelname)s: %(message)s"
-DETAILED_FORMAT = (
+# Default format always includes filename and line number
+LOG_FORMAT = (
     "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
 )
-
-# Format string mapping
-FORMAT_MAPPING = {
-    "simple": SIMPLE_FORMAT,
-    "default": DEFAULT_FORMAT,
-    "detailed": DETAILED_FORMAT,
-}
 
 
 def setup_logging_from_config(config: Any = None) -> None:
     """Set up logging using configuration from config.yml.
+
+    Always logs to both console and file with line numbers included.
 
     Args:
         config: Config object. If None, loads from default config.
@@ -46,85 +38,73 @@ def setup_logging_from_config(config: Any = None) -> None:
 
     # Get logging configuration
     log_level = config.get("logging.level", "INFO")
-    log_format_name = config.get("logging.format", "default")
-    log_format = FORMAT_MAPPING.get(log_format_name, DEFAULT_FORMAT)
-
-    # Convert string level to logging constant
     if isinstance(log_level, str):
         log_level = getattr(logging, log_level.upper())
 
-    # Get console and file levels
-    console_level = config.get("logging.console.level", "INFO")
-    if isinstance(console_level, str):
-        console_level = getattr(logging, console_level.upper())
-
-    file_level = config.get("logging.file.level", "DEBUG")
-    if isinstance(file_level, str):
-        file_level = getattr(logging, file_level.upper())
-
-    # Set root logger to the minimum level needed (most verbose)
-    # Individual handlers will filter at their own levels
-    min_level = min(console_level, file_level)
-
     # Get root logger
     root_logger = logging.getLogger("docs2synth")
-    root_logger.setLevel(min_level)
+    root_logger.setLevel(log_level)
 
     # Remove existing handlers to avoid duplicates
     root_logger.handlers.clear()
-    # Prevent messages from propagating to the root logger (avoid duplicates
-    # when other libraries configure root handlers)
     root_logger.propagate = False
 
-    # Create formatter
-    formatter = logging.Formatter(log_format)
+    # Create formatter with line numbers
+    formatter = logging.Formatter(LOG_FORMAT)
 
-    # Console handler
-    console_enabled = config.get("logging.console.enabled", True)
-    if console_enabled:
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(console_level)
-        console_handler.setFormatter(formatter)
-        root_logger.addHandler(console_handler)
+    # Console handler (always enabled)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
 
-    # File handler with rotation
-    file_enabled = config.get("logging.file.enabled", False)
-    if file_enabled:
-        log_file_path = config.get("logging.file.path", "./logs/docs2synth.log")
-        max_bytes = config.get("logging.file.max_bytes", 10485760)  # 10MB default
-        backup_count = config.get("logging.file.backup_count", 5)
-        use_timestamp = config.get("logging.file.use_timestamp", False)
+    # File handler with rotation (always enabled)
+    log_file_path = config.get("logging.file.path", "./logs/docs2synth.log")
+    if not isinstance(log_file_path, (str, Path)):
+        log_file_path = "./logs/docs2synth.log"
+    max_bytes = config.get("logging.file.max_bytes", 10485760)  # 10MB default
+    try:
+        max_bytes = int(max_bytes)
+    except Exception:
+        max_bytes = 10485760
+    backup_count = config.get("logging.file.backup_count", 5)
+    try:
+        backup_count = int(backup_count)
+    except Exception:
+        backup_count = 5
 
-        # Create log directory if it doesn't exist
-        log_path = Path(log_file_path)
+    # Create log directory if it doesn't exist
+    log_path = Path(log_file_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Add timestamp to filename if requested
-        if use_timestamp:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # Insert timestamp before file extension
-            stem = log_path.stem
-            suffix = log_path.suffix
-            log_path = log_path.parent / f"{stem}_{timestamp}{suffix}"
-
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Use RotatingFileHandler for automatic log rotation
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_path, maxBytes=max_bytes, backupCount=backup_count
-        )
-        file_handler.setLevel(file_level)
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
+    # Use RotatingFileHandler for automatic log rotation
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_path, maxBytes=max_bytes, backupCount=backup_count
+    )
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
 
     # Configure third-party loggers
     third_party_level = config.get("logging.third_party.level", "WARNING")
     if isinstance(third_party_level, str):
-        third_party_level = getattr(logging, third_party_level.upper())
+        third_party_level = getattr(logging, third_party_level.upper(), logging.WARNING)
+    if not isinstance(third_party_level, int):
+        third_party_level = logging.WARNING
 
     third_party_loggers = config.get(
         "logging.third_party.loggers",
         ["urllib3", "requests", "transformers", "torch", "tensorflow", "PIL"],
     )
+    if not isinstance(third_party_loggers, (list, tuple)):
+        third_party_loggers = [
+            "urllib3",
+            "requests",
+            "transformers",
+            "torch",
+            "tensorflow",
+            "PIL",
+        ]
 
     for logger_name in third_party_loggers:
         logging.getLogger(logger_name).setLevel(third_party_level)
@@ -132,17 +112,15 @@ def setup_logging_from_config(config: Any = None) -> None:
 
 def setup_logging(
     level: int | str = logging.INFO,
-    format_string: str = DEFAULT_FORMAT,
-    log_file: str | Path | None = None,
-    console: bool = True,
+    log_file: str | Path = "./logs/docs2synth.log",
 ) -> None:
     """Set up logging configuration for the package.
 
+    Always logs to both console and file with line numbers included.
+
     Args:
         level: Logging level (e.g., logging.INFO, "DEBUG")
-        format_string: Format string for log messages
-        log_file: Optional file path to write logs to
-        console: Whether to log to console (stdout)
+        log_file: File path to write logs to (default: ./logs/docs2synth.log)
 
     Example:
         >>> setup_logging(level="DEBUG", log_file="docs2synth.log")
@@ -158,28 +136,25 @@ def setup_logging(
 
     # Remove existing handlers to avoid duplicates
     root_logger.handlers.clear()
-    # Prevent messages from propagating to the root logger (avoid duplicates)
     root_logger.propagate = False
 
-    # Create formatter
-    formatter = logging.Formatter(format_string)
+    # Create formatter with line numbers
+    formatter = logging.Formatter(LOG_FORMAT)
 
-    # Add console handler if requested
-    if console:
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(level)
-        console_handler.setFormatter(formatter)
-        root_logger.addHandler(console_handler)
+    # Console handler (always enabled)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
 
-    # Add file handler if requested
-    if log_file:
-        log_path = Path(log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+    # File handler (always enabled)
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        file_handler = logging.FileHandler(log_path)
-        file_handler.setLevel(level)
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
+    file_handler = logging.FileHandler(log_path)
+    file_handler.setLevel(level)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -351,28 +326,95 @@ class ProgressLogger:
         self.logger.info(f"{self.name}: Completed ({self.total}/{self.total})")
 
 
-def setup_cli_logging(verbose: int = 0) -> None:
+def setup_cli_logging(verbose: int = 0, config: Any = None) -> None:
     """Set up logging for CLI commands.
 
+    Always logs to both console and file with line numbers included.
+    The verbose flag controls the log level.
+
     Args:
-        verbose: Verbosity level (0=INFO, 1=DEBUG, 2+=DEBUG with details)
+        verbose: Verbosity level (0=INFO, 1+=DEBUG)
+        config: Config object. If None, loads from default config.
 
     Example:
         >>> # In CLI
-        >>> setup_cli_logging(verbose=args.verbose)
+        >>> setup_cli_logging(verbose=args.verbose, config=config)
     """
-    if verbose == 0:
-        level = logging.INFO
-        format_string = SIMPLE_FORMAT
-    elif verbose == 1:
-        level = logging.DEBUG
-        format_string = DEFAULT_FORMAT
-    else:
-        level = logging.DEBUG
-        format_string = DETAILED_FORMAT
+    # Load config if not provided
+    if config is None:
+        from .config import get_config
 
-    setup_logging(level=level, format_string=format_string, console=True)
+        config = get_config()
 
-    # Quiet third-party loggers
-    if verbose < 2:
-        configure_third_party_loggers(logging.WARNING)
+    # Determine log level based on verbose flag (robust to non-int verbose)
+    try:
+        log_level = logging.DEBUG if int(verbose) > 0 else logging.INFO
+    except Exception:
+        log_level = logging.INFO
+
+    # Get root logger
+    root_logger = logging.getLogger("docs2synth")
+    root_logger.setLevel(log_level)
+
+    # Remove existing handlers to avoid duplicates
+    root_logger.handlers.clear()
+    root_logger.propagate = False
+
+    # Create formatter with line numbers
+    formatter = logging.Formatter(LOG_FORMAT)
+
+    # Console handler (always enabled)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    # File handler with rotation (always enabled)
+    log_file_path = config.get("logging.file.path", "./logs/docs2synth.log")
+    if not isinstance(log_file_path, (str, Path)):
+        log_file_path = "./logs/docs2synth.log"
+    max_bytes = config.get("logging.file.max_bytes", 10485760)  # 10MB default
+    try:
+        max_bytes = int(max_bytes)
+    except Exception:
+        max_bytes = 10485760
+    backup_count = config.get("logging.file.backup_count", 5)
+    try:
+        backup_count = int(backup_count)
+    except Exception:
+        backup_count = 5
+
+    # Create log directory if it doesn't exist
+    log_path = Path(log_file_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Use RotatingFileHandler for automatic log rotation
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_path, maxBytes=max_bytes, backupCount=backup_count
+    )
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
+
+    # Configure third-party loggers to reduce noise
+    third_party_level = config.get("logging.third_party.level", "WARNING")
+    if isinstance(third_party_level, str):
+        third_party_level = getattr(logging, third_party_level.upper(), logging.WARNING)
+    if not isinstance(third_party_level, int):
+        third_party_level = logging.WARNING
+
+    third_party_loggers = config.get(
+        "logging.third_party.loggers",
+        ["urllib3", "requests", "transformers", "torch", "tensorflow", "PIL"],
+    )
+    if not isinstance(third_party_loggers, (list, tuple)):
+        third_party_loggers = [
+            "urllib3",
+            "requests",
+            "transformers",
+            "torch",
+            "tensorflow",
+            "PIL",
+        ]
+    for logger_name in third_party_loggers:
+        logging.getLogger(logger_name).setLevel(third_party_level)

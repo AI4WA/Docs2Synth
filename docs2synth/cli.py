@@ -41,18 +41,17 @@ def cli(ctx: click.Context, verbose: int, config: str | None) -> None:
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
 
-    # Initialize logging as early as possible so later logs use our handlers
-    setup_cli_logging(verbose=verbose)
-
-    # Load configuration if provided
+    # Load configuration first (needed for logging setup)
     if config:
-        logger.info(f"Loading configuration from: {config}")
         cfg = load_config(config)
         ctx.obj["config"] = cfg
     else:
         from docs2synth.utils import get_config
 
         ctx.obj["config"] = get_config()
+
+    # Initialize logging as early as possible so later logs use our handlers
+    setup_cli_logging(verbose=verbose, config=ctx.obj["config"])
 
 
 @cli.command("datasets")
