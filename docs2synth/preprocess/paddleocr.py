@@ -12,7 +12,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
-
+import logging
 from docs2synth.utils.logging import get_logger
 
 from .schema import (
@@ -24,6 +24,9 @@ from .schema import (
 )
 
 logger = get_logger(__name__)
+
+
+logging.getLogger("ppocr").setLevel(logging.INFO)
 
 try:
     from paddleocr import PaddleOCR  # type: ignore
