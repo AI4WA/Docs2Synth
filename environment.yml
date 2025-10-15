@@ -17,5 +17,6 @@ dependencies:
   - pillow
   - pip:
       - paddlepaddle==3.2.0
+      - paddleocr==3.2.0
       - shapely>=1.8
       - scikit-image>=0.21
