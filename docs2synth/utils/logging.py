@@ -72,6 +72,9 @@ def setup_logging_from_config(config: Any = None) -> None:
 
     # Remove existing handlers to avoid duplicates
     root_logger.handlers.clear()
+    # Prevent messages from propagating to the root logger (avoid duplicates
+    # when other libraries configure root handlers)
+    root_logger.propagate = False
 
     # Create formatter
     formatter = logging.Formatter(log_format)
@@ -155,6 +158,8 @@ def setup_logging(
 
     # Remove existing handlers to avoid duplicates
     root_logger.handlers.clear()
+    # Prevent messages from propagating to the root logger (avoid duplicates)
+    root_logger.propagate = False
 
     # Create formatter
     formatter = logging.Formatter(format_string)
