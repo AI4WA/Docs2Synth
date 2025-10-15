@@ -7,12 +7,13 @@ from a file path and converts the OCR detections into the schema defined in
 
 from __future__ import annotations
 
+import logging
 import mimetypes
 import os
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
-import logging
+
 from docs2synth.utils.logging import get_logger
 
 from .schema import (
