@@ -350,7 +350,7 @@ class PaddleOCRProcessor:
             objects=objects,
             object_list=[],
             bbox_list=bbox_list,
-            context=" ".join(context_parts).strip() + (" " if context_parts else ""),
+            context=" ".join(context_parts),
             reading_order_ids=reading_order_ids,
             process_metadata=process_metadata,
             document_metadata=document_metadata,
