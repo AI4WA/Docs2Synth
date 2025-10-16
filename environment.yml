@@ -4,19 +4,13 @@ channels:
   - conda-forge
 dependencies:
   - pip
-  - pytorch
-  - pytest
   - python=3.10
+  - pytest
   - black
   - isort
   - flake8
-  - yaml
-  - conda=25.9.0
   - pyyaml
   - pandas
   - pillow
-  - pip:
-      - paddlepaddle==3.2.0
-      - paddleocr==3.2.0
-      - shapely>=1.8
-      - scikit-image>=0.21
+  # Note: PyTorch, PaddlePaddle, and other dependencies will be installed via pip
+  # using requirements.txt files to properly handle CPU/GPU variants

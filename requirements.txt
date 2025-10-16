@@ -1,0 +1,20 @@
+# Base requirements for Docs2Synth
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+click>=8.0
+
+# PaddleOCR and dependencies
+paddlepaddle==3.2.0
+paddleocr==3.2.0
+shapely>=1.8
+scikit-image>=0.21
+
+# Additional dependencies
+pyyaml
+pandas>=1.5.0
+pillow
+
+# Note: PyTorch will be installed separately based on CPU/GPU availability
+# For CPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# For GPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

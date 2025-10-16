@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files
+COPY requirements.txt requirements-cpu.txt requirements-dev.txt ./
 COPY pyproject.toml ./
 COPY README.md ./
 
@@ -33,10 +34,11 @@ COPY tests/ ./tests/
 COPY scripts/ ./scripts/
 
 # Install Python dependencies
-# Install CPU-only version of PyTorch
 RUN pip install --upgrade pip && \
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
-    pip install -e ".[dev,datasets,qa,retriever]"
+    pip install -r requirements-cpu.txt && \
+    pip install -r requirements.txt && \
+    pip install -r requirements-dev.txt && \
+    pip install -e .
 
 # Create directories for data and logs
 RUN mkdir -p /app/data /app/logs

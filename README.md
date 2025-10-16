@@ -44,7 +44,7 @@ pip install docs2synth
 
 ## Development setup
 
-We provide automated setup scripts for all major platforms to make development environment setup as smooth as possible.
+We provide automated setup scripts for all major platforms that automatically detect GPU availability and install the appropriate PyTorch version.
 
 ### Quick Setup
 
@@ -55,12 +55,25 @@ We provide automated setup scripts for all major platforms to make development e
 git clone https://github.com/AI4WA/Docs2Synth.git
 cd Docs2Synth
 
-# Run setup script with conda (recommended)
+# Run setup script with conda (recommended) - auto-detects GPU
 ./setup.sh conda
 
 # Or use venv
 ./setup.sh venv
+
+# Force GPU installation (if you have NVIDIA GPU)
+./setup.sh conda --gpu
+
+# Or force CPU-only installation
+./setup.sh conda  # (will prompt, choose 'n' for CPU)
 ```
+
+**The setup script will:**
+- Automatically detect NVIDIA GPU availability
+- Prompt you to install GPU-enabled PyTorch if GPU is detected
+- Install CPU-only PyTorch if no GPU is found
+- Install all project dependencies from requirements.txt files
+- Verify the installation
 
 #### Windows
 
@@ -69,11 +82,14 @@ REM Clone repository
 git clone https://github.com/AI4WA/Docs2Synth.git
 cd Docs2Synth
 
-REM Run setup script with conda (recommended)
+REM Run setup script with conda (recommended) - auto-detects GPU
 setup.bat conda
 
 REM Or use venv
 setup.bat venv
+
+REM Force GPU installation (if you have NVIDIA GPU)
+setup.bat conda --gpu
 ```
 
 ### Docker Setup
@@ -139,14 +155,50 @@ If you prefer manual setup:
 ```bash
 # Create virtual environment (Python ≥3.8)
 python -m venv .venv && source .venv/bin/activate
-# Install editable package with all dependencies
-pip install -e ".[dev,datasets,qa,retriever]"
 
-# Or use conda
+# Upgrade pip
+pip install --upgrade pip
+
+# Install PyTorch (choose CPU or GPU version)
+# For CPU:
+pip install -r requirements-cpu.txt
+# For GPU (CUDA 11.8):
+# pip install -r requirements-gpu.txt
+
+# Install project dependencies
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Install package in editable mode
+pip install -e .
+```
+
+**Or with conda:**
+
+```bash
+# Create conda environment
 conda env create -f environment.yml
 conda activate Docs2Synth
-pip install -e ".[dev,datasets,qa,retriever]"
+
+# Install PyTorch (CPU or GPU)
+pip install -r requirements-cpu.txt  # or requirements-gpu.txt
+
+# Install dependencies
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Install package
+pip install -e .
 ```
+
+### Dependency Management
+
+The project uses separate requirements files for better control:
+
+- **requirements.txt**: Core dependencies (PaddleOCR, etc.)
+- **requirements-cpu.txt**: CPU-only PyTorch
+- **requirements-gpu.txt**: GPU-enabled PyTorch (CUDA 11.8)
+- **requirements-dev.txt**: Development tools (pytest, black, etc.)
 
 ### Code Quality Checks
 
