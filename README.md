@@ -42,11 +42,16 @@ or, once released on PyPI [To be released]:
 pip install docs2synth
 ```
 
-## Development setup
+## Development Setup
+
+We provide two approaches for setting up your development environment:
+
+1. **Local Setup** (Recommended for most users) - Automated scripts with GPU auto-detection
+2. **Docker Setup** (Alternative) - Containerized environment for difficult setups or production deployment
+
+### Option 1: Local Setup (Recommended)
 
 We provide automated setup scripts for all major platforms that automatically detect GPU availability and install the appropriate PyTorch version.
-
-### Quick Setup
 
 #### Unix-based Systems (macOS, Linux, WSL)
 
@@ -92,38 +97,90 @@ REM Force GPU installation (if you have NVIDIA GPU)
 setup.bat conda --gpu
 ```
 
-### Docker Setup
+### Option 2: Docker Setup (Alternative)
 
-For containerized development and deployment, we provide Docker configurations for both CPU-only and GPU-enabled environments.
+**When to use Docker:**
+- Difficult to set up the local development environment (dependency conflicts, OS limitations)
+- Need consistent environment across team members
+- Preparing for production deployment
+- Want isolated environment without affecting system Python
 
-#### CPU-only Container
+We provide a unified Dockerfile that supports multiple build configurations through build arguments.
+
+#### Available Docker Images
+
+| Image Type | Use Case | Size | Build Command |
+|------------|----------|------|---------------|
+| `cpu-minimal` | Development, fastest builds | ~2.5 GB | `./docker-build.sh cpu-minimal` |
+| `cpu` | Production CPU deployment | ~2.5 GB | `./docker-build.sh cpu` |
+| `gpu` | Training/GPU inference | ~11 GB | `./docker-build.sh gpu` |
+
+#### Quick Start with Docker
+
+**Using docker-compose (Recommended):**
 
 ```bash
-# Build and run CPU-only container
+# For development (CPU, minimal dependencies)
+docker compose up -d docs2synth-cpu-minimal
+docker exec -it docs2synth-cpu-minimal /bin/bash
+
+# For production (CPU, full dependencies)
 docker compose up -d docs2synth-cpu
-
-# Enter the container
 docker exec -it docs2synth-cpu /bin/bash
+
+# For GPU workloads (requires NVIDIA GPU + nvidia-docker)
+docker compose up -d docs2synth-gpu
+docker exec -it docs2synth-gpu /bin/bash
 ```
 
-#### GPU-enabled Container
-
-For GPU support, you need:
-- NVIDIA GPU with CUDA support
-- NVIDIA Docker runtime installed ([installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html))
+**Using the helper script:**
 
 ```bash
-# Build and run GPU-enabled container
-docker-compose up -d docs2synth-gpu
+# Make script executable
+chmod +x docker-build.sh
 
-# Enter the container
-docker exec -it docs2synth-gpu /bin/bash
+# Build CPU minimal (default, fastest)
+./docker-build.sh cpu-minimal
 
-# Verify GPU access inside container
-python -c "import torch; print(torch.cuda.is_available())"
+# Build CPU full
+./docker-build.sh cpu
+
+# Build GPU image
+./docker-build.sh gpu
+
+# Build all variants
+./docker-build.sh all
+
+# Run the built image
+docker run -it \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  docs2synth:cpu-minimal
 ```
 
-To enable GPU support, uncomment the `deploy` section in `docker-compose.yml`:
+**Direct Docker build:**
+
+```bash
+# CPU minimal (development)
+docker build --build-arg BUILD_TYPE=cpu-minimal -t docs2synth:cpu-minimal .
+
+# CPU full (production)
+docker build --build-arg BUILD_TYPE=cpu -t docs2synth:cpu .
+
+# GPU (requires linux/amd64)
+docker build --build-arg BUILD_TYPE=gpu --platform linux/amd64 -t docs2synth:gpu .
+```
+
+#### GPU Support in Docker
+
+**Requirements:**
+- Linux host with NVIDIA GPU
+- NVIDIA drivers installed
+- NVIDIA Container Toolkit ([installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html))
+
+**Enable GPU in docker-compose.yml:**
+
+Uncomment the `deploy` section under `docs2synth-gpu`:
 
 ```yaml
 deploy:
@@ -135,18 +192,48 @@ deploy:
           capabilities: [gpu]
 ```
 
-#### Building Docker Images Manually
+**Run with GPU:**
 
 ```bash
-# Build CPU-only image
-docker build -t docs2synth:cpu -f Dockerfile .
+# Using docker-compose
+docker compose up -d docs2synth-gpu
+docker exec -it docs2synth-gpu python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
 
-# Build GPU-enabled image
-docker build -t docs2synth:gpu -f Dockerfile.gpu .
-
-# Run container with volume mounts
-docker run -it -v $(pwd)/data:/app/data -v $(pwd)/logs:/app/logs docs2synth:cpu
+# Using docker run
+docker run --gpus all -it \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  docs2synth:gpu
 ```
+
+#### Production Deployment with Docker
+
+Docker images are ideal for production deployment:
+
+```bash
+# Build on your CI/CD pipeline (x86_64 runners)
+docker build --build-arg BUILD_TYPE=cpu -t your-registry/docs2synth:cpu .
+docker push your-registry/docs2synth:cpu
+
+# Or for GPU workloads
+docker build --build-arg BUILD_TYPE=gpu --platform linux/amd64 -t your-registry/docs2synth:gpu .
+docker push your-registry/docs2synth:gpu
+
+# Deploy on production servers
+docker pull your-registry/docs2synth:cpu
+docker run -d \
+  --name docs2synth-prod \
+  -v /data:/app/data \
+  -v /logs:/app/logs \
+  your-registry/docs2synth:cpu \
+  python -m docs2synth.cli process --config /app/config.yml
+```
+
+**Platform Notes:**
+- **macOS (Apple Silicon)**: Can build all images, but GPU images use emulation and are slower. GPU containers cannot use GPU acceleration on Mac.
+- **macOS (Intel)**: Same as Apple Silicon.
+- **Linux (x86_64)**: Full support for all images including GPU.
+- **Windows (WSL2)**: Full support with proper nvidia-docker setup.
 
 ### Manual Setup
 
