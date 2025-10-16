@@ -89,7 +89,7 @@ def test_paddleocr_caches_ocr_instance(monkeypatch, tmp_path):
 pytestmark = pytest.mark.skipif(not _PADDLE_AVAILABLE, reason="paddleocr not installed")
 
 
-def test_paddleocr_processor_runs_minimal(tmp_path):
+def test_paddleocr_processor_runs_minimal(monkeypatch, tmp_path):
     # Create a tiny blank image using PIL if available; otherwise skip
     try:
         from PIL import Image  # type: ignore
@@ -98,6 +98,17 @@ def test_paddleocr_processor_runs_minimal(tmp_path):
 
     img_path = tmp_path / "blank.png"
     Image.new("RGB", (100, 40), color=(255, 255, 255)).save(img_path)
+
+    # Mock PaddleOCR to avoid downloading models
+    class DummyOCR:
+        def ocr(self, path):
+            return [{"rec_texts": [], "rec_scores": [], "rec_polys": []}]
+
+    def dummy_init(self, *args, **kwargs):
+        return DummyOCR()
+
+    monkeypatch.setattr("docs2synth.preprocess.paddleocr.PaddleOCR", DummyOCR)
+    monkeypatch.setattr(PaddleOCRProcessor, "_init_ocr", dummy_init)
 
     proc = PaddleOCRProcessor(lang="en", det=True, rec=True, show_log=False)
     res = proc.process(str(img_path))
