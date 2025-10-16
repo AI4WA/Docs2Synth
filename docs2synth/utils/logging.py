@@ -46,7 +46,9 @@ def setup_logging_from_config(config: Any = None) -> None:
     root_logger.setLevel(log_level)
 
     # Remove existing handlers to avoid duplicates
-    root_logger.handlers.clear()
+    for handler in root_logger.handlers[:]:
+        handler.close()
+        root_logger.removeHandler(handler)
     root_logger.propagate = False
 
     # Create formatter with line numbers
@@ -135,7 +137,9 @@ def setup_logging(
     root_logger.setLevel(level)
 
     # Remove existing handlers to avoid duplicates
-    root_logger.handlers.clear()
+    for handler in root_logger.handlers[:]:
+        handler.close()
+        root_logger.removeHandler(handler)
     root_logger.propagate = False
 
     # Create formatter with line numbers
@@ -357,7 +361,9 @@ def setup_cli_logging(verbose: int = 0, config: Any = None) -> None:
     root_logger.setLevel(log_level)
 
     # Remove existing handlers to avoid duplicates
-    root_logger.handlers.clear()
+    for handler in root_logger.handlers[:]:
+        handler.close()
+        root_logger.removeHandler(handler)
     root_logger.propagate = False
 
     # Create formatter with line numbers

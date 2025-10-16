@@ -49,8 +49,8 @@ class PaddleOCRProcessor:
     ----------
     lang : str
         Language code passed to PaddleOCR (e.g., "en").
-    use_angle_cls : bool
-        Whether to enable angle classification in PaddleOCR.
+    use_textline_orientation : bool
+        Whether to enable textline orientation detection in PaddleOCR.
     det : bool
         Enable text detection.
     rec : bool
@@ -60,7 +60,7 @@ class PaddleOCRProcessor:
     """
 
     lang: str = "en"
-    use_angle_cls: bool = True
+    use_textline_orientation: bool = True
     det: bool = True
     rec: bool = True
     show_log: bool = False
@@ -129,7 +129,7 @@ class PaddleOCRProcessor:
         # Note: show_log is not supported in PaddleOCR 3.x
         ocr = PaddleOCR(
             lang=lang_key,
-            use_angle_cls=self.use_angle_cls,
+            use_textline_orientation=self.use_textline_orientation,
         )
         self._ocr_cache[cache_key] = ocr
         return ocr
@@ -160,8 +160,12 @@ class PaddleOCRProcessor:
         ocr = self._init_ocr(lang_override=lang, device_override=device)
         start = time.time()
 
-        # Call PaddleOCR
-        result = ocr.ocr(image_path)
+        # Call PaddleOCR (suppress deprecation warning about ocr() method)
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Please use `predict` instead")
+            result = ocr.ocr(image_path)
         end = time.time()
 
         # Debug logging
