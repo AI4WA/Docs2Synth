@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Check staged files for CRLF in script-like files and block commit if found
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged_files" ] && exit 0
+
+has_error=0
+
+is_script_like() {
+  local path="$1"
+  if [[ "$path" =~ \.(sh|bash|zsh)$ ]] || [[ "$path" == scripts/* ]]; then
+    return 0
+  fi
+  if git cat-file -e ":$path" 2>/dev/null; then
+    local first_line
+    first_line=$(git show ":$path" 2>/dev/null | head -n 1 || true)
+    if [[ "$first_line" =~ ^#!.*\/(ba|z)?sh(\s|$) ]]; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+contains_crlf() {
+  local path="$1"
+  if git show ":$path" | grep -q $'\r$'; then
+    return 0
+  fi
+  return 1
+}
+
+while IFS= read -r file; do
+  # skip deleted paths
+  if [ ! -e "$file" ] && ! git ls-files --error-unmatch "$file" >/dev/null 2>&1; then
+    continue
+  fi
+  if is_script_like "$file"; then
+    if contains_crlf "$file"; then
+      echo "[pre-commit] CRLF detected in script-like file: $file" >&2
+      echo "  Convert to LF: dos2unix \"$file\" && git add \"$file\"" >&2
+      has_error=1
+    fi
+  fi
+done <<< "$staged_files"
+
+if [ "$has_error" -ne 0 ]; then
+  echo "Commit aborted due to CRLF line endings in scripts." >&2
+  exit 1
+fi
+
+exit 0
