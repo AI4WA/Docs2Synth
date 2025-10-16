@@ -1,6 +1,7 @@
 name: Docs2Synth
 channels:
   - defaults
+  - conda-forge
 dependencies:
   - pip
   - pytorch
@@ -13,3 +14,9 @@ dependencies:
   - conda=25.9.0
   - pyyaml
   - pandas
+  - pillow
+  - pip:
+      - paddlepaddle==3.2.0
+      - paddleocr==3.2.0
+      - shapely>=1.8
+      - scikit-image>=0.21
