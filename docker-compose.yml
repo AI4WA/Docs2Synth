@@ -1,0 +1,40 @@
+services:
+  # CPU-only container for development without GPU
+  docs2synth-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: docs2synth:cpu
+    container_name: docs2synth-cpu
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config.yml:/app/config.yml
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # GPU-enabled container for training and inference
+  docs2synth-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: docs2synth:gpu
+    container_name: docs2synth-gpu
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config.yml:/app/config.yml
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    # Uncomment the following lines if you have NVIDIA GPU and nvidia-docker installed
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    command: /bin/bash

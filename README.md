@@ -44,19 +44,108 @@ pip install docs2synth
 
 ## Development setup
 
+We provide automated setup scripts for all major platforms to make development environment setup as smooth as possible.
+
+### Quick Setup
+
+#### Unix-based Systems (macOS, Linux, WSL)
+
 ```bash
-# clone repository
-$ git clone https://github.com/AI4WA/Docs2Synth.git
-$ cd Docs2Synth
+# Clone repository
+git clone https://github.com/AI4WA/Docs2Synth.git
+cd Docs2Synth
 
-# create virtual environment (Python ≥3.8)
-$ python -m venv .venv && source .venv/bin/activate
-# install editable package with test dependencies
-$ pip install -e ".[dev]"
+# Run setup script with conda (recommended)
+./setup.sh conda
 
-# or use conda [recommended]
-$ conda env create -f environment.yml
-$ conda activate Docs2Synth
+# Or use venv
+./setup.sh venv
+```
+
+#### Windows
+
+```batch
+REM Clone repository
+git clone https://github.com/AI4WA/Docs2Synth.git
+cd Docs2Synth
+
+REM Run setup script with conda (recommended)
+setup.bat conda
+
+REM Or use venv
+setup.bat venv
+```
+
+### Docker Setup
+
+For containerized development and deployment, we provide Docker configurations for both CPU-only and GPU-enabled environments.
+
+#### CPU-only Container
+
+```bash
+# Build and run CPU-only container
+docker compose up -d docs2synth-cpu
+
+# Enter the container
+docker exec -it docs2synth-cpu /bin/bash
+```
+
+#### GPU-enabled Container
+
+For GPU support, you need:
+- NVIDIA GPU with CUDA support
+- NVIDIA Docker runtime installed ([installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html))
+
+```bash
+# Build and run GPU-enabled container
+docker-compose up -d docs2synth-gpu
+
+# Enter the container
+docker exec -it docs2synth-gpu /bin/bash
+
+# Verify GPU access inside container
+python -c "import torch; print(torch.cuda.is_available())"
+```
+
+To enable GPU support, uncomment the `deploy` section in `docker-compose.yml`:
+
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+```
+
+#### Building Docker Images Manually
+
+```bash
+# Build CPU-only image
+docker build -t docs2synth:cpu -f Dockerfile .
+
+# Build GPU-enabled image
+docker build -t docs2synth:gpu -f Dockerfile.gpu .
+
+# Run container with volume mounts
+docker run -it -v $(pwd)/data:/app/data -v $(pwd)/logs:/app/logs docs2synth:cpu
+```
+
+### Manual Setup
+
+If you prefer manual setup:
+
+```bash
+# Create virtual environment (Python ≥3.8)
+python -m venv .venv && source .venv/bin/activate
+# Install editable package with all dependencies
+pip install -e ".[dev,datasets,qa,retriever]"
+
+# Or use conda
+conda env create -f environment.yml
+conda activate Docs2Synth
+pip install -e ".[dev,datasets,qa,retriever]"
 ```
 
 ### Code Quality Checks
