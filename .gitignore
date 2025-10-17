@@ -57,3 +57,5 @@ logs/
 # Local docker volumes and configs (not for version control)
 .docker-local/
 .config-local/
+
+config.yml

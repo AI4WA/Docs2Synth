@@ -12,7 +12,8 @@ services:
     image: docs2synth:cpu
     container_name: docs2synth-cpu
     volumes:
-      - ./.docker-local/cpu/data:/app/data
+      - ./data/datasets:/app/data/datasets
+      - ./.docker-local/cpu-minimal/processed:/app/data/processed
       - ./.docker-local/cpu/logs:/app/logs
       - ./.config-local/config.cpu.yml:/app/config.yml
     working_dir: /app
@@ -30,7 +31,8 @@ services:
     image: docs2synth:cpu-minimal
     container_name: docs2synth-cpu-minimal
     volumes:
-      - ./.docker-local/cpu-minimal/data:/app/data
+      - ./data/datasets:/app/data/datasets
+      - ./.docker-local/cpu-minimal/processed:/app/data/processed
       - ./.docker-local/cpu-minimal/logs:/app/logs
       - ./.config-local/config.cpu-minimal.yml:/app/config.yml
     working_dir: /app
@@ -52,7 +54,8 @@ services:
     image: docs2synth:gpu
     container_name: docs2synth-gpu
     volumes:
-      - ./.docker-local/gpu/data:/app/data
+      - ./data/datasets:/app/data/datasets
+      - ./.docker-local/cpu-minimal/processed:/app/data/processed
       - ./.docker-local/gpu/logs:/app/logs
       - ./.config-local/config.gpu.yml:/app/config.yml
     working_dir: /app

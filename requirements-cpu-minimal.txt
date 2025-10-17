@@ -1,0 +1,8 @@
+# Minimal CPU-only PyTorch installation for development
+# Install with: pip install -r requirements-cpu-minimal.txt
+
+# PyTorch CPU version (minimal, no CUDA)
+--index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+torchaudio
