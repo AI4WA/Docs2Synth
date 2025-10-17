@@ -113,64 +113,41 @@ We provide a unified Dockerfile that supports multiple build configurations thro
 
 | Image Type | Use Case | Size | Build Command |
 |------------|----------|------|---------------|
-| `cpu-minimal` | Development, fastest builds | ~2.5 GB | `./docker-build.sh cpu-minimal` |
-| `cpu` | Production CPU deployment | ~2.5 GB | `./docker-build.sh cpu` |
-| `gpu` | Training/GPU inference | ~11 GB | `./docker-build.sh gpu` |
+| `cpu` | Development and CPU deployment | ~2.5 GB | `docker compose up -d docs2synth-cpu` |
+| `gpu` | Training and GPU inference | ~11 GB | `docker compose up -d docs2synth-gpu` |
 
 #### Quick Start with Docker
 
 **Using docker-compose (Recommended):**
 
 ```bash
-# For development (CPU, minimal dependencies)
-docker compose up -d docs2synth-cpu-minimal
-docker exec -it docs2synth-cpu-minimal /bin/bash
-
-# For production (CPU, full dependencies)
+# For CPU workloads (development and testing)
 docker compose up -d docs2synth-cpu
 docker exec -it docs2synth-cpu /bin/bash
 
 # For GPU workloads (requires NVIDIA GPU + nvidia-docker)
 docker compose up -d docs2synth-gpu
 docker exec -it docs2synth-gpu /bin/bash
-```
 
-**Using the helper script:**
-
-```bash
-# Make script executable
-chmod +x docker-build.sh
-
-# Build CPU minimal (default, fastest)
-./docker-build.sh cpu-minimal
-
-# Build CPU full
-./docker-build.sh cpu
-
-# Build GPU image
-./docker-build.sh gpu
-
-# Build all variants
-./docker-build.sh all
-
-# Run the built image
-docker run -it \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  docs2synth:cpu-minimal
+# Inside the container, test the installation
+docs2synth --help
+docs2synth datasets list
 ```
 
 **Direct Docker build:**
 
 ```bash
-# CPU minimal (development)
-docker build --build-arg BUILD_TYPE=cpu-minimal -t docs2synth:cpu-minimal .
-
-# CPU full (production)
+# CPU build
 docker build --build-arg BUILD_TYPE=cpu -t docs2synth:cpu .
 
-# GPU (requires linux/amd64)
-docker build --build-arg BUILD_TYPE=gpu --platform linux/amd64 -t docs2synth:gpu .
+# GPU build (requires linux/amd64 on Apple Silicon)
+docker build --build-arg BUILD_TYPE=gpu -t docs2synth:gpu .
+
+# Run the built image
+docker run -it \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  docs2synth:cpu
 ```
 
 #### GPU Support in Docker
@@ -232,10 +209,12 @@ docker run -d \
 ```
 
 **Platform Notes:**
-- **macOS (Apple Silicon)**: Can build all images, but GPU images use emulation and are slower. GPU containers cannot use GPU acceleration on Mac.
-- **macOS (Intel)**: Same as Apple Silicon.
-- **Linux (x86_64)**: Full support for all images including GPU.
-- **Windows (WSL2)**: Full support with proper nvidia-docker setup.
+- **macOS (Apple Silicon/Intel)**: Can build and run CPU images natively. GPU images require `--platform linux/amd64` flag (uses emulation, no GPU acceleration available).
+- **Linux (x86_64)**: Full support for both CPU and GPU images with native performance.
+- **Windows (WSL2)**: Full support for both CPU and GPU with proper NVIDIA Container Toolkit setup.
+
+**Known Issues:**
+- PaddlePaddle 3.2.0 may have stability issues on ARM64 architecture. If you encounter segmentation faults on Apple Silicon, consider using the GPU build with platform emulation or running on x86_64 Linux.
 
 ### Manual Setup
 
