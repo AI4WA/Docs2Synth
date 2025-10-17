@@ -1,5 +1,5 @@
 services:
-  # CPU-only container (full build with all dependencies)
+  # CPU-only container for development and testing
   docs2synth-cpu:
     build:
       context: .
@@ -13,28 +13,9 @@ services:
     container_name: docs2synth-cpu
     volumes:
       - ./data/datasets:/app/data/datasets
-      - ./.docker-local/cpu-minimal/processed:/app/data/processed
+      - ./.docker-local/cpu/processed:/app/data/processed
       - ./.docker-local/cpu/logs:/app/logs
       - ./.config-local/config.cpu.yml:/app/config.yml
-    working_dir: /app
-    stdin_open: true
-    tty: true
-    command: /bin/bash
-
-  # CPU-only container (minimal build for faster development)
-  docs2synth-cpu-minimal:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        BUILD_TYPE: cpu-minimal
-    image: docs2synth:cpu-minimal
-    container_name: docs2synth-cpu-minimal
-    volumes:
-      - ./data/datasets:/app/data/datasets
-      - ./.docker-local/cpu-minimal/processed:/app/data/processed
-      - ./.docker-local/cpu-minimal/logs:/app/logs
-      - ./.config-local/config.cpu-minimal.yml:/app/config.yml
     working_dir: /app
     stdin_open: true
     tty: true
@@ -49,13 +30,13 @@ services:
       args:
         BUILD_TYPE: gpu
       # For Apple Silicon: Uncomment to build for linux/amd64 (uses emulation)
-      platforms:
-        - linux/amd64
+      # platforms:
+      #   - linux/amd64
     image: docs2synth:gpu
     container_name: docs2synth-gpu
     volumes:
       - ./data/datasets:/app/data/datasets
-      - ./.docker-local/cpu-minimal/processed:/app/data/processed
+      - ./.docker-local/gpu/processed:/app/data/processed
       - ./.docker-local/gpu/logs:/app/logs
       - ./.config-local/config.gpu.yml:/app/config.yml
     working_dir: /app

@@ -1,10 +1,9 @@
 # Unified Dockerfile for Docs2Synth
-# Supports CPU-only, GPU, and minimal builds using build arguments
+# Supports CPU-only and GPU builds using build arguments
 #
 # Usage:
-#   CPU (full):     docker build --build-arg BUILD_TYPE=cpu -t docs2synth:cpu .
-#   CPU (minimal):  docker build --build-arg BUILD_TYPE=cpu-minimal -t docs2synth:cpu-minimal .
-#   GPU:            docker build --build-arg BUILD_TYPE=gpu -t docs2synth:gpu .
+#   CPU:  docker build --build-arg BUILD_TYPE=cpu -t docs2synth:cpu .
+#   GPU:  docker build --build-arg BUILD_TYPE=gpu -t docs2synth:gpu .
 
 # =============================================================================
 # Build Arguments
@@ -18,7 +17,6 @@ ARG PYTHON_VERSION=3.10
 # For GPU builds, use NVIDIA CUDA base image; otherwise use Python slim
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 AS base-gpu
 FROM python:${PYTHON_VERSION}-slim AS base-cpu
-FROM python:${PYTHON_VERSION}-slim AS base-cpu-minimal
 
 # Select the appropriate base
 FROM base-${BUILD_TYPE} AS base
@@ -62,11 +60,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # =============================================================================
-# System Dependencies - CPU full build
+# System Dependencies - CPU build
 # =============================================================================
 FROM base AS system-cpu
 
-# Full dependencies for production
+# Dependencies for CPU-based processing
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         git \
@@ -77,25 +75,6 @@ RUN apt-get update && \
         libxext6 \
         libxrender1 \
         libgl1 && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# =============================================================================
-# System Dependencies - CPU minimal build
-# =============================================================================
-FROM base AS system-cpu-minimal
-
-# Minimal dependencies for development
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        git \
-        gcc \
-        g++ \
-        libglib2.0-0 \
-        libgl1 \
-        libsm6 \
-        libxext6 \
-        libxrender1 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
