@@ -1,7 +1,6 @@
 #!/bin/bash
 # Setup script for Unix-based systems (macOS, Linux, WSL)
-# Usage: ./setup.sh [method] [--gpu]
-# Methods: venv, conda (default: conda)
+# Usage: ./setup.sh [--gpu]
 # Options: --gpu (install GPU-enabled PyTorch)
 
 set -e  # Exit on error
@@ -25,27 +24,23 @@ echo_error() {
 }
 
 # Parse arguments
-SETUP_METHOD="conda"
 INSTALL_GPU=false
 
 for arg in "$@"; do
     case $arg in
-        venv|conda)
-            SETUP_METHOD=$arg
-            ;;
         --gpu)
             INSTALL_GPU=true
             ;;
         *)
             echo_error "Unknown argument: $arg"
-            echo_info "Usage: ./setup.sh [venv|conda] [--gpu]"
+            echo_info "Usage: ./setup.sh [--gpu]"
             exit 1
             ;;
     esac
 done
 
 echo_info "Starting Docs2Synth development environment setup..."
-echo_info "Setup method: $SETUP_METHOD"
+echo_info "Setup method: Python venv"
 
 # Detect GPU availability
 detect_gpu() {
@@ -164,108 +159,14 @@ setup_venv() {
     echo_info "=========================================="
 }
 
-# Setup using conda
-setup_conda() {
-    echo_info "Setting up with Conda..."
-
-    # Check if conda is installed
-    if ! command -v conda &> /dev/null; then
-        echo_error "Conda not found. Please install Miniconda or Anaconda first."
-        echo_info "Visit: https://docs.conda.io/en/latest/miniconda.html"
-        exit 1
-    fi
-
-    # Check if environment already exists
-    if conda env list | grep -q "^Docs2Synth "; then
-        echo_warn "Conda environment 'Docs2Synth' already exists."
-        read -p "Do you want to remove and recreate it? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo_info "Removing existing environment..."
-            conda env remove -n Docs2Synth -y
-        else
-            echo_info "Updating existing environment..."
-            conda env update -f environment.yml --prune
-
-            # Install PyTorch based on GPU availability
-            echo_info "Installing PyTorch..."
-            conda run -n Docs2Synth pip install -r "$TORCH_REQUIREMENTS"
-
-            # Install requirements
-            conda run -n Docs2Synth pip install -r requirements.txt
-            conda run -n Docs2Synth pip install -r requirements-dev.txt
-            conda run -n Docs2Synth pip install -e .
-
-            echo_info ""
-            echo_info "=========================================="
-            echo_info "Setup complete!"
-            if [ "$INSTALL_GPU" = true ]; then
-                echo_info "GPU-enabled PyTorch installed."
-            else
-                echo_info "CPU-only PyTorch installed."
-            fi
-            echo_info "To activate the environment, run:"
-            echo_info "  conda activate Docs2Synth"
-            echo_info "=========================================="
-            return 0
-        fi
-    fi
-
-    # Create conda environment
-    echo_info "Creating conda environment from environment.yml..."
-    conda env create -f environment.yml
-
-    # Install PyTorch based on GPU availability
-    echo_info "Installing PyTorch..."
-    conda run -n Docs2Synth pip install -r "$TORCH_REQUIREMENTS"
-
-    # Install requirements
-    echo_info "Installing requirements..."
-    conda run -n Docs2Synth pip install -r requirements.txt
-    conda run -n Docs2Synth pip install -r requirements-dev.txt
-
-    # Install package
-    echo_info "Installing docs2synth package..."
-    conda run -n Docs2Synth pip install -e .
-
-    echo_info ""
-    echo_info "=========================================="
-    echo_info "Setup complete!"
-    if [ "$INSTALL_GPU" = true ]; then
-        echo_info "GPU-enabled PyTorch installed."
-    else
-        echo_info "CPU-only PyTorch installed."
-    fi
-    echo_info "To activate the environment, run:"
-    echo_info "  conda activate Docs2Synth"
-    echo_info "=========================================="
-}
-
-# Main setup logic
-case $SETUP_METHOD in
-    venv)
-        setup_venv
-        ;;
-    conda)
-        setup_conda
-        ;;
-    *)
-        echo_error "Unknown setup method: $SETUP_METHOD"
-        echo_info "Usage: ./setup.sh [venv|conda] [--gpu]"
-        exit 1
-        ;;
-esac
+# Main setup
+setup_venv
 
 # Verify installation
 echo_info ""
 echo_info "Verifying installation..."
-if [ "$SETUP_METHOD" == "venv" ]; then
-    if [ -f ".venv/bin/activate" ]; then
-        source .venv/bin/activate
-    fi
-else
-    eval "$(conda shell.bash hook)"
-    conda activate Docs2Synth
+if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
 fi
 
 if python -c "import docs2synth" 2>/dev/null; then

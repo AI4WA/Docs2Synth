@@ -60,17 +60,11 @@ We provide automated setup scripts for all major platforms that automatically de
 git clone https://github.com/AI4WA/Docs2Synth.git
 cd Docs2Synth
 
-# Run setup script with conda (recommended) - auto-detects GPU
-./setup.sh conda
-
-# Or use venv
-./setup.sh venv
+# Run setup script - auto-detects GPU
+./setup.sh
 
 # Force GPU installation (if you have NVIDIA GPU)
-./setup.sh conda --gpu
-
-# Or force CPU-only installation
-./setup.sh conda  # (will prompt, choose 'n' for CPU)
+./setup.sh --gpu
 ```
 
 **The setup script will:**
@@ -79,6 +73,12 @@ cd Docs2Synth
 - Install CPU-only PyTorch if no GPU is found
 - Install all project dependencies from requirements.txt files
 - Verify the installation
+- Create a Python virtual environment (.venv)
+
+**Activate the environment:**
+```bash
+source .venv/bin/activate
+```
 
 #### Windows
 
@@ -87,14 +87,16 @@ REM Clone repository
 git clone https://github.com/AI4WA/Docs2Synth.git
 cd Docs2Synth
 
-REM Run setup script with conda (recommended) - auto-detects GPU
-setup.bat conda
-
-REM Or use venv
-setup.bat venv
+REM Run setup script - auto-detects GPU
+setup.bat
 
 REM Force GPU installation (if you have NVIDIA GPU)
-setup.bat conda --gpu
+setup.bat --gpu
+```
+
+**Activate the environment:**
+```batch
+.venv\Scripts\activate
 ```
 
 ### Option 2: Docker Setup (Alternative)
@@ -257,24 +259,6 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
 # Install package in editable mode
-pip install -e .
-```
-
-**Or with conda:**
-
-```bash
-# Create conda environment
-conda env create -f environment.yml
-conda activate Docs2Synth
-
-# Install PyTorch (CPU or GPU)
-pip install -r requirements-cpu.txt  # or requirements-gpu.txt
-
-# Install dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# Install package
 pip install -e .
 ```
 

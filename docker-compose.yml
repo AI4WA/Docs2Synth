@@ -11,6 +11,7 @@ services:
       #   - linux/amd64
     image: docs2synth:cpu
     container_name: docs2synth-cpu
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -29,6 +30,7 @@ services:
         BUILD_TYPE: cpu-minimal
     image: docs2synth:cpu-minimal
     container_name: docs2synth-cpu-minimal
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -51,6 +53,7 @@ services:
         - linux/amd64
     image: docs2synth:gpu
     container_name: docs2synth-gpu
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

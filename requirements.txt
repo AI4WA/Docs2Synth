@@ -4,6 +4,10 @@
 # Core dependencies
 click>=8.0
 
+# Intel MKL libraries (required by PaddlePaddle)
+mkl>=2025.0.0
+mkl-include>=2025.0.0
+
 # PaddleOCR and dependencies
 paddlepaddle==3.2.0
 paddleocr==3.2.0

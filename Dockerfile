@@ -44,8 +44,8 @@ FROM base AS system-gpu
 # PaddleOCR requires OpenCV which needs graphics libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3.10 \
-        python3.10-dev \
+        python3 \
+        python3-dev \
         python3-pip \
         git \
         build-essential \
@@ -56,8 +56,7 @@ RUN apt-get update && \
         libxrender1 \
         libgl1 \
         wget && \
-    ln -sf /usr/bin/python3.10 /usr/bin/python && \
-    ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
+    ln -sf /usr/bin/python3 /usr/bin/python && \
     python -m pip install --upgrade pip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -131,8 +130,15 @@ RUN pip install --upgrade pip && \
     pip install -r requirements-dev.txt && \
     pip install -e .
 
-# Create directories for data and logs
-RUN mkdir -p /app/data /app/logs
+# Create directories for data, logs, and PaddleX cache
+# Set permissions to allow any user to write (for non-root users)
+RUN mkdir -p /app/data /app/logs /app/.paddlex /app/.cache /tmp && \
+    chmod -R 777 /app/data /app/logs /app/.paddlex /app/.cache /tmp
+
+# Set PaddleX cache directories to writable locations
+ENV PADDLEX_HOME=/app/.paddlex \
+    XDG_CACHE_HOME=/app/.cache \
+    HOME=/app
 
 # Add build type label
 LABEL build_type="${BUILD_TYPE}"

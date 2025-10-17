@@ -1,40 +1,28 @@
 @echo off
 REM Setup script for Windows
-REM Usage: setup.bat [method] [--gpu]
-REM Methods: venv, conda (default: conda)
+REM Usage: setup.bat [--gpu]
 REM Options: --gpu (install GPU-enabled PyTorch)
 
 setlocal enabledelayedexpansion
 
-SET SETUP_METHOD=conda
 SET INSTALL_GPU=false
 
 REM Parse arguments
 :parse_args
 IF "%~1"=="" GOTO args_done
-IF /I "%~1"=="venv" (
-    SET SETUP_METHOD=venv
-    SHIFT
-    GOTO parse_args
-)
-IF /I "%~1"=="conda" (
-    SET SETUP_METHOD=conda
-    SHIFT
-    GOTO parse_args
-)
 IF /I "%~1"=="--gpu" (
     SET INSTALL_GPU=true
     SHIFT
     GOTO parse_args
 )
 echo [ERROR] Unknown argument: %~1
-echo [INFO] Usage: setup.bat [venv^|conda] [--gpu]
+echo [INFO] Usage: setup.bat [--gpu]
 exit /b 1
 
 :args_done
 
 echo [INFO] Starting Docs2Synth development environment setup...
-echo [INFO] Setup method: %SETUP_METHOD%
+echo [INFO] Setup method: Python venv
 
 REM Check if Python is installed
 where python >nul 2>nul
@@ -75,16 +63,7 @@ IF "%INSTALL_GPU%"=="true" (
     SET TORCH_REQUIREMENTS=requirements-cpu.txt
 )
 
-IF "%SETUP_METHOD%"=="venv" (
-    call :setup_venv
-) ELSE IF "%SETUP_METHOD%"=="conda" (
-    call :setup_conda
-) ELSE (
-    echo [ERROR] Unknown setup method: %SETUP_METHOD%
-    echo [INFO] Usage: setup.bat [venv^|conda] [--gpu]
-    exit /b 1
-)
-
+call :setup_venv
 goto :end
 
 :setup_venv
@@ -151,112 +130,6 @@ python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f
 IF %ERRORLEVEL% EQU 0 (
     IF "%INSTALL_GPU%"=="true" (
         python -c "import torch; exit(0 if torch.cuda.is_available() else 1)" 2>nul
-        IF !ERRORLEVEL! EQU 0 (
-            echo [INFO] GPU support verified successfully!
-        ) ELSE (
-            echo [WARN] GPU was requested but CUDA is not available. Please check your CUDA installation.
-        )
-    )
-) ELSE (
-    echo [WARN] PyTorch verification failed. Please check the installation.
-)
-
-goto :eof
-
-:setup_conda
-echo [INFO] Setting up with Conda...
-
-REM Check if conda is installed
-where conda >nul 2>nul
-IF %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Conda not found. Please install Miniconda or Anaconda first.
-    echo [INFO] Visit: https://docs.conda.io/en/latest/miniconda.html
-    exit /b 1
-)
-
-REM Check if environment already exists
-conda env list | findstr /C:"Docs2Synth" >nul
-IF %ERRORLEVEL% EQU 0 (
-    echo [WARN] Conda environment 'Docs2Synth' already exists.
-    set /p RECREATE="Do you want to remove and recreate it? (y/N): "
-    IF /I "!RECREATE!"=="y" (
-        echo [INFO] Removing existing environment...
-        call conda env remove -n Docs2Synth -y
-    ) ELSE (
-        echo [INFO] Updating existing environment...
-        call conda env update -f environment.yml --prune
-
-        REM Install PyTorch based on GPU availability
-        echo [INFO] Installing PyTorch...
-        call conda run -n Docs2Synth pip install -r %TORCH_REQUIREMENTS%
-
-        REM Install requirements
-        call conda run -n Docs2Synth pip install -r requirements.txt
-        call conda run -n Docs2Synth pip install -r requirements-dev.txt
-        call conda run -n Docs2Synth pip install -e .
-
-        echo.
-        echo ==========================================
-        echo Setup complete!
-        IF "%INSTALL_GPU%"=="true" (
-            echo GPU-enabled PyTorch installed.
-        ) ELSE (
-            echo CPU-only PyTorch installed.
-        )
-        echo To activate the environment, run:
-        echo   conda activate Docs2Synth
-        echo ==========================================
-        goto :verify_conda
-    )
-)
-
-REM Create conda environment
-echo [INFO] Creating conda environment from environment.yml...
-call conda env create -f environment.yml
-
-REM Install PyTorch based on GPU availability
-echo [INFO] Installing PyTorch...
-call conda run -n Docs2Synth pip install -r %TORCH_REQUIREMENTS%
-
-REM Install requirements
-echo [INFO] Installing requirements...
-call conda run -n Docs2Synth pip install -r requirements.txt
-call conda run -n Docs2Synth pip install -r requirements-dev.txt
-
-REM Install package
-echo [INFO] Installing docs2synth package...
-call conda run -n Docs2Synth pip install -e .
-
-echo.
-echo ==========================================
-echo Setup complete!
-IF "%INSTALL_GPU%"=="true" (
-    echo GPU-enabled PyTorch installed.
-) ELSE (
-    echo CPU-only PyTorch installed.
-)
-echo To activate the environment, run:
-echo   conda activate Docs2Synth
-echo ==========================================
-
-:verify_conda
-REM Verify installation
-echo.
-echo [INFO] Verifying installation...
-call conda run -n Docs2Synth python -c "import docs2synth" 2>nul
-IF %ERRORLEVEL% EQU 0 (
-    echo [INFO] Package 'docs2synth' successfully installed!
-) ELSE (
-    echo [WARN] Package import test failed. Please check the installation.
-)
-
-REM Verify PyTorch installation
-echo.
-echo [INFO] Verifying PyTorch installation...
-call conda run -n Docs2Synth python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')" 2>nul
-IF %ERRORLEVEL% EQU 0 (
-    IF "%INSTALL_GPU%"=="true" (
-        call conda run -n Docs2Synth python -c "import torch; exit(0 if torch.cuda.is_available() else 1)" 2>nul
         IF !ERRORLEVEL! EQU 0 (
             echo [INFO] GPU support verified successfully!
         ) ELSE (
