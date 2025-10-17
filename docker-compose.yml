@@ -11,11 +11,10 @@ services:
       #   - linux/amd64
     image: docs2synth:cpu
     container_name: docs2synth-cpu
-    user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./config.yml:/app/config.yml
+      - ./.docker-local/cpu/data:/app/data
+      - ./.docker-local/cpu/logs:/app/logs
+      - ./.config-local/config.cpu.yml:/app/config.yml
     working_dir: /app
     stdin_open: true
     tty: true
@@ -30,11 +29,10 @@ services:
         BUILD_TYPE: cpu-minimal
     image: docs2synth:cpu-minimal
     container_name: docs2synth-cpu-minimal
-    user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./config.yml:/app/config.yml
+      - ./.docker-local/cpu-minimal/data:/app/data
+      - ./.docker-local/cpu-minimal/logs:/app/logs
+      - ./.config-local/config.cpu-minimal.yml:/app/config.yml
     working_dir: /app
     stdin_open: true
     tty: true
@@ -53,11 +51,10 @@ services:
         - linux/amd64
     image: docs2synth:gpu
     container_name: docs2synth-gpu
-    user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./config.yml:/app/config.yml
+      - ./.docker-local/gpu/data:/app/data
+      - ./.docker-local/gpu/logs:/app/logs
+      - ./.config-local/config.gpu.yml:/app/config.yml
     working_dir: /app
     stdin_open: true
     tty: true
