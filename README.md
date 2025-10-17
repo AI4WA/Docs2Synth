@@ -103,7 +103,6 @@ setup.bat --gpu
 
 **When to use Docker:**
 - Difficult to set up the local development environment (dependency conflicts, OS limitations)
-- Need consistent environment across team members
 - Preparing for production deployment
 - Want isolated environment without affecting system Python
 
