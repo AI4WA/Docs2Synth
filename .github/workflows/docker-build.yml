@@ -32,6 +32,7 @@ jobs:
           build-args: |
             BUILD_TYPE=cpu
           push: false
+          load: true
           tags: docs2synth:cpu
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -72,6 +73,7 @@ jobs:
           build-args: |
             BUILD_TYPE=gpu
           push: false
+          load: true
           tags: docs2synth:gpu
           cache-from: type=gha
           cache-to: type=gha,mode=max
