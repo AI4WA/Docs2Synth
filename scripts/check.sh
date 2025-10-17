@@ -18,7 +18,7 @@ echo "✅ black done"
 echo ""
 
 echo "3️⃣  Linting with flake8..."
-flake8 Docs2Synth tests
+flake8 docs2synth tests
 echo "✅ flake8 passed"
 echo ""
 

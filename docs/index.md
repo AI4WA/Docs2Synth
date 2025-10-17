@@ -100,21 +100,34 @@ pip install docs2synth
 git clone https://github.com/AI4WA/Docs2Synth.git
 cd Docs2Synth
 
+# Run automated setup script
+./setup.sh
+
+# Or manual setup:
 # Create virtual environment (Python ≥3.8)
 python -m venv .venv && source .venv/bin/activate
 
-# Install editable package with dev dependencies
-pip install -e ".[dev]"
+# Upgrade pip
+pip install --upgrade pip
+
+# Install PyTorch (CPU or GPU)
+pip install -r requirements-cpu.txt  # or requirements-gpu.txt for GPU
+
+# Install dependencies
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Install package in editable mode
+pip install -e .
 ```
 
-### Using Conda
+### Verify Installation
 
 ```bash
-# Create and activate environment (Python 3.10)
-conda env create -f environment.yml
-conda activate Docs2Synth
+# Activate environment
+source .venv/bin/activate
 
-# Verify installation
+# Run tests
 pytest
 ```
 

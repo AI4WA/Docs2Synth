@@ -1,0 +1,7 @@
+# GPU-enabled PyTorch installation (CUDA 11.8)
+# Install with: pip install -r requirements-gpu.txt
+
+--index-url https://download.pytorch.org/whl/cu118
+torch
+torchvision
+torchaudio
