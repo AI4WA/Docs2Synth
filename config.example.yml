@@ -23,24 +23,14 @@ data:
 # Logging configuration
 logging:
   # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  # Logs always go to both console and file with line numbers
   level: INFO
-
-  # Log format: simple, default, detailed
-  format: default
-
-  # Console logging
-  console:
-    enabled: true
-    level: INFO
 
   # File logging
   file:
-    enabled: true
     path: ./logs/docs2synth.log
-    level: DEBUG
     max_bytes: 10485760  # 10MB
     backup_count: 5
-    use_timestamp: false  # If true, adds timestamp to filename (e.g., docs2synth_20251010_232045.log)
 
   # Third-party library log levels
   third_party:

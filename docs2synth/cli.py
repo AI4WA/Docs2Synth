@@ -8,6 +8,7 @@ and logging integration.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import click
 
@@ -40,9 +41,8 @@ def cli(ctx: click.Context, verbose: int, config: str | None) -> None:
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
 
-    # Load configuration if provided
+    # Load configuration first (needed for logging setup)
     if config:
-        logger.info(f"Loading configuration from: {config}")
         cfg = load_config(config)
         ctx.obj["config"] = cfg
     else:
@@ -50,8 +50,8 @@ def cli(ctx: click.Context, verbose: int, config: str | None) -> None:
 
         ctx.obj["config"] = get_config()
 
-    # Set up logging based on verbosity
-    setup_cli_logging(verbose=verbose)
+    # Initialize logging as early as possible so later logs use our handlers
+    setup_cli_logging(verbose=verbose, config=ctx.obj["config"])
 
 
 @cli.command("datasets")
@@ -130,6 +130,73 @@ def datasets(
         sys.exit(1)
     except Exception as e:
         logger.exception("Dataset operation failed")
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
+@cli.command("preprocess")
+@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--processor",
+    "processor_name",
+    type=click.Choice(["paddleocr"], case_sensitive=False),
+    default="paddleocr",
+    show_default=True,
+    help="Name of the processor to use.",
+)
+@click.option(
+    "--lang",
+    type=str,
+    default=None,
+    help="Optional OCR language override (e.g., en)",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Directory to write processed outputs (defaults to config data.processed_dir)",
+)
+@click.option(
+    "--device",
+    type=click.Choice(["cpu", "gpu", "cuda"], case_sensitive=False),
+    default=None,
+    help="Device for OCR inference. If omitted, auto-select GPU when available.",
+)
+@click.pass_context
+def preprocess(
+    ctx: click.Context,
+    path: Path,
+    processor_name: str,
+    lang: str | None,
+    output_dir: Path | None,
+    device: str | None,
+) -> None:
+    """Preprocess an image file or all images in a directory.
+
+    PATH can be a file or a directory. If a directory is provided, all files in
+    that directory are processed. Results are written as JSON into the
+    configured output directory (data.processed_dir).
+    """
+
+    from docs2synth.preprocess.runner import run_preprocess
+
+    cfg = ctx.obj.get("config")
+    try:
+        num_success, num_failed, _ = run_preprocess(
+            path,
+            processor=processor_name,
+            output_dir=output_dir,
+            lang=lang,
+            device=device,
+            config=cfg,
+        )
+        click.echo(
+            click.style(
+                f"Done. Success: {num_success}, Failed: {num_failed}", fg="blue"
+            )
+        )
+    except Exception as e:
+        logger.exception("Preprocess command failed")
         click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
         sys.exit(1)
 

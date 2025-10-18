@@ -16,37 +16,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          auto-update-conda: true
           python-version: ${{ matrix.python-version }}
 
-      - name: Cache conda packages
+      - name: Cache pip packages
         uses: actions/cache@v3
         with:
-          path: ~/.conda/pkgs
-          key: ${{ runner.os }}-conda-${{ hashFiles('**/environment.yml') }}
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
           restore-keys: |
-            ${{ runner.os }}-conda-
+            ${{ runner.os }}-pip-
 
-      - name: Create conda environment
+      - name: Install dependencies
         run: |
-          conda env create -f environment.yml
-          conda run -n Docs2Synth pip install -e ".[dev]"
+          python -m pip install --upgrade pip
+          pip install -r requirements-cpu.txt
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e .
 
       - name: Check code formatting with black
         run: |
-          conda run -n Docs2Synth black --check --diff .
+          black --check --diff .
 
       - name: Check import sorting with isort
         run: |
-          conda run -n Docs2Synth isort --check-only --diff .
+          isort --check-only --diff .
 
       - name: Lint with flake8
         run: |
-          conda run -n Docs2Synth flake8 .
+          flake8 .
 
       - name: Run tests with pytest
         run: |
-          conda run -n Docs2Synth pytest --tb=short -v
+          pytest --tb=short -v

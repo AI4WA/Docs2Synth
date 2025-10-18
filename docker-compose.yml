@@ -1,0 +1,53 @@
+services:
+  # CPU-only container for development and testing
+  docs2synth-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_TYPE: cpu
+      # Uncomment to build for linux/amd64 on Apple Silicon
+      # platforms:
+      #   - linux/amd64
+    image: docs2synth:cpu
+    container_name: docs2synth-cpu
+    volumes:
+      - ./data/datasets:/app/data/datasets
+      - ./.docker-local/cpu/processed:/app/data/processed
+      - ./.docker-local/cpu/logs:/app/logs
+      - ./.config-local/config.cpu.yml:/app/config.yml
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # GPU-enabled container for training and inference
+  # Requirements: Linux with NVIDIA GPU + nvidia-docker runtime
+  docs2synth-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_TYPE: gpu
+      # For Apple Silicon: Uncomment to build for linux/amd64 (uses emulation)
+      # platforms:
+      #   - linux/amd64
+    image: docs2synth:gpu
+    container_name: docs2synth-gpu
+    volumes:
+      - ./data/datasets:/app/data/datasets
+      - ./.docker-local/gpu/processed:/app/data/processed
+      - ./.docker-local/gpu/logs:/app/logs
+      - ./.config-local/config.gpu.yml:/app/config.yml
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    # Uncomment for NVIDIA GPU support (Linux only)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    command: /bin/bash

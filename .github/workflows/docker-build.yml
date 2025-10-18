@@ -1,0 +1,117 @@
+name: Build Docker Images
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "Dockerfile*"
+      - "requirements*.txt"
+      - ".github/workflows/docker-build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Dockerfile*"
+      - "requirements*.txt"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  build-cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build CPU image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            BUILD_TYPE=cpu
+          push: false
+          load: true
+          tags: docs2synth:cpu
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test CPU image (build verification)
+        run: |
+          docker run --rm docs2synth:cpu python -c "import docs2synth; print('✓ CPU image build successful!')"
+
+      - name: Run tests in CPU container
+        run: |
+          docker run --rm docs2synth:cpu bash -c "
+            echo '=== Running tests in CPU container ===' &&
+            pytest tests/ -v --tb=short --color=yes || exit 1
+          "
+
+      - name: Verify CLI in CPU container
+        run: |
+          docker run --rm docs2synth:cpu bash -c "
+            docs2synth --help &&
+            docs2synth datasets list &&
+            echo '✓ CLI verification successful!'
+          "
+
+  build-gpu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free up disk space
+        run: |
+          echo "=== Before cleanup ==="
+          df -h
+          echo "=== Removing unnecessary files ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          echo "=== After cleanup ==="
+          df -h
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build GPU image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            BUILD_TYPE=gpu
+          push: false
+          tags: docs2synth:gpu
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          outputs: type=docker,dest=/tmp/gpu-image.tar
+
+      - name: Load GPU image
+        run: |
+          docker load --input /tmp/gpu-image.tar
+          docker images
+
+      - name: Test GPU image (build verification)
+        run: |
+          docker run --rm docs2synth:gpu python -c "import docs2synth; print('✓ GPU image build successful!')"
+
+      - name: Run tests in GPU container
+        run: |
+          docker run --rm docs2synth:gpu bash -c "
+            echo '=== Running tests in GPU container ===' &&
+            CI=true pytest tests/ -v --tb=short --color=yes || exit 1
+          "
+
+      - name: Verify CLI in GPU container
+        run: |
+          docker run --rm docs2synth:gpu bash -c "
+            docs2synth --help &&
+            docs2synth datasets list &&
+            echo '✓ CLI verification successful!'
+          "
