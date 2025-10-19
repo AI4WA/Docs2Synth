@@ -139,10 +139,10 @@ def datasets(
 @click.option(
     "--processor",
     "processor_name",
-    type=click.Choice(["paddleocr"], case_sensitive=False),
+    type=click.Choice(["paddleocr", "pdfplumber", "easyocr"], case_sensitive=False),
     default="paddleocr",
     show_default=True,
-    help="Name of the processor to use.",
+    help="Name of the processor to use (paddleocr: general OCR, pdfplumber: parsed PDFs, easyocr: 80+ languages OCR).",
 )
 @click.option(
     "--lang",

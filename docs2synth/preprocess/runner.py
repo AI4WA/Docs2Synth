@@ -21,6 +21,14 @@ def _get_processor(name: str):
         from .paddleocr import PaddleOCRProcessor
 
         return PaddleOCRProcessor()
+    elif name_lower == "pdfplumber":
+        from .pdfplumber_proc import PDFPlumberProcessor
+
+        return PDFPlumberProcessor()
+    elif name_lower == "easyocr":
+        from .easyocr_proc import EasyOCRProcessor
+
+        return EasyOCRProcessor()
     raise ValueError(f"Unsupported processor: {name}")
 
 
@@ -94,7 +102,13 @@ def run_preprocess(
             if device is not None:
                 kwargs["device"] = device
             result = proc.process(str(f), **kwargs)  # type: ignore[arg-type]
-            out_path = out_root / (f.stem + ".json")
+
+            # Include processor name in output filename to allow multiple processing
+            # Format: filename_processorname.json
+            # Example: document_paddleocr.json, document_pdfplumber.json
+            out_filename = f"{f.stem}_{processor.lower()}.json"
+            out_path = out_root / out_filename
+
             with open(out_path, "w", encoding="utf-8") as fh:
                 fh.write(result.to_json(indent=2))
             num_success += 1
