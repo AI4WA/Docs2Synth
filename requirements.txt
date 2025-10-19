@@ -10,6 +10,12 @@ paddleocr==3.2.0
 shapely>=1.8
 scikit-image>=0.21
 
+# EasyOCR (Apache 2.0 license)
+easyocr>=1.7.0
+
+# PDF Processing (MIT license)
+pdfplumber>=0.10.0
+
 # Additional dependencies
 pyyaml
 pandas>=1.5.0
