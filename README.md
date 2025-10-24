@@ -99,6 +99,43 @@ setup.bat --gpu
 .venv\Scripts\activate
 ```
 
+### MCP Provider (Experimental)
+
+Docs2Synth ships an MCP provider for agents. Install extras and launch either transport:
+
+```bash
+pip install -e ".[dev,mcp]"
+docs2synth-mcp stdio        # local stdio transport
+docs2synth-mcp http --port 8000  # FastAPI/HTTP transport
+```
+
+#### Cursor MCP Integration 
+
+We can setup the MCP provider in Cursor by adding the following configuration to your `mcp.json`:
+
+```json
+{
+  "mcpServers":{
+    "docs2synth": {
+      "url": "http://127.0.0.1:8000/docs2synth"
+    },
+    "docs2synth-stdio": {
+      "command": "/your/path/to/it/venv/bin/docs2synth-mcp",
+      "args": ["stdio"]
+    }
+  }
+}
+
+```
+
+And then we can test it by call it from the cursor chat window.
+Or we can use `npx @modelcontextprotocol/inspector`
+
+**Configuration Notes:**
+- Replace `/path/to/your/venv/bin/docs2synth-mcp` with the actual path to your virtual environment's `docs2synth-mcp` executable
+- The `stdio` transport is for local mcp provider, we do need to provide it via the http mode
+- For HTTP transport, use `docs2synth-mcp http --host 0.0.0.0 --port 8000` and configure accordingly
+
 ### Option 2: Docker Setup (Alternative)
 
 **When to use Docker:**

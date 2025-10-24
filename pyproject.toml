@@ -28,6 +28,7 @@ classifiers = [
 
 [project.scripts]
 docs2synth = "docs2synth.cli:main"
+docs2synth-mcp = "docs2synth.mcp.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -56,6 +57,10 @@ qa = [
 retriever = [
     "sentence-transformers>=0.6",
     "numpy>=1.22",
+]
+
+mcp = [
+    "fastmcp>=2.12.5",
 ]
 
 # Black configuration
