@@ -67,16 +67,47 @@ def build_server() -> FastMCP:
         config = get_config()
         return config.to_dict()
 
-    example_config_path = Path(__file__).resolve().parents[2] / "config.example.yml"
-    if example_config_path.exists():
+    # Add simple mock resources using decorator approach
+    @server.resource(
+        "resource://docs2synth/info",
+        description="Simple info resource for testing.",
+        mime_type="text/plain",
+    )
+    def info_resource() -> str:
+        logger.info("MCP resource info requested")
+        return "This is a simple info resource for testing Docs2Synth MCP server."
 
-        @server.resource(
-            "resource://docs2synth/config-example",
-            description="Example configuration YAML bundled with Docs2Synth.",
-            mime_type="text/yaml",
-        )
-        def config_example() -> str:
-            logger.info("MCP resource config-example requested")
-            return example_config_path.read_text(encoding="utf-8")
+    @server.resource(
+        "resource://docs2synth/status",
+        description="Server status resource for testing.",
+        mime_type="application/json",
+    )
+    def status_resource() -> str:
+        logger.info("MCP resource status requested")
+        return '{"status": "running", "version": "0.1.0", "server": "Docs2Synth MCP"}'
+
+    # Add simple mock prompts
+    @server.prompt(
+        "hello",
+        description="Simple hello prompt for testing.",
+    )
+    def hello_prompt() -> str:
+        logger.info("MCP prompt hello invoked")
+        return "Hello! This is a simple test prompt from Docs2Synth MCP server."
+
+    @server.prompt(
+        "help",
+        description="Help prompt with basic server information.",
+    )
+    def help_prompt() -> str:
+        logger.info("MCP prompt help invoked")
+        return """# Docs2Synth MCP Help
+
+This server provides:
+- **Tools**: list_datasets, dataset_info, active_config
+- **Resources**: info, status
+- **Prompts**: hello, help
+
+Use the tools to interact with datasets and configuration."""
 
     return server

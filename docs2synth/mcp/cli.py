@@ -98,21 +98,14 @@ def main() -> None:
     help="HTTP path to mount the MCP endpoint.",
 )
 @click.option("--log-level", default="info", help="Uvicorn log level.")
-@click.option(
-    "--transport",
-    type=click.Choice(["http", "streamable-http", "sse"], case_sensitive=False),
-    default="http",
-    show_default=True,
-    help="HTTP transport mode: http, streamable-http, or sse (Server-Sent Events).",
-)
-def http(host: str, port: int, path: str, log_level: str, transport: str) -> None:
-    """Expose the MCP server over HTTP transport."""
+def http(host: str, port: int, path: str, log_level: str) -> None:
+    """Expose the MCP server over Streamable-HTTP transport (modern MCP protocol)."""
     _setup_logging()
     server = build_server()
     _run(
         server.run_http_async(
             log_level=log_level,
-            transport=transport,
+            transport="streamable-http",
             host=host,
             port=port,
             path=path,
