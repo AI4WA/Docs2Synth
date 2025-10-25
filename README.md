@@ -128,7 +128,7 @@ We can setup the MCP provider in Cursor by adding the following configuration to
 
 ```
 
-And then we can test it by call it from the cursor chat window.
+And then we can test it by calling it from the cursor chat window.
 Or we can use `npx @modelcontextprotocol/inspector`
 
 **Configuration Notes:**
