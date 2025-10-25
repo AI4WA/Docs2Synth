@@ -20,7 +20,7 @@ services:
       docs2synth-mcp http
         --host 0.0.0.0
         --port 8009
-        --path /docs2synth
+        --path /mcp
         --transport sse
         --log-level info
     restart: unless-stopped
@@ -34,7 +34,7 @@ services:
           "/dev/null",
           "-w",
           "%{http_code}",
-          "http://localhost:8009/docs2synth",
+          "http://localhost:8009/mcp",
         ]
       interval: 30s
       timeout: 10s
