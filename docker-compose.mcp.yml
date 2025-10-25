@@ -1,5 +1,5 @@
 services:
-  # MCP Server - SSE transport mode (for ChatGPT compatibility)
+  # MCP Server - Streamable-HTTP transport (modern MCP protocol)
   docs2synth-mcp-http:
     build:
       context: .
@@ -21,7 +21,6 @@ services:
         --host 0.0.0.0
         --port 8009
         --path /mcp
-        --transport sse
         --log-level info
     restart: unless-stopped
     healthcheck:
@@ -30,6 +29,8 @@ services:
           "CMD",
           "curl",
           "-s",
+          "-H",
+          "Accept: application/json, text/event-stream",
           "-o",
           "/dev/null",
           "-w",
@@ -40,31 +41,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
-  # # MCP Server - SSE transport mode (alternative)
-  # docs2synth-mcp-sse:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.mcp
-  #   image: docs2synth:mcp
-  #   container_name: docs2synth-mcp-sse
-  #   ports:
-  #     - "8001:8001" # SSE transport port
-  #   volumes:
-  #     - ./data/datasets:/app/data/datasets:ro
-  #     - ./config.example.yml:/app/config.yml:ro
-  #     - ./.docker-local/mcp/logs:/app/logs
-  #   environment:
-  #     - PYTHONUNBUFFERED=1
-  #     - LOG_LEVEL=info
-  #   working_dir: /app
-  #   command: >
-  #     docs2synth-mcp http
-  #       --host 0.0.0.0
-  #       --port 8001
-  #       --path /docs2synth
-  #       --transport sse
-  #       --log-level info
-  #   restart: unless-stopped
-  #   profiles:
-  #     - sse
