@@ -41,9 +41,9 @@ LABEL description="Docs2Synth MCP Server"
 # Expose the port
 EXPOSE 8009
 
-# Health check for Streamable-HTTP mode
+# Health check for SSE mode
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f -H "Accept: application/json, text/event-stream" http://localhost:8009/mcp || exit 1
+    CMD curl -f -H "Accept: text/event-stream" http://localhost:8009/sse || exit 1
 
 # Default command (can be overridden by docker-compose)
-CMD ["docs2synth-mcp", "http", "--host", "0.0.0.0", "--port", "8009", "--path", "/mcp"]
+CMD ["docs2synth-mcp", "sse", "--host", "0.0.0.0", "--port", "8009"]
