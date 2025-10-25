@@ -133,7 +133,7 @@ Or we can use `npx @modelcontextprotocol/inspector`
 
 **Configuration Notes:**
 - Replace `/path/to/your/venv/bin/docs2synth-mcp` with the actual path to your virtual environment's `docs2synth-mcp` executable
-- The `stdio` transport is for local mcp provider, we do need to provide it via the http mode
+- The `stdio` transport is for local MCP providers and does not require HTTP mode.
 - For HTTP transport, use `docs2synth-mcp http --host 0.0.0.0 --port 8000` and configure accordingly
 
 ### Option 2: Docker Setup (Alternative)
