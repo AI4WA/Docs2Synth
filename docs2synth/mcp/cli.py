@@ -91,24 +91,17 @@ def main() -> None:
 @main.command()
 @click.option("--host", default="0.0.0.0", show_default=True, help="Bind address.")
 @click.option("--port", default=8000, show_default=True, help="Port to bind.", type=int)
-@click.option(
-    "--path",
-    default="/docs2synth",
-    show_default=True,
-    help="HTTP path to mount the MCP endpoint.",
-)
 @click.option("--log-level", default="info", help="Uvicorn log level.")
-def http(host: str, port: int, path: str, log_level: str) -> None:
-    """Expose the MCP server over Streamable-HTTP transport (modern MCP protocol)."""
+def sse(host: str, port: int, log_level: str) -> None:
+    """Expose the MCP server over SSE (Server-Sent Events) transport for ChatGPT integration."""
     _setup_logging()
     server = build_server()
     _run(
         server.run_http_async(
             log_level=log_level,
-            transport="streamable-http",
+            transport="sse",
             host=host,
             port=port,
-            path=path,
         )
     )
 
