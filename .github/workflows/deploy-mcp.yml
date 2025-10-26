@@ -1,0 +1,64 @@
+name: Deploy to MCP Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to MCP Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 115.146.85.108
+          username: pascal
+          password: ${{ secrets.DOCS2SYNTH_PASSWORD }}
+          script: |
+            set -e  # Exit on any error
+
+            echo "🚀 Starting deployment to MCP Server..."
+            echo "📅 Deployment time: $(date)"
+
+            # Navigate to project directory
+            cd /home/pascal/Docs2Synth
+
+            # Check if directory exists
+            if [ ! -d "/home/pascal/Docs2Synth" ]; then
+              echo "❌ Project directory not found!"
+              exit 1
+            fi
+
+            # Pull latest changes
+            echo "📥 Pulling latest changes from main branch..."
+            git fetch origin
+            git reset --hard origin/main
+
+            # Stop existing containers
+            echo "🛑 Stopping existing MCP containers..."
+            docker compose -f docker-compose.mcp.yml down || echo "⚠️  No containers were running"
+
+            # Build and start new containers
+            echo "🔨 Building and starting MCP containers..."
+            docker compose -f docker-compose.mcp.yml up -d --build
+
+            # Wait a moment for containers to start
+            echo "⏳ Waiting for containers to start..."
+            sleep 10
+
+            # Check container status
+            echo "📊 Checking container status..."
+            docker compose -f docker-compose.mcp.yml ps
+
+            # Check if containers are healthy
+            echo "🏥 Checking container health..."
+            if docker compose -f docker-compose.mcp.yml ps | grep -q "Up"; then
+              echo "✅ Deployment completed successfully!"
+              echo "🌐 MCP Server should be available at: http://115.146.85.108:8009"
+            else
+              echo "❌ Some containers failed to start properly"
+              docker compose -f docker-compose.mcp.yml logs
+              exit 1
+            fi

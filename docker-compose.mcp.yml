@@ -1,0 +1,42 @@
+services:
+  # MCP Server - SSE transport (Server-Sent Events for ChatGPT integration)
+  docs2synth-mcp-sse:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    image: docs2synth:mcp
+    container_name: docs2synth-mcp-sse
+    ports:
+      - "8009:8009"
+    volumes:
+      - ./data/datasets:/app/data/datasets:ro # Read-only dataset access
+      - ./config.example.yml:/app/config.yml:ro # Configuration file
+      - ./.docker-local/mcp/logs:/app/logs # Log output
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=info
+    working_dir: /app
+    command: >
+      docs2synth-mcp sse
+        --host 0.0.0.0
+        --port 8009
+        --log-level info
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-s",
+          "-H",
+          "Accept: text/event-stream",
+          "-o",
+          "/dev/null",
+          "-w",
+          "%{http_code}",
+          "http://localhost:8009/sse",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
