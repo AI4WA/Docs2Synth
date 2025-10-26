@@ -11,6 +11,11 @@ from fastmcp import FastMCP
 from docs2synth import __version__
 from docs2synth.utils import get_config, get_logger
 
+# Import auth verifier (optional, only if mcp extras installed)
+
+from docs2synth.mcp.auth import create_auth_verifier
+
+
 SERVER_NAME = "Docs2Synth MCP"
 SERVER_INSTRUCTIONS = (
     "This MCP server provides search and document retrieval capabilities for ChatGPT's "
@@ -139,11 +144,15 @@ def get_document_index() -> DocumentIndex:
 
 def build_server() -> FastMCP:  # noqa: C901
     """Create and configure the FastMCP server instance."""
+    # Initialize authentication if enabled
+    auth_verifier = create_auth_verifier()
+
     server = FastMCP(
         name=SERVER_NAME,
         version=__version__,
         instructions=SERVER_INSTRUCTIONS,
         include_fastmcp_meta=False,
+        auth=auth_verifier,
     )
 
     @server.tool(description="List dataset names registered for Docs2Synth downloads.")
