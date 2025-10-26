@@ -9,11 +9,10 @@ from typing import Any
 from fastmcp import FastMCP
 
 from docs2synth import __version__
+from docs2synth.mcp.auth import create_auth_verifier
 from docs2synth.utils import get_config, get_logger
 
 # Import auth verifier (optional, only if mcp extras installed)
-
-from docs2synth.mcp.auth import create_auth_verifier
 
 
 SERVER_NAME = "Docs2Synth MCP"

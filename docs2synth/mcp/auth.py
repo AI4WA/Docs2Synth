@@ -78,7 +78,9 @@ class DjangoTokenVerifier(TokenVerifier):
 
                 if response.status_code == 200:
                     logger.info("Token verified successfully")
-                    return AccessToken(token=token, client_id="authenticated", scopes=[])
+                    return AccessToken(
+                        token=token, client_id="authenticated", scopes=[]
+                    )
 
                 logger.warning(f"Token verification failed: {response.status_code}")
                 return None
