@@ -75,6 +75,16 @@ Combine all steps into a **unified pipeline** with flexible control flow based o
 
 </div>
 
+<div class="feature-card" markdown>
+
+### :electric_plug: MCP Integration
+
+Expose functionality as **Model Context Protocol (MCP)** server for AI agents like Claude, ChatGPT, and Cursor.
+
+[Learn more →](mcp-integration.md){ .md-button .md-button--primary }
+
+</div>
+
 </div>
 
 ## Installation

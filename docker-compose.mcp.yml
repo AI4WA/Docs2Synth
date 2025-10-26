@@ -15,6 +15,10 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=info
+      # Authentication settings
+      - AUTH_ENABLED=true  # Set to false to disable authentication
+      - AUTH_VERIFY_URL=http://admin.kaiaperth.com/authenticate/api/token/verify/
+      - AUTH_VERIFY_SSL=false  # Set to true in production, false for dev/testing with self-signed certs
     working_dir: /app
     command: >
       docs2synth-mcp sse
