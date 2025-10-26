@@ -106,7 +106,7 @@ Docs2Synth ships an MCP provider for agents. Install extras and launch either tr
 ```bash
 pip install -e ".[dev,mcp]"
 docs2synth-mcp stdio        # local stdio transport
-docs2synth-mcp http --port 8000  # FastAPI/HTTP transport
+docs2synth-mcp sse --port 8009  # SSE transport (recommended for ChatGPT)
 ```
 
 #### Cursor MCP Integration 
@@ -147,10 +147,10 @@ We provide a unified Dockerfile that supports multiple build configurations thro
 
 #### Available Docker Images
 
-| Image Type | Use Case | Size | Build Command |
-|------------|----------|------|---------------|
-| `cpu` | Development and CPU deployment | ~2.5 GB | `docker compose up -d docs2synth-cpu` |
-| `gpu` | Training and GPU inference | ~11 GB | `docker compose up -d docs2synth-gpu` |
+| Image Type | Use Case                       | Size    | Build Command                         |
+| ---------- | ------------------------------ | ------- | ------------------------------------- |
+| `cpu`      | Development and CPU deployment | ~2.5 GB | `docker compose up -d docs2synth-cpu` |
+| `gpu`      | Training and GPU inference     | ~11 GB  | `docker compose up -d docs2synth-gpu` |
 
 #### Quick Start with Docker
 
