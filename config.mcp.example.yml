@@ -1,0 +1,50 @@
+# Docs2Synth MCP Server Configuration
+#
+# This file configures the MCP (Model Context Protocol) server with
+# OAuth 2.0 authentication via Django OAuth Toolkit.
+#
+# Configuration priority: environment variables > this file > defaults
+
+# Server settings
+server:
+  # Host to bind to (0.0.0.0 allows external connections)
+  host: 0.0.0.0
+
+  # Port to listen on
+  port: 8009
+
+  # Base URL for this MCP server (used for OAuth callbacks)
+  base_url: http://localhost:8009
+
+  # Optional: Directory for processed documents
+  # If not specified, uses docs2synth.config data.processed_dir
+  data_dir: null
+
+# OAuth 2.0 / OpenID Connect settings
+oauth:
+  # OIDC discovery URL (Django OAuth Toolkit)
+  # Internal URL - used by MCP server to validate tokens
+  discovery_url: http://localhost:8000/o/.well-known/openid-configuration
+
+  # Public OAuth base URL - returned to clients for authorization
+  public_base_url: http://localhost:8000/o
+
+  # OAuth client credentials
+  client_id: qQdiLy6Raw141wfcHQIo6srYuqsl0Y2oJIaqmcwJ
+  client_secret: test
+
+  # Token validation method
+  # true: Use Token Introspection (RFC 7662) - for opaque tokens
+  # false: Use JWT validation - for self-contained JWT tokens
+  use_introspection: true
+
+  # SSL certificate verification (disable for development)
+  verify_ssl: false
+
+  # HTTP request timeout in seconds
+  timeout: 5.0
+
+# Transport: StreamableHTTP (MCP protocol 2025-03-26)
+# - GET /mcp: SSE stream for server-initiated messages
+# - POST /mcp: JSON-RPC requests with SSE or JSON responses
+# - DELETE /mcp: Session termination
