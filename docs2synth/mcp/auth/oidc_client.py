@@ -32,6 +32,8 @@ class OIDCResourceServer:
         client_id: OAuth client ID (optional, for introspection)
         client_secret: OAuth client secret (optional, for introspection)
         use_introspection: Use token introspection instead of JWT validation
+        verify_ssl: Enable SSL certificate verification (default: True from env)
+        timeout: HTTP request timeout in seconds (default: 5.0 from env)
     """
 
     def __init__(
@@ -40,6 +42,8 @@ class OIDCResourceServer:
         client_id: str | None = None,
         client_secret: str | None = None,
         use_introspection: bool = False,
+        verify_ssl: bool | None = None,
+        timeout: float | None = None,
     ):
         """Initialize the OIDC Resource Server."""
         self.oidc_discovery_url = oidc_discovery_url or os.getenv(
@@ -61,17 +65,26 @@ class OIDCResourceServer:
         # JWKS client for JWT validation
         self.jwks_client = None
 
-        # HTTP client settings
-        self.timeout = float(os.getenv("OIDC_TIMEOUT", "5.0"))
-        self.verify_ssl = os.getenv("OIDC_VERIFY_SSL", "true").lower() in (
-            "true",
-            "1",
-            "yes",
-        )
+        # HTTP client settings - config parameter takes precedence over env vars
+        if timeout is not None:
+            self.timeout = float(timeout)
+        else:
+            self.timeout = float(os.getenv("OIDC_TIMEOUT", "5.0"))
+
+        if verify_ssl is not None:
+            self.verify_ssl = bool(verify_ssl)
+        else:
+            self.verify_ssl = os.getenv("OIDC_VERIFY_SSL", "true").lower() in (
+                "true",
+                "1",
+                "yes",
+            )
 
         logger.info("Initializing OIDC Resource Server")
         logger.info(f"  Discovery URL: {self.oidc_discovery_url}")
         logger.info(f"  Use Introspection: {self.use_introspection}")
+        logger.info(f"  Verify SSL: {self.verify_ssl}")
+        logger.info(f"  Timeout: {self.timeout}s")
 
     def _fix_url(self, url: str, correct_base: str) -> str:
         """Fix URLs that might have incorrect hostnames.
