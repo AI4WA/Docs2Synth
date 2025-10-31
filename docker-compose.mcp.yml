@@ -1,5 +1,5 @@
 services:
-  # MCP Server - SSE transport (Server-Sent Events for ChatGPT integration)
+  # MCP Server - StreamableHTTP transport (MCP protocol 2025-03-26)
   docs2synth-mcp-sse:
     build:
       context: .
@@ -10,15 +10,9 @@ services:
       - "8009:8009"
     volumes:
       - ./data/datasets:/app/data/datasets:ro # Read-only dataset access
-      - ./config.example.yml:/app/config.yml:ro # Configuration file
+      - ./config.example.yml:/app/config.yml:ro # Docs2Synth configuration
+      - ./config.mcp.yml:/app/config.mcp.yml:ro # MCP server configuration
       - ./.docker-local/mcp/logs:/app/logs # Log output
-    environment:
-      - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=info
-      # Authentication settings
-      - AUTH_ENABLED=true  # Set to false to disable authentication
-      - AUTH_VERIFY_URL=http://admin.kaiaperth.com/authenticate/api/token/verify/
-      - AUTH_VERIFY_SSL=false  # Set to true in production, false for dev/testing with self-signed certs
     working_dir: /app
     command: >
       docs2synth-mcp sse
@@ -32,13 +26,11 @@ services:
           "CMD",
           "curl",
           "-s",
-          "-H",
-          "Accept: text/event-stream",
           "-o",
           "/dev/null",
           "-w",
           "%{http_code}",
-          "http://localhost:8009/sse",
+          "http://localhost:8009/health",
         ]
       interval: 30s
       timeout: 10s
