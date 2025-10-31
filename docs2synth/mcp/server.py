@@ -168,6 +168,15 @@ def create_asgi_app(
     async def handle_oauth_proxy(request: Request) -> Response:
         return await oauth_proxy.proxy_oauth_request(config, request)
 
+    async def handle_accounts_proxy(request: Request) -> Response:
+        return await oauth_proxy.proxy_accounts_request(config, request)
+
+    async def handle_login_proxy(request: Request) -> Response:
+        return await oauth_proxy.proxy_login_request(config, request)
+
+    async def handle_static_proxy(request: Request) -> Response:
+        return await oauth_proxy.proxy_static_request(config, request)
+
     routes = [
         Route("/health", endpoint=handle_health, methods=["GET"]),
         Route("/", endpoint=handle_metadata, methods=["GET", "HEAD"]),
@@ -196,6 +205,18 @@ def create_asgi_app(
             endpoint=handle_oauth_proxy,
             methods=["GET", "POST", "OPTIONS"],
         ),
+        Route(
+            "/accounts/{path:path}",
+            endpoint=handle_accounts_proxy,
+            methods=["GET", "POST", "OPTIONS"],
+        ),
+        Route(
+            "/login", endpoint=handle_login_proxy, methods=["GET", "POST", "OPTIONS"]
+        ),
+        Route(
+            "/login/", endpoint=handle_login_proxy, methods=["GET", "POST", "OPTIONS"]
+        ),
+        Route("/static/{path:path}", endpoint=handle_static_proxy, methods=["GET"]),
         Route("/mcp", endpoint=handle_mcp_endpoint, methods=["GET", "POST", "DELETE"]),
     ]
 
@@ -244,6 +265,8 @@ def build_server(
         client_id=config.oauth.client_id,
         client_secret=config.oauth.client_secret,
         use_introspection=config.oauth.use_introspection,
+        verify_ssl=config.oauth.verify_ssl,
+        timeout=config.oauth.timeout,
     )
 
     mcp_server = create_mcp_server()
