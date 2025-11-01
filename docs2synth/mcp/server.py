@@ -160,7 +160,7 @@ def create_asgi_app(
         return await oauth_proxy.handle_openid_configuration(config)
 
     async def handle_client_reg(request: Request) -> JSONResponse:
-        return await oauth_proxy.handle_client_registration(config)
+        return await oauth_proxy.handle_client_registration(config, request)
 
     async def handle_callback(request: Request) -> Response:
         return await oauth_proxy.handle_oauth_callback(config, request)
