@@ -151,7 +151,7 @@ def create_asgi_app(
 
     # OAuth proxy endpoint wrappers - properly await coroutines
     async def handle_oauth_metadata(request: Request) -> JSONResponse:
-        return await oauth_proxy.handle_oauth_metadata(config)
+        return await oauth_proxy.handle_oauth_metadata(config, request)
 
     async def handle_protected_resource(request: Request) -> JSONResponse:
         return await oauth_proxy.handle_protected_resource_metadata(config, request)
@@ -187,6 +187,11 @@ def create_asgi_app(
         Route("/metadata", endpoint=handle_metadata, methods=["GET"]),
         Route(
             "/.well-known/oauth-authorization-server",
+            endpoint=handle_oauth_metadata,
+            methods=["GET", "OPTIONS"],
+        ),
+        Route(
+            "/.well-known/oauth-authorization-server/mcp",
             endpoint=handle_oauth_metadata,
             methods=["GET", "OPTIONS"],
         ),
