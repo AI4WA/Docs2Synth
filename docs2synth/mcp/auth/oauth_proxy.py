@@ -194,6 +194,7 @@ async def handle_oauth_metadata(config: MCPConfig) -> JSONResponse:
                 "token id_token",
                 "code token id_token",
             ],
+            "scopes_supported": ["openid", "profile", "email", "read", "write"],
             "grant_types_supported": [
                 "authorization_code",
                 "implicit",
@@ -311,8 +312,12 @@ async def proxy_oauth_request(config: MCPConfig, request: Request) -> Response:
         params = dict(request.query_params)
         if "redirect_uri" in params:
             params["redirect_uri"] = f"{config.server.base_url}/oauth/callback"
-            query_string = urlencode(params)
-            logger.debug("Rewrote redirect_uri in authorization request")
+        # Ensure scope is present - Django OAuth Toolkit requires it
+        if "scope" not in params or not params.get("scope"):
+            params["scope"] = "read"  # Default scope for MCP access
+            logger.debug("Added default scope to authorization request")
+        query_string = urlencode(params)
+        logger.debug("Rewrote redirect_uri in authorization request")
 
     # Intercept token exchange requests
     request_body: bytes | None = None
