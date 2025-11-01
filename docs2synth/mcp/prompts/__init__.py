@@ -1,68 +1,46 @@
+"""MCP prompts registration and integration."""
+
 from __future__ import annotations
 
-from typing import Dict, List
-
 from mcp.server import Server
-from mcp.types import GetPromptResult, Prompt, PromptMessage, TextContent
+from mcp.types import GetPromptResult, Prompt
+
+from . import hello
+from . import help as help_prompt
+
+# Collect all prompt modules
+PROMPT_MODULES = [
+    hello,
+    help_prompt,
+]
+
+# Collect prompt specifications and handlers
+PROMPT_SPECS = [module.PROMPT_SPEC for module in PROMPT_MODULES]
+PROMPT_HANDLERS = {
+    module.PROMPT_SPEC["name"]: getattr(
+        module, f"get_{module.PROMPT_SPEC['name']}_prompt"
+    )
+    for module in PROMPT_MODULES
+}
 
 
 def register_prompts(server: Server) -> None:
+    """Register all MCP prompts with the server."""
+
     @server.list_prompts()
-    async def list_prompts() -> List[Prompt]:
+    async def list_prompts() -> list[Prompt]:
+        """List all available prompts."""
         return [
-            Prompt(name="hello", description="Simple hello prompt for testing."),
-            Prompt(
-                name="help", description="Help prompt with basic server information."
-            ),
+            Prompt(name=spec["name"], description=spec["description"])
+            for spec in PROMPT_SPECS
         ]
 
     @server.get_prompt()
     async def get_prompt(
-        name: str, arguments: Dict[str, str] | None = None
+        name: str, arguments: dict[str, str] | None = None
     ) -> GetPromptResult:
-        if name == "hello":
-            return GetPromptResult(
-                description="Simple hello prompt for testing",
-                messages=[
-                    PromptMessage(
-                        role="user",
-                        content=TextContent(
-                            type="text",
-                            text="Hello! This is a simple test prompt from Docs2Synth MCP server.",
-                        ),
-                    )
-                ],
-            )
-        if name == "help":
-            return GetPromptResult(
-                description="Help information about the Docs2Synth MCP server",
-                messages=[
-                    PromptMessage(
-                        role="user",
-                        content=TextContent(
-                            type="text",
-                            text=(
-                                "# Docs2Synth MCP Help\n\n"
-                                "This server provides:\n"
-                                "- **Tools**: list_datasets, dataset_info, active_config, search, fetch\n"
-                                "- **Resources**: info, status\n"
-                                "- **Resource Templates**: document/{doc_id}, dataset/{dataset_name}\n"
-                                "- **Prompts**: hello, help\n\n"
-                                "Use the tools to:\n"
-                                "- **list_datasets**: Get available dataset names\n"
-                                "- **dataset_info**: Get download info for a specific dataset\n"
-                                "- **active_config**: View current configuration\n"
-                                "- **search**: Search through processed documents by query\n"
-                                "- **fetch**: Retrieve full document content by ID\n\n"
-                                "## Authentication\n"
-                                "This server uses OpenID Connect (OIDC) for authentication. Clients must:\n"
-                                "1. Discover endpoints via /.well-known/openid-configuration\n"
-                                "2. Authorize via /authorize endpoint\n"
-                                "3. Exchange authorization code for access token via /token\n"
-                                "4. Use Bearer token in Authorization header for MCP requests\n"
-                            ),
-                        ),
-                    )
-                ],
-            )
-        raise ValueError(f"Unknown prompt: {name}")
+        """Handle prompt retrieval by routing to the appropriate handler."""
+        handler = PROMPT_HANDLERS.get(name)
+        if not handler:
+            raise ValueError(f"Unknown prompt: {name}")
+        return await handler()

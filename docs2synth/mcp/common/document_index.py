@@ -53,9 +53,7 @@ class DocumentIndex:
                     "metadata": {
                         "source_file": str(json_file),
                         "object_count": len(data.get("objects", {})),
-                        "processor": (
-                            "PaddleOCR" if "_easyocr" not in doc_id else "EasyOCR"
-                        ),
+                        "processor": "EasyOCR" if "_easyocr" in doc_id else "PaddleOCR",
                     },
                 }
             except Exception as e:  # pragma: no cover - defensive logging
