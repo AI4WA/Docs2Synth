@@ -6,6 +6,8 @@ to the Django OAuth Toolkit backend.
 
 from __future__ import annotations
 
+import html
+import json
 from urllib.parse import parse_qs, urlencode
 
 import httpx
@@ -289,14 +291,442 @@ async def handle_client_registration(config: MCPConfig) -> JSONResponse:
 
 async def handle_oauth_callback(
     config: MCPConfig, request: Request
-) -> RedirectResponse:
-    """Handle OAuth callback from Django and forward to MCP Inspector."""
+) -> Response:
+    """Handle OAuth callback from Django.
+    
+    For MCP Inspector: redirects to localhost:6274 for debugging.
+    For real clients: returns an HTML page that allows clients to extract
+    the authorization code via postMessage (for iframe) or URL.
+    """
     params = dict(request.query_params)
-    inspector_callback = "http://localhost:6274/oauth/callback/debug"
-    redirect_url = f"{inspector_callback}?{urlencode(params)}"
-
-    logger.debug("OAuth callback received, redirecting to Inspector")
-    return RedirectResponse(url=redirect_url, status_code=302)
+    code = params.get("code")
+    state = params.get("state")
+    error = params.get("error")
+    error_description = params.get("error_description")
+    
+    # Check if this is MCP Inspector
+    # Inspector typically sends a specific state parameter or User-Agent
+    user_agent = request.headers.get("user-agent", "").lower()
+    referer = request.headers.get("referer", "").lower()
+    
+    # More specific detection: Inspector typically comes from localhost:6274
+    is_inspector = (
+        "localhost:6274" in referer
+        or (state and "mcp-inspector" in state.lower())
+        or (user_agent and "mcp-inspector" in user_agent)
+    )
+    
+    if is_inspector:
+        # MCP Inspector: redirect to debug endpoint
+        inspector_callback = "http://localhost:6274/oauth/callback/debug"
+        redirect_url = f"{inspector_callback}?{urlencode(params)}"
+        logger.debug("OAuth callback received, redirecting to Inspector")
+        return RedirectResponse(url=redirect_url, status_code=302)
+    
+    # Real client: return HTML page that can be used by clients
+    # This allows clients to extract the code via postMessage or direct access
+    # Use JSON encoding to safely escape values for JavaScript
+    if error:
+        # Safely escape values for JavaScript
+        error_js = json.dumps(error)
+        error_desc_js = json.dumps(error_description or "")
+        state_js = json.dumps(state or "")
+        
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OAuth Authorization Error</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .container {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }}
+        .icon {{
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: #fee;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+        }}
+        h1 {{
+            color: #d32f2f;
+            margin-bottom: 16px;
+            font-size: 24px;
+        }}
+        p {{
+            color: #666;
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }}
+        .error-box {{
+            background: #fee;
+            border-left: 4px solid #d32f2f;
+            padding: 12px;
+            margin: 20px 0;
+            text-align: left;
+            border-radius: 4px;
+        }}
+        .error-box strong {{
+            color: #d32f2f;
+            display: block;
+            margin-bottom: 4px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">⚠️</div>
+        <h1>Authorization Error</h1>
+        <div class="error-box">
+            <strong>Error Code:</strong>
+            <span>{html.escape(error)}</span>
+        </div>
+        <div class="error-box">
+            <strong>Description:</strong>
+            <span>{html.escape(error_description or 'No description provided')}</span>
+        </div>
+        <p style="margin-top: 24px; font-size: 14px; color: #999;">
+            This window can be closed safely.
+        </p>
+    </div>
+    <script>
+        // Send error to parent window if in iframe
+        if (window.parent !== window) {{
+            window.parent.postMessage({{
+                type: 'oauth_error',
+                error: {error_js},
+                error_description: {error_desc_js},
+                state: {state_js}
+            }}, '*');
+        }}
+        // Try to close the window if it was opened by JavaScript
+        try {{
+            if (window.opener) {{
+                setTimeout(() => window.close(), 2000);
+            }}
+        }} catch (e) {{
+            // Ignore errors when trying to close
+        }}
+    </script>
+</body>
+</html>
+"""
+    else:
+        # Safely escape values for JavaScript
+        code_js = json.dumps(code or "")
+        state_js = json.dumps(state or "")
+        code_display = html.escape(code or "None")
+        state_display = html.escape(state or "None") if state else "None"
+        callback_url = f"{config.server.base_url}/oauth/callback"
+        
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authorization Successful</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .container {{
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            animation: slideIn 0.3s ease-out;
+        }}
+        @keyframes slideIn {{
+            from {{
+                opacity: 0;
+                transform: translateY(-20px);
+            }}
+            to {{
+                opacity: 1;
+                transform: translateY(0);
+            }}
+        }}
+        .icon {{
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: #e8f5e9;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            animation: checkmark 0.6s ease-in-out;
+        }}
+        @keyframes checkmark {{
+            0% {{
+                transform: scale(0);
+            }}
+            50% {{
+                transform: scale(1.1);
+            }}
+            100% {{
+                transform: scale(1);
+            }}
+        }}
+        h1 {{
+            color: #2e7d32;
+            margin-bottom: 16px;
+            font-size: 24px;
+            font-weight: 600;
+        }}
+        .message {{
+            color: #666;
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }}
+        .code-box {{
+            background: #f5f5f5;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 20px 0;
+            word-break: break-all;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 14px;
+            color: #333;
+        }}
+        .code-label {{
+            font-size: 12px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }}
+        .spinner {{
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }}
+        @keyframes spin {{
+            0% {{ transform: rotate(0deg); }}
+            100% {{ transform: rotate(360deg); }}
+        }}
+        .spinner.show {{
+            display: block;
+        }}
+        .status {{
+            font-size: 14px;
+            color: #999;
+            margin-top: 16px;
+        }}
+        .info-box {{
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 12px;
+            margin: 20px 0;
+            text-align: left;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #555;
+        }}
+        .info-box code {{
+            background: #fff;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 11px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">✓</div>
+        <h1>Authorization Successful</h1>
+        <p class="message">
+            Your authorization code has been received.<br>
+            This window will close automatically...
+        </p>
+        <div class="code-box">
+            <div class="code-label">Authorization Code</div>
+            <div>{code_display}</div>
+        </div>
+        <div class="info-box" id="infoBox" style="display: none;">
+            <strong>📋 Next Steps:</strong><br>
+            The authorization code is in the URL. Your client should:<br>
+            1. Extract code from URL<br>
+            2. POST to <code>/oauth/token</code> with:<br>
+            &nbsp;&nbsp;• <code>grant_type=authorization_code</code><br>
+            &nbsp;&nbsp;• <code>code={code_display}</code><br>
+            &nbsp;&nbsp;• <code>redirect_uri={html.escape(callback_url)}</code><br>
+            &nbsp;&nbsp;• <code>client_id</code> and <code>client_secret</code>
+        </div>
+        <div class="spinner" id="spinner"></div>
+        <div class="status" id="status">Processing...</div>
+    </div>
+    <script>
+        (function() {{
+            // Extract code and state from URL (OAuth standard - clients should read from URL)
+            const urlParams = new URLSearchParams(window.location.search);
+            const codeFromUrl = urlParams.get('code') || {code_js};
+            const stateFromUrl = urlParams.get('state') || {state_js};
+            
+            const code = codeFromUrl;
+            const state = stateFromUrl;
+            const spinner = document.getElementById('spinner');
+            const status = document.getElementById('status');
+            
+            // Important: Code is available in URL for OAuth clients to extract
+            // Standard OAuth flow: Client reads code from URL → POST to /oauth/token
+            console.log('OAuth callback - Code available in URL:', code ? 'Yes' : 'No');
+            console.log('Code:', code);
+            console.log('State:', state);
+            
+            // Try multiple methods to communicate with parent/opener
+            let handled = false;
+            
+            function markHandled(message) {{
+                if (handled) return;
+                handled = true;
+                status.textContent = message;
+                spinner.classList.add('show');
+            }}
+            
+            // Method 1: postMessage to parent (for iframe)
+            if (window.parent !== window) {{
+                try {{
+                    window.parent.postMessage({{
+                        type: 'oauth_callback',
+                        code: code,
+                        state: state,
+                        source: 'mcp_oauth_callback'
+                    }}, '*');
+                    markHandled('Code sent to parent window. Closing...');
+                    setTimeout(() => {{
+                        try {{
+                            window.close();
+                        }} catch (e) {{
+                            // Window might not be closable
+                        }}
+                    }}, 1500);
+                }} catch (e) {{
+                    console.error('postMessage to parent failed:', e);
+                }}
+            }}
+            
+            // Method 2: Communicate with opener (for popup windows)
+            if (window.opener && !window.opener.closed) {{
+                try {{
+                    window.opener.postMessage({{
+                        type: 'oauth_callback',
+                        code: code,
+                        state: state,
+                        source: 'mcp_oauth_callback'
+                    }}, '*');
+                    if (!handled) {{
+                        markHandled('Code sent to opener. Closing...');
+                        setTimeout(() => {{
+                            try {{
+                                window.close();
+                            }} catch (e) {{
+                                // Window might not be closable
+                            }}
+                        }}, 1500);
+                    }}
+                }} catch (e) {{
+                    console.error('postMessage to opener failed:', e);
+                }}
+            }}
+            
+            // Method 3: Dispatch custom event (for advanced clients)
+            try {{
+                window.dispatchEvent(new CustomEvent('oauth_callback', {{
+                    detail: {{ code: code, state: state }}
+                }}));
+            }} catch (e) {{
+                console.error('Custom event dispatch failed:', e);
+            }}
+            
+            // Method 4: Store in localStorage as fallback (if same origin)
+            try {{
+                if (window.localStorage) {{
+                    localStorage.setItem('oauth_code', code);
+                    localStorage.setItem('oauth_state', state || '');
+                    localStorage.setItem('oauth_timestamp', Date.now().toString());
+                    localStorage.setItem('oauth_callback_url', window.location.href);
+                }}
+            }} catch (e) {{
+                // Cross-origin or storage disabled
+            }}
+            
+            // Method 5: Try to close after delay if opened by script
+            setTimeout(() => {{
+                if (!handled) {{
+                    // For MCP clients: They should read code from URL and exchange for token
+                    status.innerHTML = '✅ Code is in URL. Client should exchange for token at <code>/oauth/token</code>';
+                    spinner.classList.remove('show');
+                    // Show info box
+                    const infoBox = document.getElementById('infoBox');
+                    if (infoBox) {{
+                        infoBox.style.display = 'block';
+                    }}
+                }} else {{
+                    try {{
+                        window.close();
+                    }} catch (e) {{
+                        // Ignore - window might not be closable
+                        status.textContent = 'Window will remain open. You can close it manually.';
+                    }}
+                }}
+            }}, 2000);
+        }})();
+    </script>
+</body>
+</html>
+"""
+    
+    logger.debug(f"OAuth callback received: code={'present' if code else 'missing'}, state={state}, error={error}")
+    return Response(content=html_content, media_type="text/html")
 
 
 async def proxy_oauth_request(config: MCPConfig, request: Request) -> Response:
