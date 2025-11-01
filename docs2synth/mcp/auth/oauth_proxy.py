@@ -258,7 +258,10 @@ async def handle_oauth_metadata(
     }
 
     # ChatGPT expects a 'mcp' field when accessing /.well-known/oauth-authorization-server/mcp
-    if request and request.url.path.endswith("/mcp"):
+    # Also handle /oauth suffix (ChatGPT sometimes constructs paths incorrectly)
+    if request and (
+        request.url.path.endswith("/mcp") or request.url.path.endswith("/oauth")
+    ):
         metadata["mcp"] = {
             "client_id": config.oauth.client_id,
             "redirect_uri": f"{base_url}/oauth/callback",
@@ -268,44 +271,63 @@ async def handle_oauth_metadata(
     return JSONResponse(metadata)
 
 
-async def handle_openid_configuration(config: MCPConfig) -> JSONResponse:
-    """Return OpenID Connect Discovery metadata."""
+async def handle_openid_configuration(
+    config: MCPConfig, request: Request | None = None
+) -> JSONResponse:
+    """Return OpenID Connect Discovery metadata.
+
+    For ChatGPT compatibility, if the path ends with /mcp, includes an 'mcp' field
+    with client_id and redirect_uri as ChatGPT expects.
+    """
     base_url = config.server.base_url
-    return JSONResponse(
-        {
-            "issuer": f"{base_url}/oauth",
-            "authorization_endpoint": f"{base_url}/oauth/authorize/",
-            "token_endpoint": f"{base_url}/oauth/token/",
-            "userinfo_endpoint": f"{base_url}/oauth/userinfo/",
-            "jwks_uri": f"{base_url}/oauth/.well-known/jwks.json",
-            "registration_endpoint": f"{base_url}/oauth/register",
-            "revocation_endpoint": f"{base_url}/oauth/revoke_token/",
-            "introspection_endpoint": f"{base_url}/oauth/introspect/",
-            "response_types_supported": [
-                "code",
-                "token",
-                "id_token",
-                "code token",
-                "code id_token",
-                "token id_token",
-                "code token id_token",
-            ],
-            "subject_types_supported": ["public"],
-            "id_token_signing_alg_values_supported": ["RS256"],
-            "scopes_supported": ["openid", "profile", "email", "read", "write"],
-            "token_endpoint_auth_methods_supported": [
-                "client_secret_basic",
-                "client_secret_post",
-            ],
-            "grant_types_supported": [
-                "authorization_code",
-                "implicit",
-                "client_credentials",
-                "refresh_token",
-            ],
-            "code_challenge_methods_supported": ["S256", "plain"],
+    metadata = {
+        "issuer": f"{base_url}/oauth",
+        "authorization_endpoint": f"{base_url}/oauth/authorize/",
+        "token_endpoint": f"{base_url}/oauth/token/",
+        "userinfo_endpoint": f"{base_url}/oauth/userinfo/",
+        "jwks_uri": f"{base_url}/oauth/.well-known/jwks.json",
+        "registration_endpoint": f"{base_url}/oauth/register",
+        "revocation_endpoint": f"{base_url}/oauth/revoke_token/",
+        "introspection_endpoint": f"{base_url}/oauth/introspect/",
+        "response_types_supported": [
+            "code",
+            "token",
+            "id_token",
+            "code token",
+            "code id_token",
+            "token id_token",
+            "code token id_token",
+        ],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+        "scopes_supported": ["openid", "profile", "email", "read", "write"],
+        "token_endpoint_auth_methods_supported": [
+            "client_secret_basic",
+            "client_secret_post",
+        ],
+        "grant_types_supported": [
+            "authorization_code",
+            "implicit",
+            "client_credentials",
+            "refresh_token",
+        ],
+        "code_challenge_methods_supported": ["S256", "plain"],
+    }
+
+    # ChatGPT expects a 'mcp' field when accessing /.well-known/openid-configuration/mcp
+    # Also handle /oauth suffix (ChatGPT sometimes constructs paths incorrectly)
+    if request and (
+        request.url.path.endswith("/mcp") or request.url.path.endswith("/oauth")
+    ):
+        metadata["mcp"] = {
+            "client_id": config.oauth.client_id,
+            "redirect_uri": f"{base_url}/oauth/callback",
         }
-    )
+        logger.debug(
+            "Added MCP field to OpenID configuration for ChatGPT compatibility"
+        )
+
+    return JSONResponse(metadata)
 
 
 async def handle_protected_resource_metadata(
