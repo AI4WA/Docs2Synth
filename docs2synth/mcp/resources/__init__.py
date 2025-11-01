@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
-from typing import List
 
 from mcp.server import Server
 from mcp.types import Resource, ResourceTemplate
@@ -15,7 +14,7 @@ from ..common.document_index import get_document_index
 
 def register_resources(server: Server) -> None:
     @server.list_resources()
-    async def list_resources() -> List[Resource]:
+    async def list_resources() -> list[Resource]:
         return [
             Resource(
                 uri="resource://docs2synth/info",
@@ -32,7 +31,7 @@ def register_resources(server: Server) -> None:
         ]
 
     @server.list_resource_templates()
-    async def list_resource_templates() -> List[ResourceTemplate]:
+    async def list_resource_templates() -> list[ResourceTemplate]:
         return [
             ResourceTemplate(
                 uriTemplate="resource://docs2synth/document/{doc_id}",
@@ -127,11 +126,7 @@ def register_resources(server: Server) -> None:
                 "error": "Unknown resource",
                 "error_code": "UNKNOWN_RESOURCE",
                 "uri": uri_str,
-                "message": (
-                    "Resource URI '"
-                    + uri_str
-                    + "' is not recognized. Use list_resources or list_resource_templates to see available resources."
-                ),
+                "message": f"Resource URI '{uri_str}' is not recognized. Use list_resources or list_resource_templates to see available resources.",
             },
             indent=2,
         )

@@ -101,7 +101,6 @@ class OIDCResourceServer:
         """
         from urllib.parse import urlparse
 
-        # Parse both URLs
         url_parsed = urlparse(url)
         correct_parsed = urlparse(correct_base)
 
@@ -159,23 +158,21 @@ class OIDCResourceServer:
                 logger.info(f"  JWKS URI: {self.jwks_uri}")
                 logger.info(f"  Introspection: {self.introspection_endpoint}")
 
-                # Fallback: If using introspection but endpoint not discovered, try common paths
+                # Fallback: If using introspection but endpoint not discovered, try environment or common paths
                 if self.use_introspection and not self.introspection_endpoint:
-                    # Try environment variable first
                     env_introspection = os.getenv("OIDC_INTROSPECTION_ENDPOINT")
                     if env_introspection:
                         self.introspection_endpoint = env_introspection
                         logger.info(
                             f"Using introspection endpoint from env: {self.introspection_endpoint}"
                         )
-                    else:
+                    elif discovery_base:
                         # Try standard Django OAuth Toolkit path
-                        if discovery_base:
-                            fallback_introspection = f"{discovery_base}/introspect/"
-                            logger.warning(
-                                f"Introspection endpoint not in discovery, trying fallback: {fallback_introspection}"
-                            )
-                            self.introspection_endpoint = fallback_introspection
+                        fallback_introspection = f"{discovery_base}/introspect/"
+                        logger.warning(
+                            f"Introspection endpoint not in discovery, trying fallback: {fallback_introspection}"
+                        )
+                        self.introspection_endpoint = fallback_introspection
 
                 # Initialize JWKS client if not using introspection
                 if not self.use_introspection and self.jwks_uri:
@@ -251,13 +248,13 @@ class OIDCResourceServer:
 
         try:
             # Try to get signing key from JWT (using kid if present)
+            signing_key = None
             try:
                 signing_key = self.jwks_client.get_signing_key_from_jwt(token)
             except Exception as e:
                 # If kid is missing or not found, try all signing keys
                 logger.warning(
-                    f"Could not get signing key from JWT header: {e}. "
-                    "Trying all available keys..."
+                    f"Could not get signing key from JWT header: {e}. Trying all available keys..."
                 )
                 signing_keys = self.jwks_client.get_signing_keys()
                 if not signing_keys:
@@ -280,15 +277,13 @@ class OIDCResourceServer:
                             },
                         )
                         logger.info(
-                            f"Token verified via JWT (using key: {key.key_id}): "
-                            f"{payload.get('sub')}"
+                            f"Token verified via JWT (using key: {key.key_id}): {payload.get('sub')}"
                         )
                         return payload
                     except Exception as verify_error:
                         last_error = verify_error
                         continue
 
-                # None of the keys worked
                 logger.error(f"Failed to verify with any available key: {last_error}")
                 return None
 
