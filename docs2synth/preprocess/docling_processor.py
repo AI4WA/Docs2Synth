@@ -25,6 +25,7 @@ logging.getLogger("docling.document_converter").setLevel(logging.WARN)
 
 try:
     from docling.document_converter import DocumentConverter
+
     _DOCLING_AVAILABLE = True
     logger.info("Docling imported successfully")
 except ImportError as e:
@@ -32,13 +33,12 @@ except ImportError as e:
     _DOCLING_AVAILABLE = False
     logger.error(
         f"Failed to import Docling: {str(e)}. Please install it with: pip install docling",
-        exc_info=True
+        exc_info=True,
     )
 
 
 @dataclass
 class DoclingProcessor:
-
     lang: str = "en"
     use_layout_analysis: bool = True
     ocr_engine: str = "tesseract"
@@ -53,10 +53,12 @@ class DoclingProcessor:
     def _gpu_available(self) -> bool:
         try:
             from docling.utils.gpu import is_gpu_available
+
             return is_gpu_available()
         except ImportError:
             try:
                 import torch  # type: ignore
+
                 return torch.cuda.is_available()
             except ImportError:
                 return False
@@ -83,7 +85,11 @@ class DoclingProcessor:
             raise RuntimeError("Docling is not installed: pip install docling")
 
         device_str = self._resolve_device(device_override)
-        lang_key = lang_override.strip() if (lang_override and isinstance(lang_override, str)) else self.lang
+        lang_key = (
+            lang_override.strip()
+            if (lang_override and isinstance(lang_override, str))
+            else self.lang
+        )
         cache_key = f"lang={lang_key}|device={device_str}|ocr={self.ocr_engine}"
 
         if cache_key in self._docling_cache:
@@ -102,17 +108,17 @@ class DoclingProcessor:
                 "language": lang_key,
                 "ocr": {
                     "engine": self.ocr_engine,
-                    "enabled": self.ocr_engine != "none"
+                    "enabled": self.ocr_engine != "none",
                 },
                 "layout_analysis": {
                     "enabled": self.use_layout_analysis,
-                    "model": "heron"
+                    "model": "heron",
                 },
                 "rendering": {"enabled": False},
-                "device": device_str
+                "device": device_str,
             }
 
-            docling_instance = DocumentConverter(** converter_config)
+            docling_instance = DocumentConverter(**converter_config)
             self._docling_cache[cache_key] = docling_instance
             return docling_instance
 
@@ -128,7 +134,9 @@ class DoclingProcessor:
                 return LabelType.OTHER
             return LabelType.TEXT
 
-        elem_class = elem.__class__.__name__.lower() if hasattr(elem, "__class__") else ""
+        elem_class = (
+            elem.__class__.__name__.lower() if hasattr(elem, "__class__") else ""
+        )
         if any(k in elem_class for k in ["picture", "formula"]):
             return LabelType.OTHER
         return LabelType.TEXT
@@ -147,7 +155,9 @@ class DoclingProcessor:
         if not os.path.exists(doc_path):
             raise FileNotFoundError(f"Document not found: {doc_path}")
 
-        docling_converter = self._init_docling(lang_override=lang, device_override=device)
+        docling_converter = self._init_docling(
+            lang_override=lang, device_override=device
+        )
         start_time = time.time()
 
         try:
@@ -165,7 +175,17 @@ class DoclingProcessor:
             if hasattr(document, "pages") and document.pages:
                 pages = document.pages
             else:
-                pages = [type("Page", (), {"elements": document.elements if hasattr(document, "elements") else []})()]
+                pages = [
+                    type(
+                        "Page",
+                        (),
+                        {
+                            "elements": document.elements
+                            if hasattr(document, "elements")
+                            else []
+                        },
+                    )()
+                ]
             logger.debug(f"Number of pages processed: {len(pages)}")
         except AttributeError as e:
             logger.warning(f"Failed to parse result: {str(e)}", exc_info=True)
@@ -181,7 +201,11 @@ class DoclingProcessor:
             logger.warning(f"No valid pages: {doc_path}")
         else:
             for page_idx, page in enumerate(pages):
-                elements = page.elements if (hasattr(page, "elements") and page.elements) else []
+                elements = (
+                    page.elements
+                    if (hasattr(page, "elements") and page.elements)
+                    else []
+                )
                 if not elements:
                     logger.warning(f"No elements on page {page_idx}")
                     continue
@@ -189,7 +213,11 @@ class DoclingProcessor:
                 logger.info(f"Processing page {page_idx}: {len(elements)} elements")
                 for elem_idx, elem in enumerate(elements):
                     try:
-                        text = elem.text.strip() if (hasattr(elem, "text") and elem.text) else ""
+                        text = (
+                            elem.text.strip()
+                            if (hasattr(elem, "text") and elem.text)
+                            else ""
+                        )
                         is_picture = self._map_label(elem) == LabelType.OTHER
                         if not text and not is_picture:
                             continue
@@ -210,7 +238,7 @@ class DoclingProcessor:
                                         max(0.0, bbox[0]),
                                         max(0.0, bbox[1]),
                                         max(bbox[0] + 1e-6, bbox[2]),
-                                        max(bbox[1] + 1e-6, bbox[3])
+                                        max(bbox[1] + 1e-6, bbox[3]),
                                     )
                             except (ValueError, TypeError, IndexError):
                                 bbox = (0.0, 0.0, 0.0, 0.0)
@@ -232,7 +260,10 @@ class DoclingProcessor:
                         current_id += 1
 
                     except Exception as e:
-                        logger.error(f"Failed to process element (page {page_idx}, element {elem_idx}): {str(e)}", exc_info=True)
+                        logger.error(
+                            f"Failed to process element (page {page_idx}, element {elem_idx}): {str(e)}",
+                            exc_info=True,
+                        )
                         continue
 
         logger.info(f"Extracted {current_id} elements total: {doc_path}")
@@ -246,13 +277,16 @@ class DoclingProcessor:
         detected_lang = lang or self.lang
         filename = os.path.basename(doc_path) if os.path.exists(doc_path) else None
         size_bytes = os.path.getsize(doc_path) if os.path.exists(doc_path) else None
-        mime_type = mimetypes.guess_type(doc_path)[0] if os.path.exists(doc_path) else None
+        mime_type = (
+            mimetypes.guess_type(doc_path)[0] if os.path.exists(doc_path) else None
+        )
         width, height = None, None
         page_count = len(pages) if pages else 1
 
         if mime_type and mime_type.startswith("image/"):
             try:
                 from PIL import Image  # type: ignore
+
                 with Image.open(doc_path) as img:
                     width, height = img.size
             except Exception:

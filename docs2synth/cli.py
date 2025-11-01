@@ -139,10 +139,12 @@ def datasets(
 @click.option(
     "--processor",
     "processor_name",
-    type=click.Choice(["paddleocr", "pdfplumber", "easyocr","docling"], case_sensitive=False),##
+    type=click.Choice(
+        ["paddleocr", "pdfplumber", "easyocr", "docling"], case_sensitive=False
+    ),  ##
     default="paddleocr",
     show_default=True,
-    help="Name of the processor to use (paddleocr: general OCR, pdfplumber: parsed PDFs, easyocr: 80+ languages OCR,docling: multi-format document processing).",##
+    help="Name of the processor to use (paddleocr: general OCR, pdfplumber: parsed PDFs, easyocr: 80+ languages OCR,docling: multi-format document processing).",  ##
 )
 @click.option(
     "--lang",
@@ -201,7 +203,7 @@ def preprocess(
             lang=lang,
             device=device,
             config=cfg,
-            **extra_kwargs  # 传递 docling 专属参数
+            **extra_kwargs,  # 传递 docling 专属参数
         )
         click.echo(
             click.style(

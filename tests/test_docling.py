@@ -20,17 +20,22 @@ def test_docling_device_and_lang_overrides(monkeypatch: Any, tmp_path: Path):
             pass
 
         def convert(self, path: str) -> Any:
-            dummy_elem = type("Elem", (), {
-                "text": "test lang override",
-                "confidence": 0.9,
-                "bbox": (0.0, 0.0, 10.0, 10.0),
-                "type": "text"
-            })()
+            dummy_elem = type(
+                "Elem",
+                (),
+                {
+                    "text": "test lang override",
+                    "confidence": 0.9,
+                    "bbox": (0.0, 0.0, 10.0, 10.0),
+                    "type": "text",
+                },
+            )()
             dummy_page = type("Page", (), {"elements": [dummy_elem]})()
             dummy_doc = type("Document", (), {"pages": [dummy_page]})()
             return type("ConvertResult", (), {"document": dummy_doc})()
 
     calls = {"gpu_checked": 0}
+
     def fake_gpu_available(self) -> bool:
         calls["gpu_checked"] += 1
         return True
@@ -38,7 +43,7 @@ def test_docling_device_and_lang_overrides(monkeypatch: Any, tmp_path: Path):
     monkeypatch.setattr(
         "docs2synth.preprocess.docling_processor.DocumentConverter",
         DummyDoclingConverter,
-        raising=True
+        raising=True,
     )
     monkeypatch.setattr(DoclingProcessor, "_gpu_available", fake_gpu_available)
 
@@ -64,17 +69,22 @@ def test_docling_caches_instance(monkeypatch: Any, tmp_path: Path):
     Image.new("RGB", (10, 10), (255, 255, 255)).save(img_path)
 
     created = {"count": 0}
+
     class DummyDoclingConverter:
         def __init__(self, *args, **kwargs):
             created["count"] += 1
 
         def convert(self, path: str) -> Any:
-            dummy_elem = type("Elem", (), {
-                "text": "cache test",
-                "confidence": 0.9,
-                "bbox": (0.0, 0.0, 10.0, 10.0),
-                "type": "text"
-            })()
+            dummy_elem = type(
+                "Elem",
+                (),
+                {
+                    "text": "cache test",
+                    "confidence": 0.9,
+                    "bbox": (0.0, 0.0, 10.0, 10.0),
+                    "type": "text",
+                },
+            )()
             dummy_page = type("Page", (), {"elements": [dummy_elem]})()
             dummy_doc = type("Document", (), {"pages": [dummy_page]})()
             return type("ConvertResult", (), {"document": dummy_doc})()
@@ -85,7 +95,7 @@ def test_docling_caches_instance(monkeypatch: Any, tmp_path: Path):
     monkeypatch.setattr(
         "docs2synth.preprocess.docling_processor.DocumentConverter",
         DummyDoclingConverter,
-        raising=True
+        raising=True,
     )
     monkeypatch.setattr(DoclingProcessor, "_resolve_device", mock_resolve_device)
 
@@ -96,8 +106,7 @@ def test_docling_caches_instance(monkeypatch: Any, tmp_path: Path):
 
 
 pytestmark = pytest.mark.skipif(
-    not _DOCLING_AVAILABLE,
-    reason="Docling not installed - skip integration tests"
+    not _DOCLING_AVAILABLE, reason="Docling not installed - skip integration tests"
 )
 
 
@@ -112,12 +121,16 @@ def test_docling_processor_runs_minimal(monkeypatch: Any, tmp_path: Path):
 
     class DummyDoclingConverter:
         def convert(self, path: str) -> Any:
-            dummy_elem = type("Elem", (), {
-                "text": "minimal test",
-                "confidence": 0.95,
-                "bbox": (10.0, 10.0, 50.0, 30.0),
-                "type": "text"
-            })()
+            dummy_elem = type(
+                "Elem",
+                (),
+                {
+                    "text": "minimal test",
+                    "confidence": 0.95,
+                    "bbox": (10.0, 10.0, 50.0, 30.0),
+                    "type": "text",
+                },
+            )()
             dummy_page = type("Page", (), {"elements": [dummy_elem]})()
             dummy_doc = type("Document", (), {"pages": [dummy_page]})()
             return type("ConvertResult", (), {"document": dummy_doc})()
@@ -128,7 +141,7 @@ def test_docling_processor_runs_minimal(monkeypatch: Any, tmp_path: Path):
     monkeypatch.setattr(
         "docs2synth.preprocess.docling_processor.DocumentConverter",
         DummyDoclingConverter,
-        raising=True
+        raising=True,
     )
     monkeypatch.setattr(DoclingProcessor, "_init_docling", dummy_init_docling)
 
@@ -164,7 +177,7 @@ def test_docling_processor_handles_empty_result(monkeypatch: Any, tmp_path: Path
     monkeypatch.setattr(
         "docs2synth.preprocess.docling_processor.DocumentConverter",
         DummyDoclingConverter,
-        raising=True
+        raising=True,
     )
     monkeypatch.setattr(DoclingProcessor, "_init_docling", dummy_init_docling)
 
@@ -188,27 +201,39 @@ def test_docling_processor_parses_layout_elements(monkeypatch: Any, tmp_path: Pa
 
     class DummyDoclingConverter:
         def convert(self, path: str) -> Any:
-            heading_elem = type("HeadingElem", (), {
-                "text": "Layout Test",
-                "confidence": 0.98,
-                "bbox": (10.0, 10.0, 100.0, 25.0),
-                "type": "heading"
-            })()
-            table_elem = type("TableElem", (), {
-                "text": "Name | Age",
-                "confidence": 0.95,
-                "bbox": (10.0, 30.0, 150.0, 60.0),
-                "type": "table"
-            })()
-            picture_elem = type("PictureElem", (), {
-                "text": "",
-                "confidence": None,
-                "bbox": (10.0, 70.0, 180.0, 85.0),
-                "type": "picture"
-            })()
-            dummy_page = type("Page", (), {
-                "elements": [heading_elem, table_elem, picture_elem]
-            })()
+            heading_elem = type(
+                "HeadingElem",
+                (),
+                {
+                    "text": "Layout Test",
+                    "confidence": 0.98,
+                    "bbox": (10.0, 10.0, 100.0, 25.0),
+                    "type": "heading",
+                },
+            )()
+            table_elem = type(
+                "TableElem",
+                (),
+                {
+                    "text": "Name | Age",
+                    "confidence": 0.95,
+                    "bbox": (10.0, 30.0, 150.0, 60.0),
+                    "type": "table",
+                },
+            )()
+            picture_elem = type(
+                "PictureElem",
+                (),
+                {
+                    "text": "",
+                    "confidence": None,
+                    "bbox": (10.0, 70.0, 180.0, 85.0),
+                    "type": "picture",
+                },
+            )()
+            dummy_page = type(
+                "Page", (), {"elements": [heading_elem, table_elem, picture_elem]}
+            )()
             dummy_doc = type("Document", (), {"pages": [dummy_page]})()
             return type("ConvertResult", (), {"document": dummy_doc})()
 
@@ -218,7 +243,7 @@ def test_docling_processor_parses_layout_elements(monkeypatch: Any, tmp_path: Pa
     monkeypatch.setattr(
         "docs2synth.preprocess.docling_processor.DocumentConverter",
         DummyDoclingConverter,
-        raising=True
+        raising=True,
     )
     monkeypatch.setattr(DoclingProcessor, "_init_docling", dummy_init_docling)
 
@@ -237,24 +262,34 @@ def test_docling_processor_parses_layout_elements(monkeypatch: Any, tmp_path: Pa
 def test_docling_processor_supports_pdf_multi_page(monkeypatch: Any, tmp_path: Path):
     pdf_path = tmp_path / "docling_multi.pdf"
     with open(pdf_path, "wb") as f:
-        f.write(b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n4 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000010 00000 n \n0000000079 00000 n \n0000000173 00000 n \n0000000279 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n395\n%%EOF")
+        f.write(
+            b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n4 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000010 00000 n \n0000000079 00000 n \n0000000173 00000 n \n0000000279 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n395\n%%EOF"
+        )
 
     class DummyDoclingConverter:
         def convert(self, path: str) -> Any:
-            page1_elem1 = type("Elem1", (), {
-                "text": "Page 1",
-                "confidence": 0.9,
-                "bbox": (10.0, 10.0, 80.0, 25.0),
-                "type": "text"
-            })()
+            page1_elem1 = type(
+                "Elem1",
+                (),
+                {
+                    "text": "Page 1",
+                    "confidence": 0.9,
+                    "bbox": (10.0, 10.0, 80.0, 25.0),
+                    "type": "text",
+                },
+            )()
             page1 = type("Page1", (), {"elements": [page1_elem1]})()
 
-            page2_elem1 = type("Elem3", (), {
-                "text": "Page 2",
-                "confidence": 0.93,
-                "bbox": (10.0, 10.0, 90.0, 40.0),
-                "type": "text"
-            })()
+            page2_elem1 = type(
+                "Elem3",
+                (),
+                {
+                    "text": "Page 2",
+                    "confidence": 0.93,
+                    "bbox": (10.0, 10.0, 90.0, 40.0),
+                    "type": "text",
+                },
+            )()
             page2 = type("Page2", (), {"elements": [page2_elem1]})()
 
             dummy_doc = type("Document", (), {"pages": [page1, page2]})()
@@ -266,7 +301,7 @@ def test_docling_processor_supports_pdf_multi_page(monkeypatch: Any, tmp_path: P
     monkeypatch.setattr(
         "docs2synth.preprocess.docling_processor.DocumentConverter",
         DummyDoclingConverter,
-        raising=True
+        raising=True,
     )
     monkeypatch.setattr(DoclingProcessor, "_init_docling", dummy_init_docling)
 

@@ -190,9 +190,9 @@ class DocumentMetadata:
     size_bytes: Optional[int] = None
     mime_type: Optional[str] = None
     language: Optional[str] = None
-    width: Optional[int] = (
-        None  # for single-page images; per-page widths should go to extra
-    )
+    width: Optional[
+        int
+    ] = None  # for single-page images; per-page widths should go to extra
     height: Optional[int] = None
     extra: Dict[str, Any] = field(default_factory=dict)
 
