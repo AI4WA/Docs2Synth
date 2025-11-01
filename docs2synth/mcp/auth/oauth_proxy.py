@@ -215,43 +215,57 @@ async def _forward_and_build_response(
     return proxied
 
 
-async def handle_oauth_metadata(config: MCPConfig) -> JSONResponse:
-    """Return OAuth 2.0 authorization server metadata (RFC 8414)."""
+async def handle_oauth_metadata(
+    config: MCPConfig, request: Request | None = None
+) -> JSONResponse:
+    """Return OAuth 2.0 authorization server metadata (RFC 8414).
+
+    For ChatGPT compatibility, if the path ends with /mcp, includes an 'mcp' field
+    with client_id and redirect_uri as ChatGPT expects.
+    """
     base_url = config.server.base_url
-    return JSONResponse(
-        {
-            "issuer": f"{base_url}/oauth",
-            "authorization_endpoint": f"{base_url}/oauth/authorize/",
-            "token_endpoint": f"{base_url}/oauth/token/",
-            "registration_endpoint": f"{base_url}/oauth/register",
-            "revocation_endpoint": f"{base_url}/oauth/revoke_token/",
-            "introspection_endpoint": f"{base_url}/oauth/introspect/",
-            "userinfo_endpoint": f"{base_url}/oauth/userinfo/",
-            "jwks_uri": f"{base_url}/oauth/.well-known/jwks.json",
-            "response_types_supported": [
-                "code",
-                "token",
-                "id_token",
-                "code token",
-                "code id_token",
-                "token id_token",
-                "code token id_token",
-            ],
-            "scopes_supported": ["openid", "profile", "email", "read", "write"],
-            "grant_types_supported": [
-                "authorization_code",
-                "implicit",
-                "client_credentials",
-                "refresh_token",
-            ],
-            "token_endpoint_auth_methods_supported": [
-                "client_secret_basic",
-                "client_secret_post",
-            ],
-            "code_challenge_methods_supported": ["S256", "plain"],
-            "service_documentation": "https://django-oauth-toolkit.readthedocs.io/",
+    metadata = {
+        "issuer": f"{base_url}/oauth",
+        "authorization_endpoint": f"{base_url}/oauth/authorize/",
+        "token_endpoint": f"{base_url}/oauth/token/",
+        "registration_endpoint": f"{base_url}/oauth/register",
+        "revocation_endpoint": f"{base_url}/oauth/revoke_token/",
+        "introspection_endpoint": f"{base_url}/oauth/introspect/",
+        "userinfo_endpoint": f"{base_url}/oauth/userinfo/",
+        "jwks_uri": f"{base_url}/oauth/.well-known/jwks.json",
+        "response_types_supported": [
+            "code",
+            "token",
+            "id_token",
+            "code token",
+            "code id_token",
+            "token id_token",
+            "code token id_token",
+        ],
+        "scopes_supported": ["openid", "profile", "email", "read", "write"],
+        "grant_types_supported": [
+            "authorization_code",
+            "implicit",
+            "client_credentials",
+            "refresh_token",
+        ],
+        "token_endpoint_auth_methods_supported": [
+            "client_secret_basic",
+            "client_secret_post",
+        ],
+        "code_challenge_methods_supported": ["S256", "plain"],
+        "service_documentation": "https://django-oauth-toolkit.readthedocs.io/",
+    }
+
+    # ChatGPT expects a 'mcp' field when accessing /.well-known/oauth-authorization-server/mcp
+    if request and request.url.path.endswith("/mcp"):
+        metadata["mcp"] = {
+            "client_id": config.oauth.client_id,
+            "redirect_uri": f"{base_url}/oauth/callback",
         }
-    )
+        logger.debug("Added MCP field to metadata for ChatGPT compatibility")
+
+    return JSONResponse(metadata)
 
 
 async def handle_openid_configuration(config: MCPConfig) -> JSONResponse:
@@ -448,7 +462,8 @@ async def handle_client_registration(
 
     logger.info(
         f"Client registration (static credentials): client_id={client_id}, "
-        f"client_name={client_name}, redirect_uris={redirect_uris}"
+        f"client_name={client_name}, redirect_uris={redirect_uris}, "
+        f"request_headers={dict(request.headers)}"
     )
     logger.debug(
         f"Registration response: {json.dumps(registration_response, indent=2)}"
