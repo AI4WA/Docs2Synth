@@ -61,43 +61,6 @@ def _validate_redirect_uri(redirect_uri: str) -> bool:
     return False
 
 
-def _rewrite_set_cookie_headers(
-    headers: dict[str, str], use_https: bool
-) -> dict[str, str]:
-    """Rewrite Set-Cookie attributes for proper cookie handling.
-
-    - Remove Domain so cookies are host-only
-    - Drop Secure if not https
-    - Ensure SameSite=Lax for login flow
-    """
-    new_headers = dict(headers)
-    set_cookie = new_headers.get("set-cookie") or new_headers.get("Set-Cookie")
-    if not set_cookie:
-        return new_headers
-
-    def transform(cookie: str) -> str:
-        parts = [p.strip() for p in cookie.split(";")]
-        out = []
-        for p in parts:
-            if p.lower().startswith("domain="):
-                # strip Domain to make it host-only
-                continue
-            if not use_https and p.lower() == "secure":
-                # remove Secure on http
-                continue
-            out.append(p)
-        # ensure SameSite=Lax
-        if not any(p.lower().startswith("samesite=") for p in out):
-            out.append("SameSite=Lax")
-        return "; ".join(out)
-
-    # Multiple Set-Cookie headers may be concatenated by httpx with commas.
-    cookies = [c for c in set_cookie.split(",") if c.strip()]
-    rewritten = ", ".join(transform(c) for c in cookies)
-    new_headers["set-cookie"] = rewritten
-    return new_headers
-
-
 def _rewrite_location(location: str, config: MCPConfig) -> str:
     """Rewrite absolute redirects from IdP to local proxy paths.
 
@@ -331,7 +294,7 @@ async def handle_openid_configuration(
 
 
 async def handle_protected_resource_metadata(
-    config: MCPConfig, request: Request
+    config: MCPConfig, _request: Request
 ) -> JSONResponse:
     """Return OAuth 2.0 protected resource metadata (RFC 8707)."""
     resource_base = config.server.base_url

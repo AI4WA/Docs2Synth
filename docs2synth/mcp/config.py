@@ -153,33 +153,29 @@ class MCPConfig:
 
         config = cls.from_file(config_path)
 
-        # Override with environment variables
+        # Override with environment variables if they exist
         env_config = cls.from_env()
 
-        # Merge: env vars take precedence
-        if os.getenv("MCP_HOST"):
-            config.server.host = env_config.server.host
-        if os.getenv("MCP_PORT"):
-            config.server.port = env_config.server.port
-        if os.getenv("MCP_BASE_URL"):
-            config.server.base_url = env_config.server.base_url
-        if os.getenv("MCP_DATA_DIR"):
-            config.server.data_dir = env_config.server.data_dir
+        # Merge server config: env vars take precedence
+        env_overrides = {
+            "MCP_HOST": ("server", "host"),
+            "MCP_PORT": ("server", "port"),
+            "MCP_BASE_URL": ("server", "base_url"),
+            "MCP_DATA_DIR": ("server", "data_dir"),
+            "OIDC_DISCOVERY_URL": ("oauth", "discovery_url"),
+            "OIDC_PUBLIC_BASE_URL": ("oauth", "public_base_url"),
+            "OIDC_CLIENT_ID": ("oauth", "client_id"),
+            "OIDC_CLIENT_SECRET": ("oauth", "client_secret"),
+            "OIDC_USE_INTROSPECTION": ("oauth", "use_introspection"),
+            "OIDC_VERIFY_SSL": ("oauth", "verify_ssl"),
+            "OIDC_TIMEOUT": ("oauth", "timeout"),
+        }
 
-        if os.getenv("OIDC_DISCOVERY_URL"):
-            config.oauth.discovery_url = env_config.oauth.discovery_url
-        if os.getenv("OIDC_PUBLIC_BASE_URL"):
-            config.oauth.public_base_url = env_config.oauth.public_base_url
-        if os.getenv("OIDC_CLIENT_ID"):
-            config.oauth.client_id = env_config.oauth.client_id
-        if os.getenv("OIDC_CLIENT_SECRET"):
-            config.oauth.client_secret = env_config.oauth.client_secret
-        if os.getenv("OIDC_USE_INTROSPECTION"):
-            config.oauth.use_introspection = env_config.oauth.use_introspection
-        if os.getenv("OIDC_VERIFY_SSL"):
-            config.oauth.verify_ssl = env_config.oauth.verify_ssl
-        if os.getenv("OIDC_TIMEOUT"):
-            config.oauth.timeout = env_config.oauth.timeout
+        for env_var, (section, attr) in env_overrides.items():
+            if os.getenv(env_var):
+                section_obj = getattr(config, section)
+                env_section_obj = getattr(env_config, section)
+                setattr(section_obj, attr, getattr(env_section_obj, attr))
 
         return config
 

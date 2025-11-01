@@ -16,10 +16,6 @@ from docs2synth.mcp.server import build_server
 from docs2synth.utils import setup_logging_from_config
 from docs2synth.utils.logging import LOG_FORMAT
 
-# Fix sys.excepthook for proper error handling
-_original_excepthook = sys.__excepthook__
-sys.excepthook = _original_excepthook
-
 
 def _is_broken_pipe(exc: BaseException) -> bool:
     """Check if exception is a BrokenPipeError (including nested exceptions)."""

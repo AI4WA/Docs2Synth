@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 # Central registry for tool specifications used by the MCP server
-TOOL_SPECS: List[Dict[str, Any]] = [
+TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "list_datasets",
         "description": "List dataset names registered for Docs2Synth downloads.",

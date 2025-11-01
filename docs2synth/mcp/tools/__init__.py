@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable
 
 from mcp.server import Server
 from mcp.types import TextContent, Tool
@@ -18,10 +18,10 @@ def register_tools(server: Server) -> None:
     """Register tool metadata and handlers."""
 
     @server.list_tools()
-    async def list_tools() -> List[Tool]:
+    async def list_tools() -> list[Tool]:
         return [Tool(**spec) for spec in BASE_TOOL_SPECS]
 
-    async def handle_list_datasets(_args: Dict[str, Any]) -> List[TextContent]:
+    async def handle_list_datasets(_args: dict[str, Any]) -> list[TextContent]:
         from docs2synth.datasets.downloader import DATASETS
 
         names = sorted(DATASETS.keys())
@@ -29,7 +29,7 @@ def register_tools(server: Server) -> None:
             TextContent(type="text", text=json.dumps({"datasets": names}, indent=2))
         ]
 
-    async def handle_dataset_info(args: Dict[str, Any]) -> List[TextContent]:
+    async def handle_dataset_info(args: dict[str, Any]) -> list[TextContent]:
         from docs2synth.datasets.downloader import DATASETS
 
         dataset_name = args.get("name")
@@ -66,11 +66,11 @@ def register_tools(server: Server) -> None:
             )
         ]
 
-    async def handle_active_config(_args: Dict[str, Any]) -> List[TextContent]:
+    async def handle_active_config(_args: dict[str, Any]) -> list[TextContent]:
         config = get_config()
         return [TextContent(type="text", text=json.dumps(config.to_dict(), indent=2))]
 
-    async def handle_search(args: Dict[str, Any]) -> List[TextContent]:
+    async def handle_search(args: dict[str, Any]) -> list[TextContent]:
         query = args.get("query", "")
         doc_index = get_document_index()
         results = doc_index.search(query, limit=10)
@@ -81,7 +81,7 @@ def register_tools(server: Server) -> None:
             TextContent(type="text", text=json.dumps({"results": formatted}, indent=2))
         ]
 
-    async def handle_fetch(args: Dict[str, Any]) -> List[TextContent]:
+    async def handle_fetch(args: dict[str, Any]) -> list[TextContent]:
         doc_id = args.get("doc_id")
         doc_index = get_document_index()
         doc = doc_index.fetch(doc_id)
@@ -94,7 +94,7 @@ def register_tools(server: Server) -> None:
             ]
         return [TextContent(type="text", text=json.dumps(doc, indent=2))]
 
-    handlers: Dict[str, Callable[[Dict[str, Any]], Any]] = {
+    handlers: dict[str, Callable[[dict[str, Any]], Any]] = {
         "list_datasets": handle_list_datasets,
         "dataset_info": handle_dataset_info,
         "active_config": handle_active_config,
@@ -103,7 +103,7 @@ def register_tools(server: Server) -> None:
     }
 
     @server.call_tool()
-    async def call_tool(name: str, arguments: Any) -> List[TextContent]:
+    async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         logger.debug(f"Tool called: {name}")
         try:
             handler = handlers.get(name)

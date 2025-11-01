@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict, List
-
 from mcp.server import Server
 from mcp.types import GetPromptResult, Prompt, PromptMessage, TextContent
 
 
 def register_prompts(server: Server) -> None:
     @server.list_prompts()
-    async def list_prompts() -> List[Prompt]:
+    async def list_prompts() -> list[Prompt]:
         return [
             Prompt(name="hello", description="Simple hello prompt for testing."),
             Prompt(
@@ -18,7 +16,7 @@ def register_prompts(server: Server) -> None:
 
     @server.get_prompt()
     async def get_prompt(
-        name: str, arguments: Dict[str, str] | None = None
+        name: str, arguments: dict[str, str] | None = None
     ) -> GetPromptResult:
         if name == "hello":
             return GetPromptResult(
