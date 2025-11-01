@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+import time
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
@@ -308,25 +309,122 @@ async def handle_protected_resource_metadata(
     )
 
 
-async def handle_client_registration(config: MCPConfig) -> JSONResponse:
+async def handle_client_registration(
+    config: MCPConfig, request: Request
+) -> JSONResponse:
     """Handle OAuth 2.0 dynamic client registration (RFC 7591).
 
-    Returns static client credentials for MCP client compatibility.
+    Implements RFC 7591 Dynamic Client Registration Protocol for OAuth 2.0.
+    Processes POST requests with client metadata and returns client credentials.
+
+    Args:
+        config: MCP configuration containing OAuth settings
+        request: Starlette request object containing client registration data
+
+    Returns:
+        JSONResponse with client registration response (RFC 7591 format)
     """
-    return JSONResponse(
-        {
-            "client_id": config.oauth.client_id,
-            "client_secret": config.oauth.client_secret,
-            "client_id_issued_at": 1730000000,
-            "client_secret_expires_at": 0,
-            "client_name": "Docs2Synth MCP",
-            "token_endpoint_auth_method": "client_secret_post",
-            "grant_types": ["authorization_code", "refresh_token"],
-            "response_types": ["code"],
-            "redirect_uris": [f"{config.server.base_url}/oauth/callback"],
-        },
-        status_code=201,
+    # RFC 7591 requires POST with JSON body
+    if request.method != "POST":
+        return JSONResponse(
+            {
+                "error": "invalid_request",
+                "error_description": "Client registration requires POST method",
+            },
+            status_code=405,
+        )
+
+    # Parse client registration request
+    try:
+        body = await request.body()
+        if not body:
+            # If no body provided, return configured static credentials
+            # This supports clients that check for endpoint availability
+            client_data = {}
+        else:
+            # Parse JSON request body (RFC 7591 format)
+            client_data = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        return JSONResponse(
+            {
+                "error": "invalid_client_metadata",
+                "error_description": f"Invalid JSON in request body: {str(e)}",
+            },
+            status_code=400,
+        )
+    except Exception as e:
+        logger.error(f"Error parsing client registration request: {e}")
+        return JSONResponse(
+            {
+                "error": "invalid_request",
+                "error_description": f"Failed to parse request: {str(e)}",
+            },
+            status_code=400,
+        )
+
+    # Extract and validate client metadata from request
+    # RFC 7591 allows various fields; we'll accept and use them if provided
+    client_name = client_data.get("client_name") or "Docs2Synth MCP Client"
+    redirect_uris = client_data.get("redirect_uris") or [
+        f"{config.server.base_url}/oauth/callback"
+    ]
+    grant_types = client_data.get("grant_types") or [
+        "authorization_code",
+        "refresh_token",
+    ]
+    response_types = client_data.get("response_types") or ["code"]
+    token_endpoint_auth_method = (
+        client_data.get("token_endpoint_auth_method") or "client_secret_post"
     )
+
+    # Validate redirect URIs
+    for uri in redirect_uris:
+        if not _validate_redirect_uri(uri):
+            return JSONResponse(
+                {
+                    "error": "invalid_redirect_uri",
+                    "error_description": f"Invalid redirect_uri: {uri}",
+                },
+                status_code=400,
+            )
+
+    # Return static client credentials (pseudo-dynamic registration)
+    # The endpoint appears to support RFC 7591, but always returns the same
+    # static client_id and client_secret from configuration
+    client_id = config.oauth.client_id
+    client_secret = config.oauth.client_secret
+    client_id_issued_at = int(time.time())
+
+    # Build RFC 7591 compliant response with static credentials
+    registration_response = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "client_id_issued_at": client_id_issued_at,
+        "client_secret_expires_at": 0,  # 0 means never expires
+        "client_name": client_name,
+        "token_endpoint_auth_method": token_endpoint_auth_method,
+        "grant_types": grant_types,
+        "response_types": response_types,
+        "redirect_uris": redirect_uris,
+    }
+
+    # Include optional fields if provided in request
+    if "scope" in client_data:
+        registration_response["scope"] = client_data["scope"]
+    if "client_uri" in client_data:
+        registration_response["client_uri"] = client_data["client_uri"]
+    if "logo_uri" in client_data:
+        registration_response["logo_uri"] = client_data["logo_uri"]
+    if "contacts" in client_data:
+        registration_response["contacts"] = client_data["contacts"]
+
+    logger.info(
+        f"Client registration (static credentials): client_id={client_id}, "
+        f"client_name={client_name}, redirect_uris={redirect_uris}"
+    )
+
+    # RFC 7591 requires 201 Created status for successful registration
+    return JSONResponse(registration_response, status_code=201)
 
 
 async def handle_oauth_callback(config: MCPConfig, request: Request) -> Response:
