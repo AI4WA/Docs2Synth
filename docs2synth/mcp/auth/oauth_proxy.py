@@ -6,9 +6,10 @@ to the Django OAuth Toolkit backend.
 
 from __future__ import annotations
 
+import base64
 import html
 import json
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 from starlette.requests import Request
@@ -20,12 +21,51 @@ from docs2synth.utils import get_logger
 logger = get_logger(__name__)
 
 
+def _validate_redirect_uri(redirect_uri: str) -> bool:
+    """Validate redirect_uri to prevent open redirect attacks.
+
+    Allows:
+    - Custom protocols (e.g., claude://, mcp://)
+    - HTTP/HTTPS URLs (with warnings for HTTP in production)
+
+    Blocks:
+    - javascript:, data:, and other dangerous protocols
+    - Invalid URLs
+    """
+    if not redirect_uri:
+        return False
+
+    try:
+        parsed = urlparse(redirect_uri)
+    except Exception:
+        return False
+
+    # Allow custom protocols (common for desktop apps)
+    if parsed.scheme and len(parsed.scheme) > 0:
+        # Allow common safe protocols
+        if parsed.scheme.lower() in ["claude", "mcp", "http", "https"]:
+            # For HTTP, warn but allow (useful for development)
+            if parsed.scheme.lower() == "http":
+                logger.warning(
+                    f"HTTP redirect_uri used (consider HTTPS): {redirect_uri}"
+                )
+            return True
+
+        # Block dangerous protocols
+        dangerous_protocols = ["javascript", "data", "vbscript", "file", "about"]
+        if parsed.scheme.lower() in dangerous_protocols:
+            logger.warning(f"Blocked dangerous redirect_uri protocol: {parsed.scheme}")
+            return False
+
+    return False
+
+
 def _rewrite_set_cookie_headers(
     headers: dict[str, str], use_https: bool
 ) -> dict[str, str]:
-    """Rewrite Set-Cookie attributes to bind cookies to localhost:8009.
+    """Rewrite Set-Cookie attributes for proper cookie handling.
 
-    - Remove Domain so cookies are host-only (localhost)
+    - Remove Domain so cookies are host-only
     - Drop Secure if not https
     - Ensure SameSite=Lax for login flow
     """
@@ -39,7 +79,7 @@ def _rewrite_set_cookie_headers(
         out = []
         for p in parts:
             if p.lower().startswith("domain="):
-                # strip Domain to make it host-only (localhost)
+                # strip Domain to make it host-only
                 continue
             if not use_https and p.lower() == "secure":
                 # remove Secure on http
@@ -96,7 +136,7 @@ def _rewrite_location(location: str, config: MCPConfig) -> str:
 def _strip_and_rewrite_cookies(
     upstream_headers: httpx.Headers, use_https: bool
 ) -> list[str]:
-    """Extract Set-Cookie values from upstream and rewrite attributes for localhost.
+    """Extract Set-Cookie values from upstream and rewrite attributes.
 
     - Remove Domain
     - Drop Secure when not https
@@ -271,7 +311,7 @@ async def handle_protected_resource_metadata(
 async def handle_client_registration(config: MCPConfig) -> JSONResponse:
     """Handle OAuth 2.0 dynamic client registration (RFC 7591).
 
-    Returns static client credentials for MCP Inspector compatibility.
+    Returns static client credentials for MCP client compatibility.
     """
     return JSONResponse(
         {
@@ -289,40 +329,77 @@ async def handle_client_registration(config: MCPConfig) -> JSONResponse:
     )
 
 
-async def handle_oauth_callback(
-    config: MCPConfig, request: Request
-) -> Response:
+async def handle_oauth_callback(config: MCPConfig, request: Request) -> Response:
     """Handle OAuth callback from Django.
-    
-    For MCP Inspector: redirects to localhost:6274 for debugging.
-    For real clients: returns an HTML page that allows clients to extract
-    the authorization code via postMessage (for iframe) or URL.
+
+    Extracts original redirect_uri from state and redirects back to the
+    client (Claude) with the authorization code.
     """
     params = dict(request.query_params)
     code = params.get("code")
     state = params.get("state")
     error = params.get("error")
     error_description = params.get("error_description")
-    
-    # Check if this is MCP Inspector
-    # Inspector typically sends a specific state parameter or User-Agent
-    user_agent = request.headers.get("user-agent", "").lower()
-    referer = request.headers.get("referer", "").lower()
-    
-    # More specific detection: Inspector typically comes from localhost:6274
-    is_inspector = (
-        "localhost:6274" in referer
-        or (state and "mcp-inspector" in state.lower())
-        or (user_agent and "mcp-inspector" in user_agent)
-    )
-    
-    if is_inspector:
-        # MCP Inspector: redirect to debug endpoint
-        inspector_callback = "http://localhost:6274/oauth/callback/debug"
-        redirect_url = f"{inspector_callback}?{urlencode(params)}"
-        logger.debug("OAuth callback received, redirecting to Inspector")
-        return RedirectResponse(url=redirect_url, status_code=302)
-    
+
+    # Extract original redirect_uri from state if present
+    # Format: original_state|redirect_uri_base64
+    original_redirect_uri = None
+    clean_state = state
+    if state and "|" in state:
+        try:
+            parts = state.rsplit("|", 1)
+            if len(parts) == 2:
+                clean_state = parts[0]
+                encoded_redirect = parts[1]
+                # Add padding if needed
+                padding = 4 - len(encoded_redirect) % 4
+                if padding != 4:
+                    encoded_redirect += "=" * padding
+                original_redirect_uri = base64.urlsafe_b64decode(
+                    encoded_redirect.encode("utf-8")
+                ).decode("utf-8")
+                logger.debug(
+                    f"Extracted original redirect_uri from state: {original_redirect_uri}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to decode redirect_uri from state: {e}")
+
+    # If we have original redirect_uri, redirect back to client with code
+    if original_redirect_uri:
+        # Validate redirect_uri again (safety check)
+        if not _validate_redirect_uri(original_redirect_uri):
+            logger.error(
+                f"Invalid redirect_uri in callback state: {original_redirect_uri}"
+            )
+            return JSONResponse(
+                {
+                    "error": "invalid_request",
+                    "error_description": "Invalid redirect_uri in state parameter",
+                },
+                status_code=400,
+            )
+
+        if error:
+            # Redirect error back to client
+            redirect_params = {"error": error}
+            if error_description:
+                redirect_params["error_description"] = error_description
+            if clean_state:
+                redirect_params["state"] = clean_state
+            redirect_url = f"{original_redirect_uri}?{urlencode(redirect_params)}"
+            logger.debug(f"Redirecting error back to client: {redirect_url}")
+            return RedirectResponse(url=redirect_url, status_code=302)
+        else:
+            # Redirect success with code back to client
+            redirect_params = {"code": code}
+            if clean_state:
+                redirect_params["state"] = clean_state
+            redirect_url = f"{original_redirect_uri}?{urlencode(redirect_params)}"
+            logger.debug(
+                f"Redirecting authorization code back to client: {original_redirect_uri}"
+            )
+            return RedirectResponse(url=redirect_url, status_code=302)
+
     # Real client: return HTML page that can be used by clients
     # This allows clients to extract the code via postMessage or direct access
     # Use JSON encoding to safely escape values for JavaScript
@@ -331,7 +408,7 @@ async def handle_oauth_callback(
         error_js = json.dumps(error)
         error_desc_js = json.dumps(error_description or "")
         state_js = json.dumps(state or "")
-        
+
         html_content = f"""
 <!DOCTYPE html>
 <html>
@@ -442,9 +519,8 @@ async def handle_oauth_callback(
         code_js = json.dumps(code or "")
         state_js = json.dumps(state or "")
         code_display = html.escape(code or "None")
-        state_display = html.escape(state or "None") if state else "None"
         callback_url = f"{config.server.base_url}/oauth/callback"
-        
+
         html_content = f"""
 <!DOCTYPE html>
 <html>
@@ -610,28 +686,28 @@ async def handle_oauth_callback(
             const urlParams = new URLSearchParams(window.location.search);
             const codeFromUrl = urlParams.get('code') || {code_js};
             const stateFromUrl = urlParams.get('state') || {state_js};
-            
+
             const code = codeFromUrl;
             const state = stateFromUrl;
             const spinner = document.getElementById('spinner');
             const status = document.getElementById('status');
-            
+
             // Important: Code is available in URL for OAuth clients to extract
             // Standard OAuth flow: Client reads code from URL → POST to /oauth/token
             console.log('OAuth callback - Code available in URL:', code ? 'Yes' : 'No');
             console.log('Code:', code);
             console.log('State:', state);
-            
+
             // Try multiple methods to communicate with parent/opener
             let handled = false;
-            
+
             function markHandled(message) {{
                 if (handled) return;
                 handled = true;
                 status.textContent = message;
                 spinner.classList.add('show');
             }}
-            
+
             // Method 1: postMessage to parent (for iframe)
             if (window.parent !== window) {{
                 try {{
@@ -653,7 +729,7 @@ async def handle_oauth_callback(
                     console.error('postMessage to parent failed:', e);
                 }}
             }}
-            
+
             // Method 2: Communicate with opener (for popup windows)
             if (window.opener && !window.opener.closed) {{
                 try {{
@@ -677,7 +753,7 @@ async def handle_oauth_callback(
                     console.error('postMessage to opener failed:', e);
                 }}
             }}
-            
+
             // Method 3: Dispatch custom event (for advanced clients)
             try {{
                 window.dispatchEvent(new CustomEvent('oauth_callback', {{
@@ -686,7 +762,7 @@ async def handle_oauth_callback(
             }} catch (e) {{
                 console.error('Custom event dispatch failed:', e);
             }}
-            
+
             // Method 4: Store in localStorage as fallback (if same origin)
             try {{
                 if (window.localStorage) {{
@@ -698,7 +774,7 @@ async def handle_oauth_callback(
             }} catch (e) {{
                 // Cross-origin or storage disabled
             }}
-            
+
             // Method 5: Try to close after delay if opened by script
             setTimeout(() => {{
                 if (!handled) {{
@@ -724,8 +800,10 @@ async def handle_oauth_callback(
 </body>
 </html>
 """
-    
-    logger.debug(f"OAuth callback received: code={'present' if code else 'missing'}, state={state}, error={error}")
+
+    logger.debug(
+        f"OAuth callback received: code={'present' if code else 'missing'}, state={state}, error={error}"
+    )
     return Response(content=html_content, media_type="text/html")
 
 
@@ -740,6 +818,34 @@ async def proxy_oauth_request(config: MCPConfig, request: Request) -> Response:
     # Intercept authorization requests
     if "/authorize" in path and request.method == "GET":
         params = dict(request.query_params)
+        original_redirect_uri = params.get("redirect_uri")
+
+        # Store original redirect_uri in state for later retrieval
+        # Validate redirect_uri first to prevent open redirect attacks
+        if original_redirect_uri and not _validate_redirect_uri(original_redirect_uri):
+            logger.warning(f"Invalid redirect_uri rejected: {original_redirect_uri}")
+            return JSONResponse(
+                {
+                    "error": "invalid_request",
+                    "error_description": "Invalid redirect_uri parameter",
+                },
+                status_code=400,
+            )
+
+        # If no state provided, create one that includes the original redirect_uri
+        if "state" in params and original_redirect_uri:
+            # Encode original redirect_uri in state (base64-like encoding)
+            # Format: original_state|redirect_uri_base64
+            state_value = params["state"]
+            encoded_redirect = (
+                base64.urlsafe_b64encode(original_redirect_uri.encode("utf-8"))
+                .decode("utf-8")
+                .rstrip("=")
+            )
+            params["state"] = f"{state_value}|{encoded_redirect}"
+
+        # Rewrite redirect_uri to MCP server callback (to capture the code)
+        # But we'll forward it back to original_redirect_uri in callback handler
         if "redirect_uri" in params:
             params["redirect_uri"] = f"{config.server.base_url}/oauth/callback"
         # Ensure scope is present - Django OAuth Toolkit requires it
@@ -747,7 +853,9 @@ async def proxy_oauth_request(config: MCPConfig, request: Request) -> Response:
             params["scope"] = "read"  # Default scope for MCP access
             logger.debug("Added default scope to authorization request")
         query_string = urlencode(params)
-        logger.debug("Rewrote redirect_uri in authorization request")
+        logger.debug(
+            f"Rewrote redirect_uri to MCP callback (original was: {original_redirect_uri})"
+        )
 
     # Intercept token exchange requests
     request_body: bytes | None = None
