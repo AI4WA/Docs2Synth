@@ -316,6 +316,7 @@ async def handle_client_registration(
 
     Implements RFC 7591 Dynamic Client Registration Protocol for OAuth 2.0.
     Processes POST requests with client metadata and returns client credentials.
+    Also supports GET requests for endpoint discovery.
 
     Args:
         config: MCP configuration containing OAuth settings
@@ -324,6 +325,33 @@ async def handle_client_registration(
     Returns:
         JSONResponse with client registration response (RFC 7591 format)
     """
+    # Support GET for endpoint discovery/validation
+    if request.method == "GET":
+        logger.info(
+            "GET request to registration endpoint - returning discovery metadata"
+        )
+        # Return endpoint metadata indicating RFC 7591 support
+        response_data = {
+            "registration_endpoint": f"{config.server.base_url}/oauth/register",
+            "registration_endpoint_auth_methods_supported": ["client_secret_post"],
+            "supported_client_metadata": [
+                "client_name",
+                "redirect_uris",
+                "grant_types",
+                "response_types",
+                "token_endpoint_auth_method",
+                "scope",
+            ],
+        }
+        logger.debug(
+            f"Registration discovery response: {json.dumps(response_data, indent=2)}"
+        )
+        return JSONResponse(
+            response_data,
+            status_code=200,
+            headers={"Content-Type": "application/json"},
+        )
+
     # RFC 7591 requires POST with JSON body
     if request.method != "POST":
         return JSONResponse(
@@ -422,9 +450,17 @@ async def handle_client_registration(
         f"Client registration (static credentials): client_id={client_id}, "
         f"client_name={client_name}, redirect_uris={redirect_uris}"
     )
+    logger.debug(
+        f"Registration response: {json.dumps(registration_response, indent=2)}"
+    )
 
     # RFC 7591 requires 201 Created status for successful registration
-    return JSONResponse(registration_response, status_code=201)
+    # Ensure Content-Type is explicitly set to application/json
+    return JSONResponse(
+        registration_response,
+        status_code=201,
+        headers={"Content-Type": "application/json"},
+    )
 
 
 async def handle_oauth_callback(config: MCPConfig, request: Request) -> Response:

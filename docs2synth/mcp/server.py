@@ -160,6 +160,10 @@ def create_asgi_app(
         return await oauth_proxy.handle_openid_configuration(config)
 
     async def handle_client_reg(request: Request) -> JSONResponse:
+        """Handle client registration endpoint - ensures it's not proxied."""
+        logger.debug(
+            f"Client registration endpoint hit: method={request.method}, path={request.url.path}"
+        )
         return await oauth_proxy.handle_client_registration(config, request)
 
     async def handle_callback(request: Request) -> Response:
@@ -197,7 +201,9 @@ def create_asgi_app(
             methods=["GET", "OPTIONS"],
         ),
         Route(
-            "/oauth/register", endpoint=handle_client_reg, methods=["POST", "OPTIONS"]
+            "/oauth/register",
+            endpoint=handle_client_reg,
+            methods=["GET", "POST", "OPTIONS"],
         ),
         Route("/oauth/callback", endpoint=handle_callback, methods=["GET", "OPTIONS"]),
         Route(
