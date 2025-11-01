@@ -139,10 +139,10 @@ def datasets(
 @click.option(
     "--processor",
     "processor_name",
-    type=click.Choice(["paddleocr", "pdfplumber", "easyocr"], case_sensitive=False),
+    type=click.Choice(["paddleocr", "pdfplumber", "easyocr","docling"], case_sensitive=False),##
     default="paddleocr",
     show_default=True,
-    help="Name of the processor to use (paddleocr: general OCR, pdfplumber: parsed PDFs, easyocr: 80+ languages OCR).",
+    help="Name of the processor to use (paddleocr: general OCR, pdfplumber: parsed PDFs, easyocr: 80+ languages OCR,docling: multi-format document processing).",##
 )
 @click.option(
     "--lang",
@@ -162,6 +162,13 @@ def datasets(
     default=None,
     help="Device for OCR inference. If omitted, auto-select GPU when available.",
 )
+@click.option(  # 新增：为 docling 新增 OCR 开关选项（可选，增强灵活性）
+    "--ocr-enabled",
+    type=bool,
+    default=True,
+    show_default=True,
+    help="Whether to enable OCR for scanned documents (only effective for docling processor).",
+)
 @click.pass_context
 def preprocess(
     ctx: click.Context,
@@ -170,6 +177,7 @@ def preprocess(
     lang: str | None,
     output_dir: Path | None,
     device: str | None,
+    ocr_enabled: bool,
 ) -> None:
     """Preprocess an image file or all images in a directory.
 
@@ -182,6 +190,10 @@ def preprocess(
 
     cfg = ctx.obj.get("config")
     try:
+        # 传递额外参数给 run_preprocess（如 docling 需要的 ocr_enabled）
+        extra_kwargs = {}
+        if processor_name == "docling":
+            extra_kwargs["ocr_enabled"] = ocr_enabled  # 仅对 docling 生效
         num_success, num_failed, _ = run_preprocess(
             path,
             processor=processor_name,
@@ -189,6 +201,7 @@ def preprocess(
             lang=lang,
             device=device,
             config=cfg,
+            **extra_kwargs  # 传递 docling 专属参数
         )
         click.echo(
             click.style(
