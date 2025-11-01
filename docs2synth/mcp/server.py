@@ -8,6 +8,8 @@ This module provides a Model Context Protocol server for Docs2Synth with:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from mcp.server import Server
 from mcp.server.streamable_http import StreamableHTTPServerTransport
 from starlette.applications import Starlette
@@ -15,7 +17,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from docs2synth import __version__
@@ -119,6 +121,49 @@ def create_asgi_app(
             {"status": "healthy", "service": SERVER_NAME, "version": __version__}
         )
 
+    async def handle_favicon(request: Request) -> Response:
+        """Handle favicon requests from docs2synth/mcp/static/ directory.
+
+        Looks for favicon files in the static directory:
+        - favicon.ico
+        - favicon.svg
+        - favicon.png
+
+        If file not found, returns 204 No Content to avoid 404 errors.
+        """
+        # Get the requested favicon filename
+        favicon_name = request.url.path.lstrip(
+            "/"
+        )  # favicon.ico, favicon.svg, or favicon.png
+
+        # Path to static directory relative to this file
+        static_dir = Path(__file__).parent / "static"
+        favicon_path = static_dir / favicon_name
+
+        # Check if file exists
+        if favicon_path.exists() and favicon_path.is_file():
+            # Determine content type based on extension
+            content_type_map = {
+                ".ico": "image/x-icon",
+                ".png": "image/png",
+                ".svg": "image/svg+xml",
+            }
+            content_type = content_type_map.get(
+                favicon_path.suffix.lower(), "image/x-icon"
+            )
+
+            return FileResponse(
+                str(favicon_path),
+                media_type=content_type,
+                headers={
+                    "Cache-Control": "public, max-age=31536000"
+                },  # Cache for 1 year
+            )
+
+        # File not found - return 204 to avoid 404 errors
+        logger.debug(f"Favicon not found: {favicon_path}, returning 204")
+        return Response(status_code=204)
+
     async def handle_metadata(request: Request) -> JSONResponse:
         """Return MCP server metadata for discovery."""
         return JSONResponse(
@@ -157,7 +202,7 @@ def create_asgi_app(
         return await oauth_proxy.handle_protected_resource_metadata(config, request)
 
     async def handle_openid_config(request: Request) -> JSONResponse:
-        return await oauth_proxy.handle_openid_configuration(config)
+        return await oauth_proxy.handle_openid_configuration(config, request)
 
     async def handle_client_reg(request: Request) -> JSONResponse:
         """Handle client registration endpoint - ensures it's not proxied."""
@@ -196,12 +241,32 @@ def create_asgi_app(
             methods=["GET", "OPTIONS"],
         ),
         Route(
+            "/.well-known/oauth-authorization-server/oauth",
+            endpoint=handle_oauth_metadata,
+            methods=["GET", "OPTIONS"],
+        ),
+        Route(
             "/.well-known/oauth-protected-resource",
             endpoint=handle_protected_resource,
             methods=["GET", "OPTIONS"],
         ),
         Route(
+            "/.well-known/oauth-protected-resource/mcp",
+            endpoint=handle_protected_resource,
+            methods=["GET", "OPTIONS"],
+        ),
+        Route(
             "/.well-known/openid-configuration",
+            endpoint=handle_openid_config,
+            methods=["GET", "OPTIONS"],
+        ),
+        Route(
+            "/.well-known/openid-configuration/mcp",
+            endpoint=handle_openid_config,
+            methods=["GET", "OPTIONS"],
+        ),
+        Route(
+            "/.well-known/openid-configuration/oauth",
             endpoint=handle_openid_config,
             methods=["GET", "OPTIONS"],
         ),
@@ -228,6 +293,9 @@ def create_asgi_app(
             "/login/", endpoint=handle_login_proxy, methods=["GET", "POST", "OPTIONS"]
         ),
         Route("/static/{path:path}", endpoint=handle_static_proxy, methods=["GET"]),
+        Route("/favicon.ico", endpoint=handle_favicon, methods=["GET"]),
+        Route("/favicon.svg", endpoint=handle_favicon, methods=["GET"]),
+        Route("/favicon.png", endpoint=handle_favicon, methods=["GET"]),
         Route("/mcp", endpoint=handle_mcp_endpoint, methods=["GET", "POST", "DELETE"]),
     ]
 
