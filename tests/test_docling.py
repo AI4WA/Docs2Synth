@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from docs2synth.preprocess.schema import LabelType
 from docs2synth.preprocess.docling_processor import _DOCLING_AVAILABLE, DoclingProcessor

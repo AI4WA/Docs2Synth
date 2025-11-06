@@ -58,4 +58,6 @@ logs/
 .docker-local/
 .config-local/
 
-config.yml
+config.yml.idea/
+.idea/
+.idea/

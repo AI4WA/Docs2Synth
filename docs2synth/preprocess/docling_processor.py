@@ -29,7 +29,7 @@ try:
     _DOCLING_AVAILABLE = True
     logger.info("Docling imported successfully")
 except ImportError as e:
-    DocumentConverter = None  # type: ignore
+    DocumentConverter = None
     _DOCLING_AVAILABLE = False
     logger.error(
         f"Failed to import Docling: {str(e)}. Please install it with: pip install docling",
@@ -49,7 +49,7 @@ class DoclingProcessor:
     )
     _max_cache_size: int = field(default=10, init=False, repr=False)
 
-    # PaddleOCR逻辑
+    # PaddleOCR logic
     def _gpu_available(self) -> bool:
         try:
             from docling.utils.gpu import is_gpu_available
@@ -57,12 +57,11 @@ class DoclingProcessor:
             return is_gpu_available()
         except ImportError:
             try:
-                import torch  # type: ignore
+                import torch
 
                 return torch.cuda.is_available()
             except ImportError:
                 return False
-        return False
 
     def _resolve_device(self, device_override: Optional[str]) -> str:
         if device_override is not None:
@@ -101,7 +100,6 @@ class DoclingProcessor:
             del self._docling_cache[oldest_key]
             logger.debug(f"Cache full, removing oldest instance: {oldest_key}")
 
-        # Initialize new instance
         logger.debug(f"Initializing new Docling instance: {cache_key}")
         try:
             converter_config = {
@@ -127,7 +125,7 @@ class DoclingProcessor:
             raise
 
     def _map_label(self, elem) -> LabelType:
-        """将 Docling 元素类型映射为 schema 支持的 LabelType"""
+        """Map Docling element types to schema-supported LabelType"""
         if hasattr(elem, "type"):
             elem_type = str(elem.type).lower()
             if any(k in elem_type for k in ["picture", "formula"]):
@@ -141,133 +139,100 @@ class DoclingProcessor:
             return LabelType.OTHER
         return LabelType.TEXT
 
-    def process(
-        self,
-        doc_path: str,
-        *,
-        lang: Optional[str] = None,
-        device: Optional[str] = None,
-    ) -> DocumentProcessResult:
-        """处理文档并返回 schema 兼容结果"""
-        if not isinstance(doc_path, str) or not doc_path.strip():
-            raise ValueError(f"Invalid document path: {doc_path}")
-        doc_path = doc_path.strip()
-        if not os.path.exists(doc_path):
-            raise FileNotFoundError(f"Document not found: {doc_path}")
-
-        docling_converter = self._init_docling(
-            lang_override=lang, device_override=device
-        )
-        start_time = time.time()
-
-        try:
-            convert_result = docling_converter.convert(doc_path)
-        except (FileNotFoundError, PermissionError) as e:
-            logger.error(f"Failed to access document: {str(e)}", exc_info=True)
-            raise
-        except Exception as e:
-            logger.error(f"Docling processing failed: {str(e)}", exc_info=True)
-            raise
-        end_time = time.time()
-
+    def _parse_pages(self, convert_result):
+        """Parse document pages from conversion result"""
         try:
             document = convert_result.document
             if hasattr(document, "pages") and document.pages:
-                pages = document.pages
-            else:
-                pages = [
-                    type(
-                        "Page",
-                        (),
-                        {
-                            "elements": document.elements
-                            if hasattr(document, "elements")
-                            else []
-                        },
-                    )()
-                ]
-            logger.debug(f"Number of pages processed: {len(pages)}")
+                return document.pages
+            elements = document.elements if hasattr(document, "elements") else []
+            return [type("Page", (), {"elements": elements})()]
         except AttributeError as e:
-            logger.warning(f"Failed to parse result: {str(e)}", exc_info=True)
-            pages = []
+            logger.warning(f"Failed to parse pages: {str(e)}", exc_info=True)
+            return []
 
+    def _process_single_element(self, elem, page_idx, elem_idx, current_id):
+        """Process a single element to extract text, bbox, and create DocumentObject"""
+        try:
+            text = elem.text.strip() if (hasattr(elem, "text") and elem.text) else ""
+            is_picture = self._map_label(elem) == LabelType.OTHER
+            if not text and not is_picture:
+                return None
+            score = None
+            if hasattr(elem, "confidence") and elem.confidence is not None:
+                try:
+                    score = float(elem.confidence)
+                except (ValueError, TypeError):
+                    score = None
+
+            bbox = (0.0, 0.0, 0.0, 0.0)
+            if hasattr(elem, "bbox") and elem.bbox:
+                try:
+                    bbox_tuple = tuple(elem.bbox)
+                    if len(bbox_tuple) == 4:
+                        bbox = tuple(map(float, bbox_tuple))
+                        bbox = (
+                            max(0.0, bbox[0]),
+                            max(0.0, bbox[1]),
+                            max(bbox[0] + 1e-6, bbox[2]),
+                            max(bbox[1] + 1e-6, bbox[3]),
+                        )
+                except (ValueError, TypeError, IndexError):
+                    bbox = (0.0, 0.0, 0.0, 0.0)
+
+            obj = DocumentObject(
+                object_id=current_id,
+                text=text,
+                bbox=bbox,
+                label=self._map_label(elem),
+                page=page_idx,
+                score=score,
+            )
+            return obj, bbox, text
+
+        except Exception as e:
+            logger.error(
+                f"Failed to process element (page {page_idx}, element {elem_idx}): {str(e)}",
+                exc_info=True,
+            )
+            return None
+
+    def _process_elements(self, pages):
+        """Process elements from all pages and generate DocumentObjects"""
         objects: Dict[int, DocumentObject] = {}
         bbox_list: List[Tuple[float, float, float, float]] = []
         context_parts: List[str] = []
         reading_order_ids: List[int] = []
         current_id = 0
 
-        if not pages:
-            logger.warning(f"No valid pages: {doc_path}")
-        else:
-            for page_idx, page in enumerate(pages):
-                elements = (
-                    page.elements
-                    if (hasattr(page, "elements") and page.elements)
-                    else []
+        for page_idx, page in enumerate(pages):
+            elements = (
+                page.elements if (hasattr(page, "elements") and page.elements) else []
+            )
+            if not elements:
+                logger.warning(f"No elements on page {page_idx}")
+                continue
+
+            logger.info(f"Processing page {page_idx}: {len(elements)} elements")
+            for elem_idx, elem in enumerate(elements):
+                obj_data = self._process_single_element(
+                    elem, page_idx, elem_idx, current_id
                 )
-                if not elements:
-                    logger.warning(f"No elements on page {page_idx}")
+                if not obj_data:
                     continue
 
-                logger.info(f"Processing page {page_idx}: {len(elements)} elements")
-                for elem_idx, elem in enumerate(elements):
-                    try:
-                        text = (
-                            elem.text.strip()
-                            if (hasattr(elem, "text") and elem.text)
-                            else ""
-                        )
-                        is_picture = self._map_label(elem) == LabelType.OTHER
-                        if not text and not is_picture:
-                            continue
-                        score = None
-                        if hasattr(elem, "confidence") and elem.confidence is not None:
-                            try:
-                                score = float(elem.confidence)
-                            except (ValueError, TypeError):
-                                score = None
+                obj, bbox, text = obj_data
+                objects[current_id] = obj
+                bbox_list.append(bbox)
+                if text:
+                    context_parts.append(text)
+                reading_order_ids.append(current_id)
+                current_id += 1
 
-                        bbox = (0.0, 0.0, 0.0, 0.0)
-                        if hasattr(elem, "bbox") and elem.bbox:
-                            try:
-                                bbox_tuple = tuple(elem.bbox)
-                                if len(bbox_tuple) == 4:
-                                    bbox = tuple(map(float, bbox_tuple))
-                                    bbox = (
-                                        max(0.0, bbox[0]),
-                                        max(0.0, bbox[1]),
-                                        max(bbox[0] + 1e-6, bbox[2]),
-                                        max(bbox[1] + 1e-6, bbox[3]),
-                                    )
-                            except (ValueError, TypeError, IndexError):
-                                bbox = (0.0, 0.0, 0.0, 0.0)
+        return objects, bbox_list, context_parts, reading_order_ids, current_id
 
-                        obj = DocumentObject(
-                            object_id=current_id,
-                            text=text,
-                            bbox=bbox,
-                            label=self._map_label(elem),
-                            page=page_idx,
-                            score=score,
-                        )
-
-                        objects[current_id] = obj
-                        bbox_list.append(bbox)
-                        if text:
-                            context_parts.append(text)
-                        reading_order_ids.append(current_id)
-                        current_id += 1
-
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to process element (page {page_idx}, element {elem_idx}): {str(e)}",
-                            exc_info=True,
-                        )
-                        continue
-
-        logger.info(f"Extracted {current_id} elements total: {doc_path}")
-
+    def _build_metadata(self, doc_path, lang, pages, start_time, end_time):
+        """Build document metadata and process metadata"""
         process_metadata = ProcessMetadata(
             processor_name="docling",
             timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
@@ -285,7 +250,7 @@ class DoclingProcessor:
 
         if mime_type and mime_type.startswith("image/"):
             try:
-                from PIL import Image  # type: ignore
+                from PIL import Image
 
                 with Image.open(doc_path) as img:
                     width, height = img.size
@@ -301,6 +266,53 @@ class DoclingProcessor:
             language=detected_lang,
             width=width,
             height=height,
+        )
+
+        return document_metadata, process_metadata
+
+    def process(
+        self,
+        doc_path: str,
+        *,
+        lang: Optional[str] = None,
+        device: Optional[str] = None,
+    ) -> DocumentProcessResult:
+        """Process document and return schema-compatible results"""
+        if not isinstance(doc_path, str) or not doc_path.strip():
+            raise ValueError(f"Invalid document path: {doc_path}")
+        doc_path = doc_path.strip()
+        if not os.path.exists(doc_path):
+            raise FileNotFoundError(f"Document not found: {doc_path}")
+
+        docling_converter = self._init_docling(
+            lang_override=lang, device_override=device
+        )
+        start_time = time.time()
+        try:
+            convert_result = docling_converter.convert(doc_path)
+        except (FileNotFoundError, PermissionError) as e:
+            logger.error(f"Failed to access document: {str(e)}", exc_info=True)
+            raise
+        except Exception as e:
+            logger.error(f"Docling processing failed: {str(e)}", exc_info=True)
+            raise
+        end_time = time.time()
+
+        pages = self._parse_pages(convert_result)
+        if not pages:
+            logger.warning(f"No valid pages: {doc_path}")
+
+        (
+            objects,
+            bbox_list,
+            context_parts,
+            reading_order_ids,
+            current_id,
+        ) = self._process_elements(pages)
+        logger.info(f"Extracted {current_id} elements total: {doc_path}")
+
+        document_metadata, process_metadata = self._build_metadata(
+            doc_path, lang, pages, start_time, end_time
         )
 
         return DocumentProcessResult(
