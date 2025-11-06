@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -197,6 +198,270 @@ def preprocess(
         )
     except Exception as e:
         logger.exception("Preprocess command failed")
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
+@cli.group("agent")
+@click.pass_context
+def agent_group(ctx: click.Context) -> None:
+    """LLM agent commands for text generation and chat."""
+    pass
+
+
+@agent_group.command("generate")
+@click.argument("prompt", type=str)
+@click.option(
+    "--provider",
+    type=str,
+    default="openai",
+    show_default=True,
+    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface)",
+)
+@click.option(
+    "--model",
+    type=str,
+    default=None,
+    help="Model name (optional, uses provider default if not specified)",
+)
+@click.option(
+    "--config-path",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to config.yml (optional, uses DOCS2SYNTH_CONFIG env var or ./config.yml if set)",
+)
+@click.option(
+    "--system-prompt",
+    type=str,
+    default=None,
+    help="System prompt for chat models",
+)
+@click.option(
+    "--temperature",
+    type=float,
+    default=None,
+    help="Sampling temperature (0.0-2.0)",
+)
+@click.option(
+    "--max-tokens",
+    type=int,
+    default=None,
+    help="Maximum tokens to generate",
+)
+@click.option(
+    "--response-format",
+    type=click.Choice(["json", "text"]),
+    default=None,
+    help="Response format (json for JSON mode)",
+)
+@click.pass_context
+def agent_generate(
+    ctx: click.Context,
+    prompt: str,
+    provider: str,
+    model: str | None,
+    config_path: str | None,
+    system_prompt: str | None,
+    temperature: float | None,
+    max_tokens: int | None,
+    response_format: str | None,
+) -> None:
+    """Generate text from a prompt using LLM agents.
+
+    PROMPT: The text prompt to generate from.
+
+    Examples:
+        docs2synth agent generate "Explain quantum computing"
+        docs2synth agent generate "List 3 items" --provider anthropic --response-format json
+        docs2synth agent generate "Hello" --provider ollama --model llama2
+    """
+    from docs2synth.agent import AgentWrapper
+
+    try:
+        # Build kwargs for AgentWrapper
+        agent_kwargs: dict[str, Any] = {}
+        # Resolve config_path default to ./config.yml if present
+        if not config_path and Path("./config.yml").exists():
+            config_path = "./config.yml"
+
+        if model:
+            agent_kwargs["model"] = model
+        if config_path:
+            agent_kwargs["config_path"] = config_path
+
+        agent = AgentWrapper(provider=provider, **agent_kwargs)
+
+        # Build generation kwargs
+        gen_kwargs: dict[str, Any] = {}
+        if system_prompt:
+            gen_kwargs["system_prompt"] = system_prompt
+        if temperature is not None:
+            gen_kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            gen_kwargs["max_tokens"] = max_tokens
+        if response_format:
+            gen_kwargs["response_format"] = response_format
+
+        click.echo(click.style(f"Generating with {provider}...", fg="blue"))
+        response = agent.generate(prompt, **gen_kwargs)
+
+        click.echo(click.style("\nResponse:", fg="green", bold=True))
+        click.echo(response.content)
+
+        if response.usage:
+            click.echo(
+                click.style(f"\nToken usage: {response.usage}", fg="cyan", dim=True)
+            )
+
+    except Exception as e:
+        logger.exception("Agent generate command failed")
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
+@agent_group.command("chat")
+@click.argument("message", type=str)
+@click.option(
+    "--provider",
+    type=str,
+    default="openai",
+    show_default=True,
+    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface)",
+)
+@click.option(
+    "--model",
+    type=str,
+    default=None,
+    help="Model name (optional, uses provider default if not specified)",
+)
+@click.option(
+    "--config-path",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to config.yml (optional, uses DOCS2SYNTH_CONFIG env var or ./config.yml if set)",
+)
+@click.option(
+    "--temperature",
+    type=float,
+    default=None,
+    help="Sampling temperature (0.0-2.0)",
+)
+@click.option(
+    "--max-tokens",
+    type=int,
+    default=None,
+    help="Maximum tokens to generate",
+)
+@click.option(
+    "--response-format",
+    type=click.Choice(["json", "text"]),
+    default=None,
+    help="Response format (json for JSON mode)",
+)
+@click.option(
+    "--history-file",
+    type=click.Path(),
+    default=None,
+    help="Path to JSON file with chat history (optional)",
+)
+@click.pass_context
+def agent_chat(
+    ctx: click.Context,
+    message: str,
+    provider: str,
+    model: str | None,
+    config_path: str | None,
+    temperature: float | None,
+    max_tokens: int | None,
+    response_format: str | None,
+    history_file: str | None,
+) -> None:
+    """Chat with LLM agents using message history.
+
+    MESSAGE: The user message to send.
+
+    Examples:
+        docs2synth agent chat "What is Python?"
+        docs2synth agent chat "Explain AI" --provider anthropic --model claude-3-5-sonnet-20241022
+        docs2synth agent chat "Hello" --history-file chat.json
+    """
+    import json
+
+    from docs2synth.agent import AgentWrapper
+
+    try:
+        # Build kwargs for AgentWrapper
+        agent_kwargs: dict[str, Any] = {}
+        # Resolve config_path default to ./config.yml if present
+        if not config_path and Path("./config.yml").exists():
+            config_path = "./config.yml"
+
+        if model:
+            agent_kwargs["model"] = model
+        if config_path:
+            agent_kwargs["config_path"] = config_path
+
+        agent = AgentWrapper(provider=provider, **agent_kwargs)
+
+        # Load chat history if provided
+        messages: list[dict[str, str]] = []
+        if history_file:
+            try:
+                with open(history_file, "r") as f:
+                    messages = json.load(f)
+                if not isinstance(messages, list):
+                    raise ValueError("History file must contain a list of messages")
+            except Exception as e:
+                click.echo(
+                    click.style(f"✗ Error loading history file: {e}", fg="yellow"),
+                    err=True,
+                )
+                click.echo("Starting with empty history...", err=True)
+
+        # Add current user message
+        messages.append({"role": "user", "content": message})
+
+        # Build generation kwargs
+        gen_kwargs: dict[str, Any] = {}
+        if temperature is not None:
+            gen_kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            gen_kwargs["max_tokens"] = max_tokens
+        if response_format:
+            gen_kwargs["response_format"] = response_format
+
+        click.echo(click.style(f"Chatting with {provider}...", fg="blue"))
+        response = agent.chat(messages, **gen_kwargs)
+
+        click.echo(click.style("\nResponse:", fg="green", bold=True))
+        click.echo(response.content)
+
+        if response.usage:
+            click.echo(
+                click.style(f"\nToken usage: {response.usage}", fg="cyan", dim=True)
+            )
+
+        # Optionally save updated history
+        if history_file:
+            messages.append({"role": "assistant", "content": response.content})
+            try:
+                with open(history_file, "w") as f:
+                    json.dump(messages, f, indent=2)
+                click.echo(
+                    click.style(
+                        f"\n✓ History saved to {history_file}", fg="green", dim=True
+                    )
+                )
+            except Exception as e:
+                click.echo(
+                    click.style(
+                        f"\n⚠ Could not save history: {e}", fg="yellow", dim=True
+                    ),
+                    err=True,
+                )
+
+    except Exception as e:
+        logger.exception("Agent chat command failed")
         click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
         sys.exit(1)
 
