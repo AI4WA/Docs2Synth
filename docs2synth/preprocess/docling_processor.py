@@ -14,7 +14,7 @@ from .schema import (
     DocumentObject,
     DocumentProcessResult,
     LabelType,
-    ProcessMetadata,
+    ProcessMetadata
 )
 
 logger = get_logger(__name__)

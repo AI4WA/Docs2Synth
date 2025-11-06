@@ -21,10 +21,9 @@ pyyaml
 pandas>=1.5.0
 pillow
 
-#Docling and Paddleocr
+#Docling
 docling>=2.58.0
-pytest>=8.4.0
-pytest-cov>=7.0.0
+
 # Note: PyTorch will be installed separately based on CPU/GPU availability
 # For CPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 # For GPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

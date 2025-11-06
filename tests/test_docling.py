@@ -1,9 +1,10 @@
-import pytest
 from pathlib import Path
 from typing import Any
 
-from docs2synth.preprocess.schema import LabelType
+import pytest
+
 from docs2synth.preprocess.docling_processor import _DOCLING_AVAILABLE, DoclingProcessor
+from docs2synth.preprocess.schema import LabelType
 
 
 def test_docling_device_and_lang_overrides(monkeypatch: Any, tmp_path: Path):

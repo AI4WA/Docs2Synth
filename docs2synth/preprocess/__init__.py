@@ -1,13 +1,13 @@
 """Preprocessing modules for document analysis."""
 
-from .paddleocr import PaddleOCRProcessor
 from .docling_processor import DoclingProcessor
+from .paddleocr import PaddleOCRProcessor
 from .schema import (
-    DocumentProcessResult,
-    DocumentObject,
     DocumentMetadata,
-    ProcessMetadata,
+    DocumentObject,
+    DocumentProcessResult,
     LabelType,
+    ProcessMetadata,
 )
 
 __all__ = [
