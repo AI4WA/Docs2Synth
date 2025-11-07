@@ -40,7 +40,26 @@ for arg in "$@"; do
 done
 
 echo_info "Starting Docs2Synth development environment setup..."
-echo_info "Setup method: Python venv"
+echo_info "Setup method: uv with Python venv"
+
+# Check if uv is installed
+check_uv() {
+    if ! command -v uv &> /dev/null; then
+        echo_warn "uv is not installed. Installing uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+
+        # Add uv to PATH for current session
+        export PATH="$HOME/.cargo/bin:$PATH"
+
+        if ! command -v uv &> /dev/null; then
+            echo_error "Failed to install uv. Please install manually: https://github.com/astral-sh/uv"
+            exit 1
+        fi
+        echo_info "uv installed successfully!"
+    else
+        echo_info "uv is already installed"
+    fi
+}
 
 # Detect GPU availability
 detect_gpu() {
@@ -106,18 +125,21 @@ check_python_version() {
     fi
 }
 
-# Setup using venv
+# Setup using uv and venv
 setup_venv() {
-    echo_info "Setting up with Python venv..."
+    echo_info "Setting up with uv and Python venv..."
 
     if ! check_python_version; then
         exit 1
     fi
 
-    # Create virtual environment
+    # Check and install uv if needed
+    check_uv
+
+    # Create virtual environment using uv
     if [ ! -d ".venv" ]; then
-        echo_info "Creating virtual environment..."
-        python3 -m venv .venv
+        echo_info "Creating virtual environment with uv..."
+        uv venv
     else
         echo_warn "Virtual environment already exists, skipping creation..."
     fi
@@ -126,25 +148,13 @@ setup_venv() {
     echo_info "Activating virtual environment..."
     source .venv/bin/activate
 
-    # Upgrade pip
-    echo_info "Upgrading pip..."
-    pip install --upgrade pip
-
     # Install PyTorch (CPU or GPU)
-    echo_info "Installing PyTorch..."
-    pip install -r "$TORCH_REQUIREMENTS"
+    echo_info "Installing PyTorch with uv..."
+    uv pip install -r "$TORCH_REQUIREMENTS"
 
-    # Install base requirements
-    echo_info "Installing base requirements..."
-    pip install -r requirements.txt
-
-    # Install development dependencies
-    echo_info "Installing development dependencies..."
-    pip install -r requirements-dev.txt
-
-    # Install the package in editable mode
-    echo_info "Installing docs2synth in editable mode..."
-    pip install -e .
+    # Install the package in editable mode with dev dependencies
+    echo_info "Installing docs2synth with dev dependencies..."
+    uv pip install -e ".[dev]"
 
     echo_info ""
     echo_info "=========================================="

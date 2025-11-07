@@ -105,16 +105,42 @@ pip install docs2synth
 
 ### Development Setup
 
+#### Recommended: Using uv (Fast & Modern)
+
 ```bash
 # Clone repository
 git clone https://github.com/AI4WA/Docs2Synth.git
 cd Docs2Synth
 
-# Run automated setup script
-./setup.sh
+# Install uv (if not already installed)
+# macOS/Linux:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows:
+# powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# Or manual setup:
-# Create virtual environment (Python ≥3.8)
+# Create virtual environment
+uv venv
+
+# Activate environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+uv pip install -r requirements-cpu.txt  # or requirements-gpu.txt for GPU
+uv pip install -e ".[dev]"
+```
+
+#### Alternative: Automated Setup Script
+
+```bash
+# Run setup script (auto-installs uv and dependencies)
+./setup.sh  # On Unix/macOS/WSL
+# setup.bat  # On Windows
+```
+
+#### Alternative: Traditional pip
+
+```bash
+# Create virtual environment (Python ≥3.10)
 python -m venv .venv && source .venv/bin/activate
 
 # Upgrade pip
@@ -123,12 +149,8 @@ pip install --upgrade pip
 # Install PyTorch (CPU or GPU)
 pip install -r requirements-cpu.txt  # or requirements-gpu.txt for GPU
 
-# Install dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# Install package in editable mode
-pip install -e .
+# Install package in editable mode with dev dependencies
+pip install -e ".[dev]"
 ```
 
 ### Verify Installation

@@ -22,7 +22,22 @@ exit /b 1
 :args_done
 
 echo [INFO] Starting Docs2Synth development environment setup...
-echo [INFO] Setup method: Python venv
+echo [INFO] Setup method: uv with Python venv
+
+REM Check if uv is installed
+where uv >nul 2>nul
+IF %ERRORLEVEL% NEQ 0 (
+    echo [WARN] uv is not installed. Installing uv...
+    powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    where uv >nul 2>nul
+    IF !ERRORLEVEL! NEQ 0 (
+        echo [ERROR] Failed to install uv. Please install manually: https://github.com/astral-sh/uv
+        exit /b 1
+    )
+    echo [INFO] uv installed successfully!
+) ELSE (
+    echo [INFO] uv is already installed
+)
 
 REM Check if Python is installed
 where python >nul 2>nul
@@ -67,12 +82,12 @@ call :setup_venv
 goto :end
 
 :setup_venv
-echo [INFO] Setting up with Python venv...
+echo [INFO] Setting up with uv and Python venv...
 
 REM Check if virtual environment exists
 IF NOT EXIST ".venv" (
-    echo [INFO] Creating virtual environment...
-    python -m venv .venv
+    echo [INFO] Creating virtual environment with uv...
+    uv venv
 ) ELSE (
     echo [WARN] Virtual environment already exists, skipping creation...
 )
@@ -81,25 +96,13 @@ REM Activate virtual environment
 echo [INFO] Activating virtual environment...
 call .venv\Scripts\activate.bat
 
-REM Upgrade pip
-echo [INFO] Upgrading pip...
-python -m pip install --upgrade pip
-
 REM Install PyTorch (CPU or GPU)
-echo [INFO] Installing PyTorch...
-pip install -r %TORCH_REQUIREMENTS%
+echo [INFO] Installing PyTorch with uv...
+uv pip install -r %TORCH_REQUIREMENTS%
 
-REM Install base requirements
-echo [INFO] Installing base requirements...
-pip install -r requirements.txt
-
-REM Install development dependencies
-echo [INFO] Installing development dependencies...
-pip install -r requirements-dev.txt
-
-REM Install the package in editable mode
-echo [INFO] Installing docs2synth in editable mode...
-pip install -e .
+REM Install the package in editable mode with dev dependencies
+echo [INFO] Installing docs2synth with dev dependencies...
+uv pip install -e ".[dev]"
 
 echo.
 echo ==========================================
