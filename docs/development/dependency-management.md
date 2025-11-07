@@ -70,7 +70,28 @@ uv pip install -e ".[dev]"
 
 ### Adding a Development Dependency
 
-1. Edit `requirements-dev.in`:
+Development dependencies can be added in two places depending on their use:
+
+**For dependencies needed by tests or all developers:**
+
+1. Edit `pyproject.toml` under `[project.optional-dependencies]` → `dev`:
+
+```toml
+dev = [
+    "pytest>=7.0",
+    "new-dev-tool>=2.0",  # Add your tool here
+]
+```
+
+2. Reinstall the package:
+
+```bash
+uv pip install -e ".[dev]"
+```
+
+**For dependencies that should be locked in requirements-dev.txt:**
+
+1. Also add to `requirements-dev.in`:
 
 ```text
 pytest>=7.0
@@ -83,11 +104,8 @@ new-dev-tool>=2.0  # Add your tool here
 uv pip compile requirements-dev.in -o requirements-dev.txt
 ```
 
-3. Install the updated dependencies:
-
-```bash
-uv pip install -r requirements-dev.txt
-```
+!!! note "Sync pyproject.toml and requirements-dev.in"
+    For consistency, keep `pyproject.toml` dev dependencies and `requirements-dev.in` in sync. The lockfile approach ensures reproducible builds in CI/CD.
 
 ### Updating Dependencies
 
