@@ -1197,6 +1197,411 @@ def qa_list(ctx: click.Context) -> None:
         sys.exit(1)
 
 
+# Verify command group
+@cli.group("verify")
+@click.pass_context
+def verify_group(ctx: click.Context) -> None:
+    """Verification commands for QA pairs and document content."""
+    pass
+
+
+def _prepare_verifier_kwargs(
+    verifier_type: str,
+    question: str,
+    answer: str | None,
+    context: str | None,
+    image_obj: Any,
+    temperature: float | None,
+    max_tokens: int | None,
+) -> tuple[dict[str, Any], bool]:
+    """Prepare verification kwargs for a specific verifier type.
+
+    Args:
+        verifier_type: Type of verifier (meaningful, correctness, etc.)
+        question: Generated question
+        answer: Target answer
+        context: Document context
+        image_obj: Document image object
+        temperature: Sampling temperature
+        max_tokens: Maximum tokens
+
+    Returns:
+        Tuple of (verify_kwargs dict, should_skip bool)
+    """
+    verify_kwargs: dict[str, Any] = {}
+    if temperature is not None:
+        verify_kwargs["temperature"] = temperature
+    if max_tokens is not None:
+        verify_kwargs["max_tokens"] = max_tokens
+    verify_kwargs["image"] = image_obj
+
+    if verifier_type == "meaningful":
+        if context is None and image_obj is None:
+            return {}, True
+        if context is not None:
+            verify_kwargs["context"] = context
+    elif verifier_type == "correctness":
+        if answer is None:
+            return {}, True
+
+    return verify_kwargs, False
+
+
+def _load_verification_config(config_path: str | None) -> tuple[Any, str]:
+    """Load verification configuration from config file.
+
+    Args:
+        config_path: Path to config file (or None to auto-detect)
+
+    Returns:
+        Tuple of (verification_config, resolved_config_path)
+
+    Raises:
+        SystemExit: If config file not found or invalid
+    """
+    from docs2synth.qa import QAVerificationConfig
+    from docs2synth.utils.config import Config
+
+    # Resolve config_path
+    if not config_path and Path("./config.yml").exists():
+        config_path = "./config.yml"
+
+    if not config_path:
+        click.echo(
+            click.style(
+                "✗ Error: config.yml not found. Please specify --config-path or create config.yml",
+                fg="red",
+            ),
+            err=True,
+        )
+        sys.exit(1)
+
+    # Load verification config
+    config = Config.from_yaml(config_path)
+    verification_config = QAVerificationConfig.from_config(config)
+
+    if verification_config is None or not verification_config.verifiers:
+        click.echo(
+            click.style(
+                "✗ Error: No verifiers found in config.yml. Please configure 'verifiers' section.",
+                fg="red",
+            ),
+            err=True,
+        )
+        sys.exit(1)
+
+    return verification_config, config_path
+
+
+def _display_verification_result(result: dict[str, Any]) -> None:
+    """Display verification result to console.
+
+    Args:
+        result: Result dictionary from verifier
+    """
+    if result["status"] == "skipped":
+        click.echo(
+            click.style(
+                f"⚠ [{result['verifier_type']}] Skipping: {result['reason']}",
+                fg="yellow",
+            )
+        )
+        return
+
+    # Display running status
+    click.echo(click.style(f"[{result['verifier_type']}] Running...", fg="cyan"))
+
+    # Display result
+    if result["is_valid"]:
+        click.echo(
+            click.style(
+                f"  ✓ Result: {result['response']} (True)",
+                fg="green",
+                bold=True,
+            )
+        )
+    else:
+        click.echo(
+            click.style(
+                f"  ✗ Result: {result['response']} (False)",
+                fg="red",
+                bold=True,
+            )
+        )
+
+    if result.get("explanation"):
+        click.echo(click.style(f"  Explanation: {result['explanation']}", fg="yellow"))
+
+
+def _run_single_verifier(
+    verifier_config: Any,
+    question: str,
+    answer: str | None,
+    context: str | None,
+    image_obj: Any,
+    temperature: float | None,
+    max_tokens: int | None,
+    config_path: str | None,
+) -> dict[str, Any]:
+    """Run a single verifier and return result.
+
+    Args:
+        verifier_config: Verifier configuration
+        question: Generated question
+        answer: Target answer
+        context: Document context
+        image_obj: Document image object
+        temperature: Sampling temperature
+        max_tokens: Maximum tokens
+        config_path: Path to config file
+
+    Returns:
+        Result dictionary with status and results
+    """
+    from docs2synth.qa import QAVerifierFactory
+
+    verifier = QAVerifierFactory.create_from_config(
+        verifier_config, config_path=config_path
+    )
+
+    verify_kwargs, should_skip = _prepare_verifier_kwargs(
+        verifier_config.verifier_type,
+        question,
+        answer,
+        context,
+        image_obj,
+        temperature,
+        max_tokens,
+    )
+
+    if should_skip:
+        skip_reason = (
+            "context or image required"
+            if verifier_config.verifier_type == "meaningful"
+            else "answer required"
+        )
+        return {
+            "verifier_type": verifier_config.verifier_type,
+            "status": "skipped",
+            "reason": skip_reason,
+        }
+
+    result = verifier.verify(question=question, answer=answer or "", **verify_kwargs)
+
+    response = result.get("response", "Unknown")
+    is_valid = response.lower() == "yes"
+
+    return {
+        "verifier_type": verifier_config.verifier_type,
+        "status": "completed",
+        "response": response,
+        "is_valid": is_valid,
+        "explanation": result.get("explanation"),
+        "raw_output": result.get("raw_output"),
+    }
+
+
+@verify_group.command("run")
+@click.argument("question", type=str)
+@click.option(
+    "--answer",
+    type=str,
+    default=None,
+    help="Target answer (optional, required for correctness verifier)",
+)
+@click.option(
+    "--image",
+    type=click.Path(exists=True),
+    required=True,
+    help="Path to document image (required)",
+)
+@click.option(
+    "--context",
+    type=str,
+    default=None,
+    help="Document context (optional, recommended for meaningful verifier)",
+)
+@click.option(
+    "--config-path",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to config.yml (optional, uses DOCS2SYNTH_CONFIG env var or ./config.yml if set)",
+)
+@click.option(
+    "--temperature",
+    type=float,
+    default=None,
+    help="Sampling temperature (0.0-2.0)",
+)
+@click.option(
+    "--max-tokens",
+    type=int,
+    default=None,
+    help="Maximum tokens to generate",
+)
+@click.pass_context
+def verify_run(
+    ctx: click.Context,
+    question: str,
+    answer: str | None,
+    image: str,
+    context: str | None,
+    config_path: str | None,
+    temperature: float | None,
+    max_tokens: int | None,
+) -> None:
+    """Run all configured verifiers on a QA pair.
+
+    QUESTION: Generated question (required)
+
+    This command runs all verifiers configured in config.yml and returns
+    true/false results for each verifier.
+
+    Examples:
+        docs2synth verify run "What is the name?" --image doc.png --answer "John Doe"
+        docs2synth verify run "What is the address?" --image doc.png --context "Form contains..."
+    """
+    from PIL import Image as PILImage
+
+    try:
+        # Load verification config
+        verification_config, resolved_config_path = _load_verification_config(
+            config_path
+        )
+
+        # Load image
+        image_obj = PILImage.open(image)
+
+        # Display header
+        click.echo(
+            click.style(
+                f"Running {len(verification_config.verifiers)} verifier(s)...",
+                fg="blue",
+                bold=True,
+            )
+        )
+        click.echo(click.style(f"Question: {question}", fg="cyan"))
+        if answer:
+            click.echo(click.style(f"Answer: {answer}", fg="cyan"))
+        click.echo(click.style(f"Image: {image}\n", fg="cyan"))
+
+        # Run all verifiers
+        results = []
+        for verifier_config in verification_config.verifiers:
+            try:
+                result = _run_single_verifier(
+                    verifier_config,
+                    question,
+                    answer,
+                    context,
+                    image_obj,
+                    temperature,
+                    max_tokens,
+                    resolved_config_path,
+                )
+
+                _display_verification_result(result)
+                results.append(result)
+
+            except Exception as e:
+                logger.exception(
+                    f"Failed to run verifier '{verifier_config.verifier_type}'"
+                )
+                click.echo(
+                    click.style(f"  ✗ Error: {e}", fg="red"),
+                    err=True,
+                )
+                results.append(
+                    {
+                        "verifier_type": verifier_config.verifier_type,
+                        "status": "error",
+                        "error": str(e),
+                    }
+                )
+                continue
+
+        # Print summary
+        click.echo(click.style("\n" + "=" * 60, fg="blue", bold=True))
+        click.echo(click.style("Summary:", fg="blue", bold=True))
+
+        completed = [r for r in results if r.get("status") == "completed"]
+        skipped = [r for r in results if r.get("status") == "skipped"]
+        errors = [r for r in results if r.get("status") == "error"]
+
+        if completed:
+            click.echo(click.style("\nCompleted:", fg="green", bold=True))
+            for result in completed:
+                verifier_type = result["verifier_type"]
+                is_valid = result.get("is_valid", False)
+                response = result.get("response", "Unknown")
+                status_icon = "✓" if is_valid else "✗"
+                status_color = "green" if is_valid else "red"
+                click.echo(
+                    click.style(
+                        f"  {status_icon} {verifier_type}: {response} ({'True' if is_valid else 'False'})",
+                        fg=status_color,
+                    )
+                )
+
+        if skipped:
+            click.echo(click.style("\nSkipped:", fg="yellow", bold=True))
+            for result in skipped:
+                click.echo(
+                    click.style(
+                        f"  ⚠ {result['verifier_type']}: {result.get('reason', 'unknown reason')}",
+                        fg="yellow",
+                    )
+                )
+
+        if errors:
+            click.echo(click.style("\nErrors:", fg="red", bold=True))
+            for result in errors:
+                click.echo(
+                    click.style(
+                        f"  ✗ {result['verifier_type']}: {result.get('error', 'unknown error')}",
+                        fg="red",
+                    )
+                )
+
+        # Overall result
+        if completed:
+            all_valid = all(r.get("is_valid", False) for r in completed)
+            if all_valid:
+                click.echo(
+                    click.style(
+                        "\n✓ All verifiers passed (True)", fg="green", bold=True
+                    )
+                )
+            else:
+                click.echo(
+                    click.style(
+                        "\n✗ Some verifiers failed (False)", fg="red", bold=True
+                    )
+                )
+
+    except Exception as e:
+        logger.exception("Verify run command failed")
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
+@verify_group.command("list")
+@click.pass_context
+def verify_list(ctx: click.Context) -> None:
+    """List all available verifiers."""
+    from docs2synth.qa import QAVerifierFactory
+
+    try:
+        verifiers = QAVerifierFactory.list_verifiers()
+        click.echo(click.style("Available verifiers:", fg="blue", bold=True))
+        for verifier in verifiers:
+            click.echo(f"  - {verifier}")
+    except Exception as e:
+        logger.exception("Failed to list verifiers")
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
 def main(argv: list[str] | None = None) -> None:  # pragma: no cover
     """Entry point for the console script."""
     cli(args=argv if argv is not None else sys.argv[1:])

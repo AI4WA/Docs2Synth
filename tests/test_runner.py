@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from docs2synth.preprocess.runner import run_preprocess
 
 
@@ -239,3 +241,235 @@ def test_run_preprocess_batch_includes_processor_in_all_filenames(
     # Verify all files exist
     for output_path in outputs:
         assert output_path.exists()
+
+
+def test_get_processor_paddleocr(monkeypatch):
+    """Test _get_processor returns PaddleOCRProcessor."""
+    from docs2synth.preprocess.runner import _get_processor
+
+    # Mock PaddleOCRProcessor where it's actually imported
+    class MockPaddleOCR:
+        pass
+
+    monkeypatch.setattr(
+        "docs2synth.preprocess.paddleocr.PaddleOCRProcessor", MockPaddleOCR
+    )
+
+    processor = _get_processor("paddleocr")
+    assert isinstance(processor, MockPaddleOCR)
+
+
+def test_get_processor_pdfplumber(monkeypatch):
+    """Test _get_processor returns PDFPlumberProcessor."""
+    from docs2synth.preprocess.runner import _get_processor
+
+    # Mock PDFPlumberProcessor where it's actually imported
+    class MockPDFPlumber:
+        pass
+
+    monkeypatch.setattr(
+        "docs2synth.preprocess.pdfplumber_proc.PDFPlumberProcessor", MockPDFPlumber
+    )
+
+    processor = _get_processor("pdfplumber")
+    assert isinstance(processor, MockPDFPlumber)
+
+
+def test_get_processor_easyocr(monkeypatch):
+    """Test _get_processor returns EasyOCRProcessor."""
+    from docs2synth.preprocess.runner import _get_processor
+
+    # Mock EasyOCRProcessor where it's actually imported
+    class MockEasyOCR:
+        pass
+
+    monkeypatch.setattr(
+        "docs2synth.preprocess.easyocr_proc.EasyOCRProcessor", MockEasyOCR
+    )
+
+    processor = _get_processor("easyocr")
+    assert isinstance(processor, MockEasyOCR)
+
+
+def test_get_processor_case_insensitive(monkeypatch):
+    """Test _get_processor is case insensitive."""
+    from docs2synth.preprocess.runner import _get_processor
+
+    class MockProcessor:
+        pass
+
+    monkeypatch.setattr(
+        "docs2synth.preprocess.paddleocr.PaddleOCRProcessor", MockProcessor
+    )
+
+    # Should work with various cases
+    assert isinstance(_get_processor("PADDLEOCR"), MockProcessor)
+    assert isinstance(_get_processor("PaddleOCR"), MockProcessor)
+    assert isinstance(_get_processor("paddleocr"), MockProcessor)
+
+
+def test_get_processor_unsupported():
+    """Test _get_processor raises ValueError for unsupported processor."""
+    from docs2synth.preprocess.runner import _get_processor
+
+    with pytest.raises(ValueError) as exc_info:
+        _get_processor("unsupported_processor")
+    assert "Unsupported processor" in str(exc_info.value)
+
+
+def test_determine_output_dir_with_explicit_path(tmp_path):
+    """Test _determine_output_dir with explicit output_dir."""
+    from docs2synth.preprocess.runner import _determine_output_dir
+    from docs2synth.utils.config import Config
+
+    input_path = tmp_path / "input.png"
+    input_path.touch()
+    output_dir = tmp_path / "explicit_output"
+
+    config = Config()
+    result = _determine_output_dir(input_path, output_dir, config)
+
+    assert result == output_dir.resolve()
+    assert result.exists()
+
+
+def test_determine_output_dir_from_config_preprocess(tmp_path):
+    """Test _determine_output_dir uses preprocess.output_dir from config."""
+    from docs2synth.preprocess.runner import _determine_output_dir
+    from docs2synth.utils.config import Config
+
+    input_path = tmp_path / "input.png"
+    input_path.touch()
+    config_output = tmp_path / "config_output"
+
+    config = Config({"preprocess": {"output_dir": str(config_output)}})
+    result = _determine_output_dir(input_path, None, config)
+
+    assert result == config_output.resolve()
+    assert result.exists()
+
+
+def test_determine_output_dir_from_config_data_processed(tmp_path):
+    """Test _determine_output_dir falls back to data.processed_dir."""
+    from docs2synth.preprocess.runner import _determine_output_dir
+    from docs2synth.utils.config import Config
+
+    input_path = tmp_path / "input.png"
+    input_path.touch()
+    processed_dir = tmp_path / "processed"
+
+    config = Config({"data": {"processed_dir": str(processed_dir)}})
+    result = _determine_output_dir(input_path, None, config)
+
+    assert result == processed_dir.resolve()
+    assert result.exists()
+
+
+def test_determine_output_dir_for_directory_input(tmp_path):
+    """Test _determine_output_dir creates subfolder for directory input."""
+    from docs2synth.preprocess.runner import _determine_output_dir
+    from docs2synth.utils.config import Config
+
+    input_dir = tmp_path / "my_dataset"
+    input_dir.mkdir()
+    output_base = tmp_path / "output"
+
+    config = Config()
+    result = _determine_output_dir(input_dir, output_base, config)
+
+    # Should create output/my_dataset/
+    assert result == (output_base / "my_dataset").resolve()
+    assert result.exists()
+
+
+def test_get_file_list_single_file(tmp_path):
+    """Test _get_file_list with single file."""
+    from docs2synth.preprocess.runner import _get_file_list
+
+    test_file = tmp_path / "test.png"
+    test_file.touch()
+
+    files = _get_file_list(test_file)
+    assert files == [test_file]
+
+
+def test_get_file_list_directory(tmp_path):
+    """Test _get_file_list with directory."""
+    from docs2synth.preprocess.runner import _get_file_list
+
+    # Create test files
+    (tmp_path / "file1.png").touch()
+    (tmp_path / "file2.jpg").touch()
+    (tmp_path / "file3.pdf").touch()
+
+    files = _get_file_list(tmp_path)
+    assert len(files) == 3
+    # Files should be sorted
+    assert files[0].name == "file1.png"
+    assert files[1].name == "file2.jpg"
+    assert files[2].name == "file3.pdf"
+
+
+def test_run_preprocess_nonexistent_path():
+    """Test run_preprocess raises FileNotFoundError for nonexistent path."""
+    with pytest.raises(FileNotFoundError):
+        run_preprocess("/nonexistent/path/to/file.png")
+
+
+def test_run_preprocess_with_custom_config(monkeypatch, tmp_path):
+    """Test run_preprocess with custom config."""
+
+    class DummyProcessor:
+        def process(self, path, **kwargs):
+            from docs2synth.preprocess.schema import (
+                DocumentMetadata,
+                DocumentProcessResult,
+                ProcessMetadata,
+            )
+
+            return DocumentProcessResult(
+                objects={},
+                object_list=[],
+                bbox_list=[],
+                context="test",
+                reading_order_ids=[],
+                process_metadata=ProcessMetadata(
+                    processor_name="paddleocr",
+                    timestamp="2024-01-01T00:00:00Z",
+                    latency=0.0,
+                ),
+                document_metadata=DocumentMetadata(
+                    source=path,
+                    filename="test.png",
+                    page_count=1,
+                    size_bytes=100,
+                    mime_type="image/png",
+                    language="en",
+                    width=100,
+                    height=100,
+                ),
+            )
+
+    def mock_get_processor(name):
+        return DummyProcessor()
+
+    monkeypatch.setattr(
+        "docs2synth.preprocess.runner._get_processor", mock_get_processor
+    )
+
+    input_file = tmp_path / "test.png"
+    input_file.write_bytes(b"fake data")
+
+    custom_output = tmp_path / "custom_output"
+    from docs2synth.utils.config import Config
+
+    config = Config({"preprocess": {"output_dir": str(custom_output)}})
+
+    num_success, num_failed, outputs = run_preprocess(
+        input_file, processor="paddleocr", config=config
+    )
+
+    assert num_success == 1
+    assert num_failed == 0
+    # Output should be in custom directory
+    assert outputs[0].parent == custom_output.resolve()
