@@ -3,6 +3,7 @@
 This module provides common utilities including:
 - Logging configuration and utilities
 - Performance timing tools
+- PDF image management utilities
 """
 
 from __future__ import annotations
@@ -17,6 +18,14 @@ from docs2synth.utils.logging import (
     setup_cli_logging,
     setup_logging,
     setup_logging_from_config,
+)
+from docs2synth.utils.pdf_images import (
+    convert_pdf_to_images,
+    convert_pdfs_in_directory,
+    get_pdf_images,
+    get_pdf_images_dir,
+    is_pdf_images_dir,
+    save_pdf_images,
 )
 from docs2synth.utils.timer import Timer, format_time, timeit, timer
 
@@ -40,4 +49,11 @@ __all__ = [
     "timeit",
     "Timer",
     "format_time",
+    # PDF Images
+    "get_pdf_images",
+    "get_pdf_images_dir",
+    "is_pdf_images_dir",
+    "save_pdf_images",
+    "convert_pdf_to_images",
+    "convert_pdfs_in_directory",
 ]

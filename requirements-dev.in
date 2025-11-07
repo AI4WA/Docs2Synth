@@ -23,7 +23,7 @@ pyarrow>=10.0.0
 # Optional dependencies for dev/testing
 openai>=1.0
 sentence-transformers>=0.6
-numpy>=1.22
+numpy>=1.22,<2.0  # PaddlePaddle requires NumPy 1.x
 
 # MCP dependencies (required for MCP tests)
 # These must be here because tests import mcp modules
