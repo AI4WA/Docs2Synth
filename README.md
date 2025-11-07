@@ -253,17 +253,38 @@ docker run --gpus all -it \
   docs2synth:gpu
 ```
 
+#### Building Docker Images
+
+We provide a convenient script to build and test Docker images:
+
+```bash
+# Build and test CPU image
+./scripts/build-docker.sh cpu
+
+# Build and test GPU image (requires significant disk space)
+./scripts/build-docker.sh gpu
+
+# Build and test both images
+./scripts/build-docker.sh all
+```
+
+The script will:
+- Build the Docker image
+- Verify Python and package installation
+- Run tests inside the container
+- Display image size and usage instructions
+
 #### Production Deployment with Docker
 
 Docker images are ideal for production deployment:
 
 ```bash
-# Build on your CI/CD pipeline (x86_64 runners)
+# Build images manually
 docker build --build-arg BUILD_TYPE=cpu -t your-registry/docs2synth:cpu .
-docker push your-registry/docs2synth:cpu
+docker build --build-arg BUILD_TYPE=gpu -t your-registry/docs2synth:gpu .
 
-# Or for GPU workloads
-docker build --build-arg BUILD_TYPE=gpu --platform linux/amd64 -t your-registry/docs2synth:gpu .
+# Push to registry
+docker push your-registry/docs2synth:cpu
 docker push your-registry/docs2synth:gpu
 
 # Deploy on production servers
