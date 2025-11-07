@@ -1,0 +1,752 @@
+# CLI Reference
+
+Docs2Synth provides a comprehensive command-line interface for document processing, QA generation, and agent interactions.
+
+## Global Options
+
+These options are available for all commands:
+
+```bash
+docs2synth --help                    # Show help message
+docs2synth --version                 # Show version
+docs2synth -v [COMMAND]              # Verbose output
+docs2synth -vv [COMMAND]             # Very verbose output
+docs2synth --config CONFIG [COMMAND] # Use custom config file
+```
+
+---
+
+## Dataset Management
+
+### List Available Datasets
+
+List all datasets that can be downloaded:
+
+```bash
+docs2synth datasets list
+```
+
+**Output Example:**
+```
+Available datasets:
+  - cord
+  - funsd
+  - vrd-iu2024-tracka
+  - vrd-iu2024-trackb
+```
+
+### Download a Dataset
+
+Download a specific dataset:
+
+```bash
+docs2synth datasets download vrd-iu2024-tracka
+```
+
+With custom output directory:
+
+```bash
+docs2synth datasets download vrd-iu2024-tracka --output-dir ./data
+```
+
+### Download All Datasets
+
+Download all available datasets at once:
+
+```bash
+docs2synth datasets download all
+```
+
+With custom output directory:
+
+```bash
+docs2synth datasets download all --output-dir ./data
+```
+
+---
+
+## Document Preprocessing
+
+Process documents with OCR to extract text and structure.
+
+### Basic Preprocessing
+
+Process a single image:
+
+```bash
+docs2synth preprocess document.png
+```
+
+Process all images in a directory:
+
+```bash
+docs2synth preprocess ./images/
+```
+
+### Processor Options
+
+#### PaddleOCR (Default - General Purpose)
+
+```bash
+docs2synth preprocess document.png --processor paddleocr
+```
+
+#### PDFPlumber (For Parsed PDFs)
+
+```bash
+docs2synth preprocess document.pdf --processor pdfplumber
+```
+
+#### EasyOCR (80+ Languages)
+
+```bash
+docs2synth preprocess document.png --processor easyocr
+```
+
+### Advanced Options
+
+Specify OCR language:
+
+```bash
+docs2synth preprocess document.png --lang en
+```
+
+Custom output directory:
+
+```bash
+docs2synth preprocess document.png --output-dir ./processed
+```
+
+Specify device (CPU/GPU):
+
+```bash
+docs2synth preprocess document.png --device gpu
+docs2synth preprocess document.png --device cpu
+```
+
+Complete example with all options:
+
+```bash
+docs2synth preprocess ./images/ \
+  --processor paddleocr \
+  --lang en \
+  --output-dir ./processed \
+  --device gpu
+```
+
+---
+
+## Agent Commands
+
+Interact with LLM agents for text generation and chat.
+
+### Generate Text
+
+Basic text generation:
+
+```bash
+docs2synth agent generate "Explain quantum computing"
+```
+
+#### Provider Options
+
+Use different LLM providers:
+
+```bash
+# OpenAI (default)
+docs2synth agent generate "Your prompt" --provider openai
+
+# Anthropic Claude
+docs2synth agent generate "Your prompt" --provider anthropic
+
+# Google Gemini
+docs2synth agent generate "Your prompt" --provider gemini
+
+# ByteDance Doubao
+docs2synth agent generate "Your prompt" --provider doubao
+
+# Ollama (local models)
+docs2synth agent generate "Your prompt" --provider ollama
+
+# Hugging Face
+docs2synth agent generate "Your prompt" --provider huggingface
+```
+
+#### Model Selection
+
+Specify a specific model:
+
+```bash
+docs2synth agent generate "Your prompt" \
+  --provider anthropic \
+  --model claude-3-5-sonnet-20241022
+```
+
+```bash
+docs2synth agent generate "Your prompt" \
+  --provider openai \
+  --model gpt-4o
+```
+
+#### Generation Parameters
+
+Control output with generation parameters:
+
+```bash
+docs2synth agent generate "Your prompt" \
+  --temperature 0.7 \
+  --max-tokens 1000
+```
+
+#### System Prompts
+
+Add system instructions:
+
+```bash
+docs2synth agent generate "What is Python?" \
+  --system-prompt "You are a helpful programming tutor"
+```
+
+#### JSON Mode
+
+Get structured JSON output:
+
+```bash
+docs2synth agent generate "List 3 programming languages" \
+  --response-format json
+```
+
+#### Vision Models
+
+Analyze images with vision-capable models:
+
+```bash
+docs2synth agent generate "What's in this image?" \
+  --image photo.jpg \
+  --provider openai \
+  --model gpt-4o
+```
+
+#### Custom Configuration
+
+Use a custom config file:
+
+```bash
+docs2synth agent generate "Your prompt" \
+  --config-path ./custom-config.yml
+```
+
+### Chat with Message History
+
+Basic chat:
+
+```bash
+docs2synth agent chat "What is Python?"
+```
+
+#### Provider and Model Selection
+
+```bash
+docs2synth agent chat "Explain AI" \
+  --provider anthropic \
+  --model claude-3-5-sonnet-20241022
+```
+
+#### Chat with Images
+
+```bash
+docs2synth agent chat "What's in this image?" \
+  --image photo.jpg \
+  --provider openai \
+  --model gpt-4o
+```
+
+#### Persistent Chat History
+
+Save and load chat history from a JSON file:
+
+```bash
+# First message (creates history.json)
+docs2synth agent chat "Hello" --history-file chat.json
+
+# Continue conversation (loads and updates history.json)
+docs2synth agent chat "Tell me more" --history-file chat.json
+```
+
+#### Complete Chat Example
+
+```bash
+docs2synth agent chat "Analyze this code" \
+  --provider anthropic \
+  --model claude-3-5-sonnet-20241022 \
+  --temperature 0.5 \
+  --max-tokens 2000 \
+  --history-file chat.json
+```
+
+---
+
+## QA Generation Commands
+
+Generate question-answer pairs for document understanding.
+
+### List Available Strategies
+
+```bash
+docs2synth qa list
+```
+
+**Output:**
+```
+Available QA generation strategies:
+  - semantic
+  - layout_aware
+  - logical_aware
+```
+
+### Semantic QA Generation
+
+Generate questions from document context and target answer:
+
+```bash
+docs2synth qa semantic "Form contains name, address fields" "John Doe"
+```
+
+With provider and model:
+
+```bash
+docs2synth qa semantic "Document context" "Target answer" \
+  --provider anthropic \
+  --model claude-3-5-sonnet-20241022
+```
+
+With vision model and image:
+
+```bash
+docs2synth qa semantic "Context here" "Target" \
+  --provider openai \
+  --model gpt-4o \
+  --image document.png
+```
+
+With generation parameters:
+
+```bash
+docs2synth qa semantic "Context" "Target" \
+  --temperature 0.7 \
+  --max-tokens 500
+```
+
+### Layout-Aware QA
+
+Transform questions to be spatially aware (position-based):
+
+```bash
+docs2synth qa layout "What is the name?"
+```
+
+With image for better spatial understanding:
+
+```bash
+docs2synth qa layout "What is the address?" \
+  --provider anthropic \
+  --image document.png
+```
+
+**Example Output:**
+```
+Original Question:
+What is the address?
+
+Layout-Aware Question:
+What is the text in the upper right section of the form?
+```
+
+### Logical-Aware QA
+
+Transform questions to be structure-aware (section-based):
+
+```bash
+docs2synth qa logical "What is the address?"
+```
+
+With image:
+
+```bash
+docs2synth qa logical "What is the name?" \
+  --provider anthropic \
+  --image document.png
+```
+
+**Example Output:**
+```
+Original Question:
+What is the name?
+
+Logical-Aware Question:
+What is the value in the 'Personal Information' section for the 'Name' field?
+```
+
+### Batch QA Generation
+
+Generate QA pairs using all strategies configured in `config.yml`:
+
+```bash
+docs2synth qa generate "Form contains name, address fields" "John Doe"
+```
+
+With image:
+
+```bash
+docs2synth qa generate "Context here" "Target" --image document.png
+```
+
+Use a specific strategy only:
+
+```bash
+docs2synth qa generate "Context" "Target" --strategy semantic
+```
+
+Custom config file:
+
+```bash
+docs2synth qa generate "Context" "Target" \
+  --config-path ./custom-config.yml
+```
+
+**Example Output:**
+```
+Generating QA questions using 3 strategy(ies) from config...
+
+[semantic] Using openai/gpt-4o...
+  Question: What name appears in the personal information section?
+
+[layout_aware] Using anthropic/claude-3-5-sonnet-20241022...
+  Question: What text is located in the top-left corner of the form?
+
+[logical_aware] Using gemini/gemini-1.5-flash...
+  Question: In the 'Personal Details' section, what value is provided for the name field?
+
+============================================================
+Summary:
+
+[semantic] openai/gpt-4o
+  Question: What name appears in the personal information section?
+
+[layout_aware] anthropic/claude-3-5-sonnet-20241022
+  Original: What name appears in the personal information section?
+  Question: What text is located in the top-left corner of the form?
+
+[logical_aware] gemini/gemini-1.5-flash
+  Original: What name appears in the personal information section?
+  Question: In the 'Personal Details' section, what value is provided for the name field?
+```
+
+---
+
+## Common Patterns
+
+### Using Configuration Files
+
+Most commands support `--config-path` to use custom configuration:
+
+```bash
+# Create a config.yml in your working directory
+# Commands will automatically use ./config.yml if it exists
+
+# Or specify a custom path
+docs2synth --config ./my-config.yml [COMMAND]
+```
+
+### Verbose Output
+
+Get detailed logs for debugging:
+
+```bash
+# Basic verbosity
+docs2synth -v preprocess document.png
+
+# Very verbose (debug level)
+docs2synth -vv preprocess document.png
+```
+
+### Combining Options
+
+You can combine multiple options for complex workflows:
+
+```bash
+docs2synth -vv --config ./config.yml agent generate "Your prompt" \
+  --provider anthropic \
+  --model claude-3-5-sonnet-20241022 \
+  --temperature 0.8 \
+  --max-tokens 2000 \
+  --response-format json \
+  --image document.png
+```
+
+---
+
+## Environment Variables
+
+Docs2Synth respects the following environment variables:
+
+- `DOCS2SYNTH_CONFIG`: Default path to config file
+- Provider-specific API keys (see [Configuration](#configuration) below)
+
+```bash
+# Set default config path
+export DOCS2SYNTH_CONFIG=/path/to/config.yml
+
+# Then run commands without --config-path
+docs2synth agent generate "Your prompt"
+```
+
+---
+
+## Configuration
+
+### Config File Structure
+
+Create a `config.yml` file in your working directory:
+
+```yaml
+# LLM Provider Configuration
+agent:
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      default_model: gpt-4o
+    anthropic:
+      api_key: ${ANTHROPIC_API_KEY}
+      default_model: claude-3-5-sonnet-20241022
+    gemini:
+      api_key: ${GEMINI_API_KEY}
+      default_model: gemini-1.5-flash
+
+# QA Generation Strategies
+qa:
+  strategies:
+    - strategy: semantic
+      provider: openai
+      model: gpt-4o
+      temperature: 0.7
+    - strategy: layout_aware
+      provider: anthropic
+      model: claude-3-5-sonnet-20241022
+      temperature: 0.5
+    - strategy: logical_aware
+      provider: gemini
+      model: gemini-1.5-flash
+      temperature: 0.7
+
+# Data Directories
+data:
+  raw_dir: ./data/raw
+  processed_dir: ./data/processed
+  datasets_dir: ./data/datasets
+
+# Logging
+logging:
+  level: INFO
+  file: ./logs/docs2synth.log
+```
+
+### API Keys
+
+Set API keys as environment variables:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GEMINI_API_KEY="..."
+export DOUBAO_API_KEY="..."
+```
+
+Or use a `.env` file:
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...
+```
+
+---
+
+## Examples Gallery
+
+### Example 1: Complete Document Processing Pipeline
+
+```bash
+# 1. Download dataset
+docs2synth datasets download funsd --output-dir ./data
+
+# 2. Preprocess documents
+docs2synth preprocess ./data/funsd/images/ \
+  --processor paddleocr \
+  --output-dir ./data/processed \
+  --device gpu
+
+# 3. Generate QA pairs
+docs2synth qa generate "Form contains date field" "2024-01-15" \
+  --image ./data/funsd/images/form1.png
+```
+
+### Example 2: Multi-Provider QA Generation
+
+```bash
+# Generate with OpenAI
+docs2synth qa semantic "Document text" "Answer" --provider openai
+
+# Generate with Anthropic
+docs2synth qa semantic "Document text" "Answer" --provider anthropic
+
+# Generate with Gemini
+docs2synth qa semantic "Document text" "Answer" --provider gemini
+```
+
+### Example 3: Interactive Chat Session
+
+```bash
+# Start conversation
+docs2synth agent chat "Help me understand Python decorators" \
+  --provider anthropic \
+  --history-file python-help.json
+
+# Continue conversation
+docs2synth agent chat "Can you show me an example?" \
+  --history-file python-help.json
+
+# Ask follow-up
+docs2synth agent chat "How do I use @property?" \
+  --history-file python-help.json
+```
+
+### Example 4: Vision-Based Document Analysis
+
+```bash
+# Analyze document structure
+docs2synth agent generate "Describe the layout and structure of this document" \
+  --image invoice.png \
+  --provider openai \
+  --model gpt-4o
+
+# Generate layout-aware questions
+docs2synth qa layout "What is the total amount?" \
+  --image invoice.png \
+  --provider openai \
+  --model gpt-4o
+```
+
+---
+
+## Tips and Best Practices
+
+### 1. Use Config Files for Repeated Tasks
+
+Instead of passing options every time:
+
+```bash
+# Bad: Repetitive
+docs2synth agent generate "prompt1" --provider anthropic --model claude-3-5-sonnet-20241022
+docs2synth agent generate "prompt2" --provider anthropic --model claude-3-5-sonnet-20241022
+
+# Good: Use config
+# Set default in config.yml, then just:
+docs2synth agent generate "prompt1"
+docs2synth agent generate "prompt2"
+```
+
+### 2. Use History Files for Long Conversations
+
+```bash
+# Maintain context across multiple commands
+docs2synth agent chat "Question 1" --history-file session.json
+docs2synth agent chat "Question 2" --history-file session.json
+docs2synth agent chat "Question 3" --history-file session.json
+```
+
+### 3. Vision Models for Better QA
+
+When working with documents, always use vision models with images for better results:
+
+```bash
+# Good: Provides visual context
+docs2synth qa semantic "Form context" "Answer" \
+  --image form.png \
+  --provider openai \
+  --model gpt-4o
+
+# Less accurate: Text-only
+docs2synth qa semantic "Form context" "Answer"
+```
+
+### 4. Batch Processing
+
+Process multiple files with shell loops:
+
+```bash
+# Process all images in a directory
+for img in ./images/*.png; do
+  docs2synth preprocess "$img" --output-dir ./processed
+done
+```
+
+### 5. Debug with Verbose Flags
+
+Use verbose output when troubleshooting:
+
+```bash
+docs2synth -vv preprocess document.png
+```
+
+---
+
+## Troubleshooting
+
+### Command Not Found
+
+```bash
+# Make sure package is installed
+pip install -e .
+
+# Or use full module path
+python -m docs2synth.cli [COMMAND]
+```
+
+### API Key Errors
+
+```bash
+# Check environment variables
+echo $OPENAI_API_KEY
+echo $ANTHROPIC_API_KEY
+
+# Or verify config file
+cat config.yml
+```
+
+### Config File Not Found
+
+```bash
+# Check for config.yml in current directory
+ls -la config.yml
+
+# Or specify path explicitly
+docs2synth --config ./path/to/config.yml [COMMAND]
+```
+
+### GPU Not Available
+
+```bash
+# Force CPU mode
+docs2synth preprocess document.png --device cpu
+```
+
+---
+
+## See Also
+
+- [QA Generation Workflow](workflow/qa-generation.md)
+- [Document Processing Workflow](workflow/document-processing.md)
+- [API Reference](api-reference.md)
+- [MCP Integration](mcp-integration.md)

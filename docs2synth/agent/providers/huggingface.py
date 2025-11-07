@@ -6,10 +6,11 @@ from typing import Any, Dict, List, Optional
 
 try:
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer
 except ImportError:
     AutoModelForCausalLM = None  # type: ignore
     AutoTokenizer = None  # type: ignore
+    AutoProcessor = None  # type: ignore
     torch = None  # type: ignore
 
 from docs2synth.agent.base import BaseLLMProvider, LLMResponse
@@ -31,6 +32,7 @@ class HuggingFaceProvider(BaseLLMProvider):
         load_in_8bit: bool = False,
         load_in_4bit: bool = False,
         hf_token: Optional[str] = None,
+        use_vision: bool = False,
         **kwargs: Any,
     ):
         """Initialize Hugging Face provider.
@@ -40,6 +42,7 @@ class HuggingFaceProvider(BaseLLMProvider):
             device: Device to use ('cuda', 'cpu', 'auto'). Auto-detects if None.
             load_in_8bit: Load model in 8-bit mode (requires bitsandbytes)
             load_in_4bit: Load model in 4-bit mode (requires bitsandbytes)
+            use_vision: Set to True for vision-language models (e.g., LLaVA, Qwen-VL)
             **kwargs: Additional model loading parameters
         """
         if AutoModelForCausalLM is None or AutoTokenizer is None:
@@ -74,6 +77,9 @@ class HuggingFaceProvider(BaseLLMProvider):
         # Persist only generation defaults into provider config
         super().__init__(model, **gen_defaults)
 
+        self.use_vision = use_vision
+        self.processor = None
+
         # Auto-detect device
         if device is None:
             device = "cuda" if torch and torch.cuda.is_available() else "cpu"
@@ -88,9 +94,31 @@ class HuggingFaceProvider(BaseLLMProvider):
             hf_token = kwargs.pop("hf_token")
         token_kw = {"token": hf_token} if hf_token else {}
 
-        # Load tokenizer (pass only loading kwargs)
-        self.tokenizer = AutoTokenizer.from_pretrained(model, **token_kw, **kwargs)
-        if self.tokenizer.pad_token is None:
+        # For vision models, try to load processor first
+        if use_vision and AutoProcessor is not None:
+            try:
+                self.processor = AutoProcessor.from_pretrained(
+                    model, **token_kw, **kwargs
+                )
+                self.tokenizer = (
+                    self.processor.tokenizer
+                    if hasattr(self.processor, "tokenizer")
+                    else self.processor
+                )
+                self.logger.info(f"Loaded processor for vision model {model}")
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to load processor: {e}. Falling back to tokenizer."
+                )
+                self.processor = None
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    model, **token_kw, **kwargs
+                )
+        else:
+            # Load tokenizer (pass only loading kwargs)
+            self.tokenizer = AutoTokenizer.from_pretrained(model, **token_kw, **kwargs)
+
+        if hasattr(self.tokenizer, "pad_token") and self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Load model
@@ -116,6 +144,34 @@ class HuggingFaceProvider(BaseLLMProvider):
         self.model.eval()
         self.logger.info(f"Model {model} loaded successfully")
 
+    def _load_image(self, image: Any):
+        """Load image into PIL format.
+
+        Args:
+            image: PIL.Image, file path, or bytes
+
+        Returns:
+            PIL Image object
+        """
+        try:
+            from PIL import Image as PILImage
+        except ImportError:
+            raise ImportError(
+                "PIL (Pillow) is required for image support. Install with: pip install Pillow"
+            )
+
+        if isinstance(image, PILImage.Image):
+            return image
+        elif isinstance(image, str):
+            # File path
+            return PILImage.open(image)
+        elif isinstance(image, bytes):
+            import io
+
+            return PILImage.open(io.BytesIO(image))
+        else:
+            raise ValueError(f"Unsupported image type: {type(image)}")
+
     def generate(
         self,
         prompt: str,
@@ -126,6 +182,9 @@ class HuggingFaceProvider(BaseLLMProvider):
         **kwargs: Any,
     ) -> LLMResponse:
         """Generate text using Hugging Face model."""
+        # Extract image from kwargs
+        image = kwargs.pop("image", None)
+
         full_prompt = prompt
         if system_prompt:
             full_prompt = f"{system_prompt}\n\n{prompt}"
@@ -134,8 +193,22 @@ class HuggingFaceProvider(BaseLLMProvider):
         if response_format == "json":
             full_prompt = f"{full_prompt}\n\nIMPORTANT: You must respond with valid JSON only, no additional text or markdown."
 
-        # Tokenize input
-        inputs = self.tokenizer(full_prompt, return_tensors="pt").to(self.device)
+        # Process inputs based on whether we have an image
+        if image is not None and self.processor is not None:
+            # Use processor for vision models
+            pil_image = self._load_image(image)
+            inputs = self.processor(
+                text=full_prompt, images=pil_image, return_tensors="pt"
+            ).to(self.device)
+        elif image is not None and self.processor is None:
+            self.logger.warning(
+                "Image provided but model was not initialized with use_vision=True. "
+                "Image will be ignored. Set use_vision=True when initializing the provider."
+            )
+            inputs = self.tokenizer(full_prompt, return_tensors="pt").to(self.device)
+        else:
+            # Text-only input
+            inputs = self.tokenizer(full_prompt, return_tensors="pt").to(self.device)
 
         # Merge generation defaults from self.config
         # Note: HF doesn't support presence_penalty/frequency_penalty (OpenAI-specific)
@@ -228,6 +301,7 @@ class HuggingFaceProvider(BaseLLMProvider):
 
         prompt = "\n".join(prompt_parts) + "\nAssistant:"
 
+        # kwargs (including image if present) will be passed through to generate method
         return self.generate(
             prompt,
             temperature=temperature,

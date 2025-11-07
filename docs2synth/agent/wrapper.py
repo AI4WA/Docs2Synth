@@ -175,6 +175,7 @@ class AgentWrapper:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         response_format: Optional[str] = None,
+        image: Optional[Any] = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Generate text from prompt.
@@ -185,7 +186,8 @@ class AgentWrapper:
             temperature: Sampling temperature (0.0-2.0)
             max_tokens: Maximum tokens to generate
             response_format: Response format ("json" for JSON mode, None for text)
-            **kwargs: Provider-specific parameters
+            image: Optional image input (PIL.Image, file path, base64, or URL) for vision models
+            **kwargs: Provider-specific parameters (can include 'image' or 'images' for multimodal)
 
         Returns:
             LLMResponse with generated content and metadata
@@ -195,7 +197,13 @@ class AgentWrapper:
             >>> print(response.content)
             >>> # JSON mode
             >>> response = agent.generate("List 3 items", response_format="json")
+            >>> # With image (for vision models)
+            >>> from PIL import Image
+            >>> img = Image.open("document.png")
+            >>> response = agent.generate("What's in this image?", image=img)
         """
+        if image is not None:
+            kwargs["image"] = image
         return self.provider.generate(
             prompt=prompt,
             system_prompt=system_prompt,
@@ -211,16 +219,19 @@ class AgentWrapper:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         response_format: Optional[str] = None,
+        image: Optional[Any] = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Chat completion with message history.
 
         Args:
-            messages: List of message dicts with 'role' and 'content' keys
+            messages: List of message dicts with 'role' and 'content' keys.
+                For vision models, content can be a list with text and image items.
             temperature: Sampling temperature (0.0-2.0)
             max_tokens: Maximum tokens to generate
             response_format: Response format ("json" for JSON mode, None for text)
-            **kwargs: Provider-specific parameters
+            image: Optional image input (PIL.Image, file path, base64, or URL) for vision models
+            **kwargs: Provider-specific parameters (can include 'image' or 'images' for multimodal)
 
         Returns:
             LLMResponse with generated content and metadata
@@ -234,7 +245,13 @@ class AgentWrapper:
             >>> response = agent.chat(messages)
             >>> # JSON mode
             >>> response = agent.chat(messages, response_format="json")
+            >>> # With image (for vision models)
+            >>> from PIL import Image
+            >>> img = Image.open("document.png")
+            >>> response = agent.chat(messages, image=img)
         """
+        if image is not None:
+            kwargs["image"] = image
         return self.provider.chat(
             messages=messages,
             temperature=temperature,

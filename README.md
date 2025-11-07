@@ -367,6 +367,7 @@ Full documentation is available at: **https://ai4wa.github.io/Docs2Synth/**
 
 Topics covered:
 - [Quick Start Guide](https://ai4wa.github.io/Docs2Synth/)
+- [CLI Reference](https://ai4wa.github.io/Docs2Synth/cli-reference/) - Complete command-line interface documentation with examples
 - [Document Processing](https://ai4wa.github.io/Docs2Synth/workflow/document-processing/)
 - [QA Generation](https://ai4wa.github.io/Docs2Synth/workflow/qa-generation/)
 - [Retriever Training](https://ai4wa.github.io/Docs2Synth/workflow/retriever-training/)

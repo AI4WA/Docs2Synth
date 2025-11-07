@@ -6,6 +6,8 @@ interface that many Chinese LLM providers support.
 
 from __future__ import annotations
 
+import base64
+import io
 from typing import Any, Dict, List, Optional
 
 try:
@@ -78,6 +80,50 @@ class DoubaoProvider(BaseLLMProvider):
         }
         self.client = OpenAI(api_key=api_key, base_url=base_url, **client_kwargs)
 
+    def _encode_image(self, image: Any) -> str:
+        """Encode PIL Image to base64 string."""
+        try:
+            from PIL import Image as PILImage
+        except ImportError:
+            raise ImportError(
+                "PIL (Pillow) is required for image support. Install with: pip install Pillow"
+            )
+
+        if not isinstance(image, PILImage.Image):
+            # If it's already a file path or URL, return as-is
+            if isinstance(image, (str, bytes)):
+                return str(image)
+            raise ValueError(f"Unsupported image type: {type(image)}")
+
+        # Convert PIL Image to base64
+        buffer = io.BytesIO()
+        # Save as JPEG (most compatible format)
+        if image.mode in ("RGBA", "LA", "P"):
+            # Convert RGBA/LA/P to RGB for JPEG
+            rgb_image = PILImage.new("RGB", image.size, (255, 255, 255))
+            if image.mode == "P":
+                image = image.convert("RGBA")
+            rgb_image.paste(
+                image, mask=image.split()[-1] if image.mode == "RGBA" else None
+            )
+            image = rgb_image
+        image.save(buffer, format="JPEG")
+        image_bytes = buffer.getvalue()
+        base64_image = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:image/jpeg;base64,{base64_image}"
+
+    def _build_message_content(self, text: str, image: Optional[Any] = None) -> Any:
+        """Build message content with optional image."""
+        if image is None:
+            return text
+
+        # For vision models, content must be a list
+        image_url = self._encode_image(image)
+        return [
+            {"type": "text", "text": text},
+            {"type": "image_url", "image_url": {"url": image_url}},
+        ]
+
     def generate(
         self,
         prompt: str,
@@ -88,10 +134,14 @@ class DoubaoProvider(BaseLLMProvider):
         **kwargs: Any,
     ) -> LLMResponse:
         """Generate text using Doubao API."""
+        # Extract image from kwargs
+        image = kwargs.pop("image", None)
+
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        user_content = self._build_message_content(prompt, image)
+        messages.append({"role": "user", "content": user_content})
 
         # Build merged generation parameters from defaults + call-time
         default_keys = {
@@ -148,9 +198,31 @@ class DoubaoProvider(BaseLLMProvider):
         **kwargs: Any,
     ) -> LLMResponse:
         """Chat completion with message history."""
-        formatted_messages = [
-            {"role": msg["role"], "content": msg["content"]} for msg in messages
-        ]
+        # Extract image from kwargs
+        image = kwargs.pop("image", None)
+
+        # Convert message format if needed
+        formatted_messages = []
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+
+            # If this is the last user message and we have an image, add image to content
+            if (
+                role == "user"
+                and image is not None
+                and msg == messages[-1]
+                and isinstance(content, str)
+            ):
+                content = self._build_message_content(content, image)
+            elif isinstance(content, list):
+                # Content is already in the correct format (e.g., from a previous call)
+                content = content
+            else:
+                # Regular text content
+                content = content
+
+            formatted_messages.append({"role": role, "content": content})
 
         default_keys = {
             "temperature",
