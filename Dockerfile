@@ -38,13 +38,11 @@ ENV PYTHONUNBUFFERED=1 \
 # =============================================================================
 FROM base AS system-gpu
 
-# Install Python and dependencies on Ubuntu (GPU base image doesn't have Python)
+# Install Python 3.11 and dependencies on Ubuntu (GPU base image doesn't have Python)
 # PaddleOCR requires OpenCV which needs graphics libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3 \
-        python3-dev \
-        python3-pip \
+        software-properties-common \
         git \
         build-essential \
         libgomp1 \
@@ -54,8 +52,18 @@ RUN apt-get update && \
         libxrender1 \
         libgl1 \
         wget && \
-    ln -sf /usr/bin/python3 /usr/bin/python && \
-    python -m pip install --upgrade pip && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.11 \
+        python3.11-dev \
+        python3.11-distutils && \
+    wget https://bootstrap.pypa.io/get-pip.py && \
+    python3.11 get-pip.py && \
+    rm get-pip.py && \
+    ln -sf /usr/bin/python3.11 /usr/bin/python3 && \
+    ln -sf /usr/bin/python3.11 /usr/bin/python && \
+    python --version && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -98,7 +106,10 @@ COPY scripts/ ./scripts/
 # Install Python dependencies
 # Select the appropriate torch requirements based on BUILD_TYPE
 RUN pip install --upgrade pip && \
-    if [ -f "requirements-${BUILD_TYPE}.txt" ]; then \
+    if [ "$BUILD_TYPE" = "gpu" ]; then \
+        echo "Using requirements-gpu.txt for PyTorch with CUDA 11.8"; \
+        pip install -r requirements-gpu.txt --extra-index-url https://download.pytorch.org/whl/cu118; \
+    elif [ -f "requirements-${BUILD_TYPE}.txt" ]; then \
         echo "Using requirements-${BUILD_TYPE}.txt for PyTorch"; \
         pip install -r "requirements-${BUILD_TYPE}.txt"; \
     else \
