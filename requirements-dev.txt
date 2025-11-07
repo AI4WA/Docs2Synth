@@ -25,3 +25,8 @@ pyarrow>=10.0.0
 openai>=1.0
 sentence-transformers>=0.6
 numpy>=1.22
+
+# Jupyter notebook support
+ipykernel>=7.0.0
+nbconvert>=7.0.0  # For cleaning notebook outputs
+jupyter
