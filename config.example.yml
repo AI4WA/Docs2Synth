@@ -174,3 +174,34 @@ qa:
   #   model: gemini-1.5-pro
   #   temperature: 0.7
   #   max_tokens: 256
+
+# QA Verification configuration
+# Configure verifiers to validate QA pairs
+verifiers:
+  # Correctness verifier: checks if answer matches question
+  - verifier_type: correctness
+    provider: openai
+    model: gpt-4o-mini
+    prompt_template: |
+      Ignore the context information and domain knowledge (e.g. ABN or ACN/ARSN).
+      Just consider whether '{answer}' could be the expected answer to the question '{question}'.
+      Output format (JSON with double quotes): {{"Response": "Yes/No", "Explanation": "xxx"}}.
+    temperature: 0.7
+    max_tokens: 256
+
+  # Meaningful verifier: checks if target was entered by user (not part of template)
+  - verifier_type: meaningful
+    provider: openai
+    model: gpt-4o-mini
+    prompt_template: |
+      Question: {question}
+      Answer: {answer}
+      Context: {context}
+      Based on the document context and image, determine if the question and answer pair is meaningful. 
+      A meaningful QA pair should:
+      1. Have a clear, answerable question
+      2. Have an answer that can be found or inferred from the document
+      3. Be useful for understanding the document content
+      Output format (JSON with double quotes): {{"Response": "Yes/No", "Explanation": "xxx"}}.
+    temperature: 0.7
+    max_tokens: 256
