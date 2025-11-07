@@ -47,6 +47,25 @@ logging:
       - anthropic
       - google.generativeai
 
+# Preprocess configuration
+# Configure default settings for document preprocessing
+preprocess:
+  # Default processor to use: paddleocr, pdfplumber, or easyocr
+  processor: paddleocr
+
+  # Default OCR language (e.g., en, zh, fr)
+  # For paddleocr: en, ch, japan, korean, etc.
+  # For easyocr: en, ch_sim, fr, etc.
+  lang: en
+
+  # Default device for OCR inference: cpu, gpu, cuda, or null (auto-detect)
+  # If null, will auto-select GPU when available
+  device: null
+
+  input_dir: ./data/datasets/docs2synth-dev/docs2synth-dev/images/
+  # Default output directory (if not specified, uses data.processed_dir)
+  output_dir: ./data/processed
+
 # Agent/LLM configuration (provider-driven presets)
 agent:
   # Choose active provider here: openai | anthropic | gemini | doubao | ollama | huggingface
@@ -58,7 +77,7 @@ agent:
     anthropic_api_key: "sk-ant-YOUR-ANTHROPIC-API-KEY"
     google_api_key: "YOUR-GOOGLE-API-KEY"
     doubao_api_key: "YOUR-DOUBAO-API-KEY"
-    huggingface_token: "YOUR-HF-TOKEN"  # For gated models on Hugging Face
+    huggingface_token: "YOUR-HF-TOKEN" # For gated models on Hugging Face
 
   # Provider-specific configuration blocks. Switch provider by changing agent.provider.
   openai:
@@ -104,7 +123,7 @@ agent:
 
   huggingface:
     model: meta-llama/Llama-2-7b-chat-hf
-    device: auto     # auto | cpu | cuda
+    device: auto # auto | cpu | cuda
     max_new_tokens: 512
     temperature: 0.7
     top_p: 0.95

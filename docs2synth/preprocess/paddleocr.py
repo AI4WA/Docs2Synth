@@ -10,8 +10,10 @@ from __future__ import annotations
 import logging
 import mimetypes
 import os
+import tempfile
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from docs2synth.utils.logging import get_logger
@@ -40,10 +42,22 @@ except Exception:  # pragma: no cover - runtime availability check
         "PaddleOCR is not installed. Please install paddleocr to use PaddleOCRProcessor."
     )
 
+try:
+    import fitz  # PyMuPDF  # type: ignore
+
+    _PYMUPDF_AVAILABLE = True
+except Exception:  # pragma: no cover - runtime availability check
+    fitz = None  # type: ignore
+    _PYMUPDF_AVAILABLE = False
+    logger.debug("PyMuPDF is not installed. PDF support will be unavailable.")
+
 
 @dataclass
 class PaddleOCRProcessor:
     """OCR processor using PaddleOCR.
+
+    Supports both image files and PDF files. PDFs are automatically converted to images
+    before OCR processing.
 
     Parameters
     ----------
@@ -57,6 +71,13 @@ class PaddleOCRProcessor:
         Enable text recognition.
     show_log : bool
         Control PaddleOCR internal logging.
+    pdf_dpi : int
+        DPI (resolution) for PDF to image conversion (default: 300).
+        Higher values produce better quality but slower processing.
+    save_pdf_images : bool
+        If True, save PDF page images to a structured directory for later use
+        (e.g., QA generation). Images are saved as {pdf_dir}/{pdf_stem}/1.png, 2.png, ...
+        If False, use temporary files that are cleaned up after processing (default: True).
     """
 
     lang: str = "en"
@@ -64,6 +85,10 @@ class PaddleOCRProcessor:
     det: bool = True
     rec: bool = True
     show_log: bool = False
+    pdf_dpi: int = 300
+    save_pdf_images: bool = (
+        True  # Save PDF page images for later use (e.g., QA generation)
+    )
     # Optional device preference: "cpu" or "gpu"/"cuda". If None, auto-detect GPU.
     device: Optional[str] = None
     _ocr_cache: Dict[str, "PaddleOCR"] = field(
@@ -101,6 +126,94 @@ class PaddleOCRProcessor:
                 return "gpu" if self._gpu_available() else "cpu"
             return "cpu"
         return "gpu" if self._gpu_available() else "cpu"
+
+    def _is_pdf_file(self, file_path: str) -> bool:
+        """Check if the file is a PDF based on extension and/or magic bytes.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the file to check.
+
+        Returns
+        -------
+        bool
+            True if file appears to be a PDF, False otherwise.
+        """
+        # Check file extension
+        if not file_path.lower().endswith(".pdf"):
+            return False
+
+        # Check PDF magic bytes (%PDF)
+        try:
+            with open(file_path, "rb") as f:
+                header = f.read(5)
+                return header.startswith(b"%PDF-")
+        except Exception as e:
+            logger.warning(f"Could not read file header for {file_path}: {e}")
+            return False
+
+    def _pdf_to_images(self, pdf_path: str) -> List[str]:
+        """Convert PDF pages to image files.
+
+        If `save_pdf_images` is True, images are saved to a structured directory.
+        Otherwise, temporary files are created.
+
+        Parameters
+        ----------
+        pdf_path : str
+            Path to the PDF file.
+
+        Returns
+        -------
+        List[str]
+            List of image file paths (one per page).
+
+        Raises
+        ------
+        RuntimeError
+            If PyMuPDF is not available or PDF conversion fails.
+        """
+        if not _PYMUPDF_AVAILABLE:
+            raise RuntimeError(
+                "PyMuPDF is not installed. Please install pymupdf to enable PDF support."
+            )
+
+        try:
+            doc = fitz.open(pdf_path)  # type: ignore
+            image_paths: List[str] = []
+
+            # Determine where to save images
+            if self.save_pdf_images:
+                from docs2synth.utils.pdf_images import get_pdf_images_dir
+
+                images_dir = get_pdf_images_dir(pdf_path)
+                images_dir.mkdir(parents=True, exist_ok=True)
+                save_dir = str(images_dir)
+                logger.info(f"Saving PDF page images to {images_dir}")
+            else:
+                save_dir = tempfile.mkdtemp(prefix="paddleocr_pdf_")
+
+            try:
+                for page_num in range(len(doc)):
+                    page = doc.load_page(page_num)
+                    # Convert page to image with specified DPI
+                    mat = fitz.Matrix(self.pdf_dpi / 72, self.pdf_dpi / 72)  # type: ignore
+                    pix = page.get_pixmap(matrix=mat)
+                    # Save as PNG file (numbered from 1)
+                    image_filename = f"{page_num + 1}.png"
+                    image_path = os.path.join(save_dir, image_filename)
+                    pix.save(image_path)
+                    image_paths.append(image_path)
+                    logger.debug(f"Converted PDF page {page_num + 1} to {image_path}")
+
+                logger.info(f"Converted {len(image_paths)} PDF pages to images")
+                return image_paths
+            finally:
+                doc.close()
+        except Exception as e:
+            logger.error(f"Failed to convert PDF {pdf_path} to images: {e}")
+            raise RuntimeError(f"PDF to image conversion failed: {e}") from e
 
     def _init_ocr(
         self, lang_override: Optional[str] = None, device_override: Optional[str] = None
@@ -143,29 +256,110 @@ class PaddleOCRProcessor:
     ) -> DocumentProcessResult:
         """Run OCR on a file path and return schema-compliant results.
 
+        Supports both image files (PNG, JPG, etc.) and PDF files. PDFs are
+        automatically converted to images before OCR processing.
+
         Notes
         -----
         - Bounding boxes from PaddleOCR are quadrilaterals; here we convert to
           axis-aligned `(x1, y1, x2, y2)` by taking min/max on the 4 points.
         - All recognized segments are labeled as `LabelType.TEXT`.
+        - For PDF files, each page is processed separately and page numbers are
+          preserved in the results.
 
         Parameters
         ----------
         image_path : str
-            Path to the image to OCR.
+            Path to the image or PDF file to OCR.
         lang : Optional[str]
             Optional language override for this call (defaults to the instance's
             `lang` value, which itself defaults to "en").
+        device : Optional[str]
+            Optional device override ("cpu" or "gpu"/"cuda").
         """
         ocr = self._init_ocr(lang_override=lang, device_override=device)
         start = time.time()
+
+        # Check if input is a PDF and convert if necessary
+        # Note: If PDFs were pre-converted (e.g., in batch processing), use those images
+        is_pdf = self._is_pdf_file(image_path)
+        temp_image_paths: List[str] = []
+        input_path = image_path
+        # Track if this is a single page image from a PDF (for page numbering)
+        is_pdf_page_image = False
+        pdf_source_path = image_path
+
+        if is_pdf:
+            # Check if PDF images already exist (from pre-conversion)
+            from docs2synth.utils.pdf_images import get_pdf_images
+
+            existing_images = get_pdf_images(image_path)
+            if existing_images:
+                logger.info(
+                    f"Using pre-converted images for PDF {image_path} ({len(existing_images)} pages)"
+                )
+                temp_image_paths = [str(img) for img in existing_images]
+                input_path = temp_image_paths[0]
+            else:
+                # Convert PDF to images on-the-fly
+                logger.info(f"Detected PDF file: {image_path}, converting to images...")
+                temp_image_paths = self._pdf_to_images(image_path)
+                if not temp_image_paths:
+                    raise RuntimeError(f"Failed to convert PDF {image_path} to images")
+                input_path = temp_image_paths[0]
+                logger.info(f"Converted PDF to {len(temp_image_paths)} image(s)")
+        else:
+            # Check if this is a PDF page image (e.g., document/1.png)
+            # If so, find all pages from the same PDF
+            from docs2synth.utils.pdf_images import get_pdf_images
+
+            img_path = Path(image_path)
+            # Check if this is a PDF page image (e.g., document/1.png)
+            # Look for PDF file with matching stem in parent's parent directory
+            parent_dir = img_path.parent
+            if parent_dir.is_dir():
+                grandparent = parent_dir.parent
+                pdf_candidate = grandparent / f"{parent_dir.name}.pdf"
+                if pdf_candidate.exists():
+                    pdf_images = get_pdf_images(pdf_candidate)
+                    if pdf_images and img_path in pdf_images:
+                        # This is a PDF page image
+                        is_pdf_page_image = True
+                        pdf_source_path = str(pdf_candidate)
+                        temp_image_paths = [str(p) for p in pdf_images]
+                        # Find the page index
+                        page_num = pdf_images.index(img_path)
+                        logger.debug(
+                            f"Detected PDF page image: {img_path.name} (page {page_num + 1} of {len(pdf_images)})"
+                        )
 
         # Call PaddleOCR (suppress deprecation warning about ocr() method)
         import warnings
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Please use `predict` instead")
-            result = ocr.ocr(image_path)
+            # Process each page separately and combine results
+            if (is_pdf or is_pdf_page_image) and len(temp_image_paths) > 1:
+                # Process all pages one by one
+                result = []
+                logger.info(f"Processing {len(temp_image_paths)} PDF pages...")
+                for page_idx, page_image_path in enumerate(temp_image_paths):
+                    logger.info(
+                        f"Processing PDF page {page_idx + 1}/{len(temp_image_paths)}"
+                    )
+                    page_result = ocr.ocr(page_image_path)
+                    # ocr() returns a list, so we need to extract the first element
+                    if page_result and len(page_result) > 0:
+                        result.append(page_result[0])
+                    else:
+                        result.append(None)
+            else:
+                # Single image or single-page PDF
+                result = ocr.ocr(input_path)
+                # Ensure result is a list for consistent processing
+                if not isinstance(result, list):
+                    result = [result]
+
         end = time.time()
 
         # Debug logging
@@ -326,27 +520,43 @@ class PaddleOCRProcessor:
             mime_type = None
 
         # Try to get image dimensions via Pillow, fall back silently if unavailable
+        # For PDFs, use the first converted image
+        dimension_source = temp_image_paths[0] if temp_image_paths else image_path
         try:
             from PIL import Image  # type: ignore
 
-            with Image.open(image_path) as img:
+            with Image.open(dimension_source) as img:
                 width, height = img.size  # type: ignore[assignment]
         except Exception:
             width = None
             height = None
 
+        # Determine page count and source path
+        page_count = 1
+        source_path = image_path
+        if is_pdf or is_pdf_page_image:
+            page_count = len(temp_image_paths) if temp_image_paths else 1
+            if is_pdf_page_image:
+                source_path = pdf_source_path  # Use original PDF path
+        elif result and isinstance(result, list):
+            # PaddleOCR 3.x returns list of pages
+            page_count = len(result)
+
         document_metadata = DocumentMetadata(
-            source=image_path,
-            filename=filename,
-            page_count=1,
+            source=source_path,
+            filename=(
+                os.path.basename(source_path) if source_path != image_path else filename
+            ),
+            page_count=page_count,
             size_bytes=size_bytes,
-            mime_type=mime_type,
+            mime_type=mime_type
+            or ("application/pdf" if (is_pdf or is_pdf_page_image) else None),
             language=detected_lang,
             width=width,
             height=height,
         )
 
-        return DocumentProcessResult(
+        result_obj = DocumentProcessResult(
             objects=objects,
             object_list=[],
             bbox_list=bbox_list,
@@ -355,3 +565,24 @@ class PaddleOCRProcessor:
             process_metadata=process_metadata,
             document_metadata=document_metadata,
         )
+
+        # Clean up temporary image files if PDF was converted and not saving images
+        # Do this after all processing is complete
+        if temp_image_paths and not self.save_pdf_images:
+            try:
+                temp_dir = os.path.dirname(temp_image_paths[0])
+                for temp_path in temp_image_paths:
+                    try:
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                    except Exception:
+                        pass
+                try:
+                    if os.path.exists(temp_dir):
+                        os.rmdir(temp_dir)
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary files: {e}")
+
+        return result_obj

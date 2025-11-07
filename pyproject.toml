@@ -16,15 +16,17 @@ dependencies = [
     "click>=8.0",
     "pyyaml",
     # OCR and Document Processing
-    "paddlepaddle==3.2.0",
-    "paddleocr==3.2.0",
+    "paddlepaddle>=3.2.0,<3.3.0",  # Allow patch updates (3.2.x)
+    "paddleocr>=3.2.0,<3.4.0",  # Allow minor updates (3.2.x, 3.3.x)
     "shapely>=1.8",
     "scikit-image>=0.21",
     "easyocr>=1.7.0",
     "pdfplumber>=0.10.0",
+    "pymupdf>=1.23.0",  # For PDF to image conversion in PaddleOCR
     # Data Processing
     "pandas>=1.5.0",
     "pillow",
+    "tqdm>=4.65.0",
     # Agent & LLM providers
     "transformers>=4.30.0",
     "requests>=2.28.0",
@@ -75,7 +77,7 @@ dev = [
     "jupyter",
     # Additional dev dependencies
     "sentence-transformers>=0.6",
-    "numpy>=1.22",
+    "numpy>=1.22,<2.0",  # PaddlePaddle requires NumPy 1.x
     # MCP dependencies (required for MCP tests)
     "mcp>=1.20.0",
     "starlette>=0.27.0",
@@ -105,7 +107,7 @@ agent = [
 
 retriever = [
     "sentence-transformers>=0.6",
-    "numpy>=1.22",
+    "numpy>=1.22,<2.0",  # PaddlePaddle requires NumPy 1.x
     # Note: torch should be installed from requirements-cpu.txt or requirements-gpu.txt
 ]
 
