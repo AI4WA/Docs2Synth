@@ -63,14 +63,32 @@ jobs:
         run: |
           echo "=== Before cleanup ==="
           df -h
+          echo "=== Available space: $(df -h / | awk 'NR==2 {print $4}') ==="
+
           echo "=== Removing unnecessary files ==="
+          # Remove .NET, Android, GHC, and other large tools
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
+
+          # Remove additional large directories
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/graalvm/
+          sudo rm -rf /usr/local/.ghcup/
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+
+          # Clean apt cache
+          sudo apt-get clean
+
+          # Remove Docker images and containers
+          sudo docker system prune --all --volumes --force
+
           echo "=== After cleanup ==="
           df -h
+          echo "=== Available space: $(df -h / | awk 'NR==2 {print $4}') ==="
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -86,16 +104,16 @@ jobs:
           build-args: |
             BUILD_TYPE=gpu
           push: false
+          load: true  # Load directly to Docker daemon (saves disk space vs tar export)
           tags: docs2synth:gpu
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64
-          outputs: type=docker,dest=/tmp/gpu-image.tar
 
-      - name: Load GPU image
+      - name: Clean up build cache
         run: |
-          docker load --input /tmp/gpu-image.tar
-          docker images
+          echo "=== Cleaning up build cache to free space ==="
+          docker builder prune --force
+          df -h
 
       - name: Test GPU image (build verification)
         run: |
