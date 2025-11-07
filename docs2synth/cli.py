@@ -198,38 +198,37 @@ def datasets(
 
 
 @cli.command("preprocess")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.argument("path", type=click.Path(path_type=Path), required=False)
 @click.option(
     "--processor",
     "processor_name",
     type=click.Choice(["paddleocr", "pdfplumber", "easyocr"], case_sensitive=False),
-    default="paddleocr",
-    show_default=True,
-    help="Name of the processor to use (paddleocr: general OCR, pdfplumber: parsed PDFs, easyocr: 80+ languages OCR).",
+    default=None,
+    help="Name of the processor to use (paddleocr: general OCR, pdfplumber: parsed PDFs, easyocr: 80+ languages OCR). Defaults to config.preprocess.processor.",
 )
 @click.option(
     "--lang",
     type=str,
     default=None,
-    help="Optional OCR language override (e.g., en)",
+    help="Optional OCR language override (e.g., en). Defaults to config.preprocess.lang.",
 )
 @click.option(
     "--output-dir",
     type=click.Path(path_type=Path),
     default=None,
-    help="Directory to write processed outputs (defaults to config data.processed_dir)",
+    help="Directory to write processed outputs (defaults to config.preprocess.output_dir or config.data.processed_dir)",
 )
 @click.option(
     "--device",
     type=click.Choice(["cpu", "gpu", "cuda"], case_sensitive=False),
     default=None,
-    help="Device for OCR inference. If omitted, auto-select GPU when available.",
+    help="Device for OCR inference. Defaults to config.preprocess.device (or auto-select GPU when available).",
 )
 @click.pass_context
 def preprocess(
     ctx: click.Context,
-    path: Path,
-    processor_name: str,
+    path: Path | None,
+    processor_name: str | None,
     lang: str | None,
     output_dir: Path | None,
     device: str | None,
@@ -239,11 +238,59 @@ def preprocess(
     PATH can be a file or a directory. If a directory is provided, all files in
     that directory are processed. Results are written as JSON into the
     configured output directory (data.processed_dir).
+
+    If PATH is not provided, uses config.preprocess.input_dir. If neither is set,
+    an error is returned.
+
+    Default values for processor, lang, and device are read from config.preprocess
+    if not specified via command-line options.
     """
 
     from docs2synth.preprocess.runner import run_preprocess
 
     cfg = ctx.obj.get("config")
+
+    # Get input path: CLI argument > config.preprocess.input_dir > error
+    if path is None:
+        input_dir = cfg.get("preprocess.input_dir")
+        if input_dir is None:
+            click.echo(
+                click.style(
+                    "✗ Error: PATH argument is required, or set config.preprocess.input_dir",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+        path = Path(input_dir)
+
+    # Validate that the path exists
+    if not path.exists():
+        click.echo(
+            click.style(
+                f"✗ Error: Input path does not exist: {path}",
+                fg="red",
+            ),
+            err=True,
+        )
+        sys.exit(1)
+
+    # Get defaults from config if not provided via CLI
+    if processor_name is None:
+        processor_name = cfg.get("preprocess.processor", "paddleocr")
+
+    if lang is None:
+        lang = cfg.get("preprocess.lang")
+
+    if device is None:
+        device = cfg.get("preprocess.device")
+
+    # Get output_dir from config if not provided via CLI
+    if output_dir is None:
+        output_dir = cfg.get("preprocess.output_dir")
+        if output_dir is not None:
+            output_dir = Path(output_dir)
+
     try:
         num_success, num_failed, _ = run_preprocess(
             path,
