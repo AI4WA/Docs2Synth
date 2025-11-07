@@ -2,7 +2,7 @@
 
 [![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://ai4wa.github.io/Docs2Synth/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 **Docs2Synth** is a Python package aimed at helping you convert, synthesise and train a retriever for your document datasets.
 
@@ -118,9 +118,6 @@ When you need to update or regenerate the locked dependency files:
 # Regenerate CPU requirements
 uv pip compile requirements-cpu.in -o requirements-cpu.txt
 
-# Regenerate GPU requirements (requires Linux platform)
-uv pip compile requirements-gpu.in -o requirements-gpu.txt --python-version 3.10 --python-platform linux
-
 # Regenerate dev requirements
 uv pip compile requirements-dev.in -o requirements-dev.txt
 
@@ -129,7 +126,8 @@ uv pip compile requirements-cpu.in -o requirements-cpu.txt --upgrade
 uv pip compile requirements-dev.in -o requirements-dev.txt --upgrade
 ```
 
-**Note:** The locked `.txt` files are committed to the repository to ensure reproducible builds across all environments.
+**Note about GPU dependencies:**
+GPU PyTorch is installed directly via `pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118` rather than from a lockfile, as NVIDIA CUDA dependencies are platform-specific and managed by PyTorch.
 
 ### MCP Provider (Experimental)
 
@@ -253,17 +251,38 @@ docker run --gpus all -it \
   docs2synth:gpu
 ```
 
+#### Building Docker Images
+
+We provide a convenient script to build and test Docker images:
+
+```bash
+# Build and test CPU image
+./scripts/build-docker.sh cpu
+
+# Build and test GPU image (requires significant disk space)
+./scripts/build-docker.sh gpu
+
+# Build and test both images
+./scripts/build-docker.sh all
+```
+
+The script will:
+- Build the Docker image
+- Verify Python and package installation
+- Run tests inside the container
+- Display image size and usage instructions
+
 #### Production Deployment with Docker
 
 Docker images are ideal for production deployment:
 
 ```bash
-# Build on your CI/CD pipeline (x86_64 runners)
+# Build images manually
 docker build --build-arg BUILD_TYPE=cpu -t your-registry/docs2synth:cpu .
-docker push your-registry/docs2synth:cpu
+docker build --build-arg BUILD_TYPE=gpu -t your-registry/docs2synth:gpu .
 
-# Or for GPU workloads
-docker build --build-arg BUILD_TYPE=gpu --platform linux/amd64 -t your-registry/docs2synth:gpu .
+# Push to registry
+docker push your-registry/docs2synth:cpu
 docker push your-registry/docs2synth:gpu
 
 # Deploy on production servers
@@ -289,7 +308,7 @@ docker run -d \
 If you prefer not to use `uv`, you can still use traditional pip:
 
 ```bash
-# Create virtual environment (Python ≥3.10)
+# Create virtual environment (Python ≥3.11)
 python -m venv .venv && source .venv/bin/activate
 
 # Upgrade pip
