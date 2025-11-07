@@ -117,7 +117,7 @@ uv pip compile requirements-cpu.in -o requirements-cpu.txt --upgrade
 
 # Update GPU PyTorch dependencies (requires Linux target)
 uv pip compile requirements-gpu.in -o requirements-gpu.txt \
-  --upgrade --python-version 3.10 --python-platform linux
+  --upgrade --python-version 3.11 --python-platform linux
 
 # Update dev dependencies
 uv pip compile requirements-dev.in -o requirements-dev.txt --upgrade
@@ -195,7 +195,7 @@ GPU builds require specifying the target platform:
 ```bash
 # For Linux x86_64 with Python 3.10
 uv pip compile requirements-gpu.in -o requirements-gpu.txt \
-  --python-version 3.10 \
+  --python-version 3.11 \
   --python-platform linux
 
 # For Linux x86_64 with Python 3.11
@@ -241,7 +241,7 @@ uv pip compile requirements-dev.in -o requirements-dev.txt --verbose
 
 ```bash
 uv pip compile requirements-gpu.in -o requirements-gpu.txt \
-  --python-version 3.10 --python-platform linux
+  --python-version 3.11 --python-platform linux
 ```
 
 ### Lockfile Conflicts After Merge
@@ -253,7 +253,7 @@ uv pip compile requirements-gpu.in -o requirements-gpu.txt \
 ```bash
 # Regenerate all lockfiles
 uv pip compile requirements-cpu.in -o requirements-cpu.txt
-uv pip compile requirements-gpu.in -o requirements-gpu.txt --python-version 3.10 --python-platform linux
+uv pip compile requirements-gpu.in -o requirements-gpu.txt --python-version 3.11 --python-platform linux
 uv pip compile requirements-dev.in -o requirements-dev.txt
 
 # Test the changes

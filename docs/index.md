@@ -140,7 +140,7 @@ uv pip install -e ".[dev]"
 #### Alternative: Traditional pip
 
 ```bash
-# Create virtual environment (Python ≥3.10)
+# Create virtual environment (Python ≥3.11)
 python -m venv .venv && source .venv/bin/activate
 
 # Upgrade pip

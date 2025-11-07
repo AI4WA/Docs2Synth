@@ -112,15 +112,15 @@ check_python_version() {
         PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
         PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
 
-        if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
-            echo_info "Python $PYTHON_VERSION detected (minimum 3.8 required)"
+        if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 11 ]; then
+            echo_info "Python $PYTHON_VERSION detected (minimum 3.11 required)"
             return 0
         else
-            echo_error "Python 3.8+ required, but found $PYTHON_VERSION"
+            echo_error "Python 3.11+ required, but found $PYTHON_VERSION"
             return 1
         fi
     else
-        echo_error "Python 3 not found. Please install Python 3.8 or higher."
+        echo_error "Python 3 not found. Please install Python 3.11 or higher."
         return 1
     fi
 }

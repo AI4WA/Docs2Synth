@@ -9,7 +9,7 @@
 # Build Arguments
 # =============================================================================
 ARG BUILD_TYPE=cpu
-ARG PYTHON_VERSION=3.10
+ARG PYTHON_VERSION=3.11
 
 # =============================================================================
 # Base Image Selection
@@ -105,9 +105,7 @@ RUN pip install --upgrade pip && \
         echo "Using requirements-cpu.txt for PyTorch (fallback)"; \
         pip install -r requirements-cpu.txt; \
     fi && \
-    pip install -r requirements.txt && \
-    pip install -r requirements-dev.txt && \
-    pip install -e .
+    pip install -e ".[dev]"
 
 # Create directories for data, logs, and PaddleX cache
 # Set permissions to allow any user to write (for non-root users)

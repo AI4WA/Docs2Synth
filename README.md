@@ -2,7 +2,7 @@
 
 [![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://ai4wa.github.io/Docs2Synth/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 **Docs2Synth** is a Python package aimed at helping you convert, synthesise and train a retriever for your document datasets.
 
@@ -119,7 +119,7 @@ When you need to update or regenerate the locked dependency files:
 uv pip compile requirements-cpu.in -o requirements-cpu.txt
 
 # Regenerate GPU requirements (requires Linux platform)
-uv pip compile requirements-gpu.in -o requirements-gpu.txt --python-version 3.10 --python-platform linux
+uv pip compile requirements-gpu.in -o requirements-gpu.txt --python-version 3.11 --python-platform linux
 
 # Regenerate dev requirements
 uv pip compile requirements-dev.in -o requirements-dev.txt
@@ -289,7 +289,7 @@ docker run -d \
 If you prefer not to use `uv`, you can still use traditional pip:
 
 ```bash
-# Create virtual environment (Python ≥3.10)
+# Create virtual environment (Python ≥3.11)
 python -m venv .venv && source .venv/bin/activate
 
 # Upgrade pip
