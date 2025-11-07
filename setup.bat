@@ -72,10 +72,8 @@ IF "%INSTALL_GPU%"=="false" (
 
 IF "%INSTALL_GPU%"=="true" (
     echo [INFO] Will install GPU-enabled PyTorch (CUDA 11.8^)
-    SET TORCH_REQUIREMENTS=requirements-gpu.txt
 ) ELSE (
     echo [INFO] Will install CPU-only PyTorch
-    SET TORCH_REQUIREMENTS=requirements-cpu.txt
 )
 
 call :setup_venv
@@ -98,7 +96,11 @@ call .venv\Scripts\activate.bat
 
 REM Install PyTorch (CPU or GPU)
 echo [INFO] Installing PyTorch with uv...
-uv pip install -r %TORCH_REQUIREMENTS%
+IF "%INSTALL_GPU%"=="true" (
+    uv pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
+) ELSE (
+    uv pip install -r requirements-cpu.txt
+)
 
 REM Install the package in editable mode with dev dependencies
 echo [INFO] Installing docs2synth with dev dependencies...

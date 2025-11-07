@@ -99,10 +99,8 @@ fi
 
 if [ "$INSTALL_GPU" = true ]; then
     echo_info "Will install GPU-enabled PyTorch (CUDA 11.8)"
-    TORCH_REQUIREMENTS="requirements-gpu.txt"
 else
     echo_info "Will install CPU-only PyTorch"
-    TORCH_REQUIREMENTS="requirements-cpu.txt"
 fi
 
 # Check Python version
@@ -150,7 +148,11 @@ setup_venv() {
 
     # Install PyTorch (CPU or GPU)
     echo_info "Installing PyTorch with uv..."
-    uv pip install -r "$TORCH_REQUIREMENTS"
+    if [ "$INSTALL_GPU" = true ]; then
+        uv pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
+    else
+        uv pip install -r requirements-cpu.txt
+    fi
 
     # Install the package in editable mode with dev dependencies
     echo_info "Installing docs2synth with dev dependencies..."
