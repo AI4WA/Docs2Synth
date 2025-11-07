@@ -107,8 +107,8 @@ COPY scripts/ ./scripts/
 # Select the appropriate torch requirements based on BUILD_TYPE
 RUN pip install --upgrade pip && \
     if [ "$BUILD_TYPE" = "gpu" ]; then \
-        echo "Using requirements-gpu.txt for PyTorch with CUDA 11.8"; \
-        pip install -r requirements-gpu.txt --extra-index-url https://download.pytorch.org/whl/cu118; \
+        echo "Installing PyTorch with CUDA 11.8 support"; \
+        pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118; \
     elif [ -f "requirements-${BUILD_TYPE}.txt" ]; then \
         echo "Using requirements-${BUILD_TYPE}.txt for PyTorch"; \
         pip install -r "requirements-${BUILD_TYPE}.txt"; \

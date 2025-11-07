@@ -118,9 +118,6 @@ When you need to update or regenerate the locked dependency files:
 # Regenerate CPU requirements
 uv pip compile requirements-cpu.in -o requirements-cpu.txt
 
-# Regenerate GPU requirements (requires Linux platform)
-uv pip compile requirements-gpu.in -o requirements-gpu.txt --python-version 3.11 --python-platform linux
-
 # Regenerate dev requirements
 uv pip compile requirements-dev.in -o requirements-dev.txt
 
@@ -129,7 +126,8 @@ uv pip compile requirements-cpu.in -o requirements-cpu.txt --upgrade
 uv pip compile requirements-dev.in -o requirements-dev.txt --upgrade
 ```
 
-**Note:** The locked `.txt` files are committed to the repository to ensure reproducible builds across all environments.
+**Note about GPU dependencies:**
+GPU PyTorch is installed directly via `pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118` rather than from a lockfile, as NVIDIA CUDA dependencies are platform-specific and managed by PyTorch.
 
 ### MCP Provider (Experimental)
 
