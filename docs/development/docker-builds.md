@@ -252,7 +252,7 @@ build-docker:
 
 ## References
 
-- [Dockerfile](../../Dockerfile)
-- [Build Script](../../scripts/build-docker.sh)
-- [Docker Compose](../../docker-compose.yml)
+- [Dockerfile](https://github.com/AI4WA/Docs2Synth/blob/main/Dockerfile)
+- [Build Script](https://github.com/AI4WA/Docs2Synth/blob/main/scripts/build-docker.sh)
+- [Docker Compose](https://github.com/AI4WA/Docs2Synth/blob/main/docker-compose.yml)
 - [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
