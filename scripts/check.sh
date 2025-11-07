@@ -22,7 +22,19 @@ flake8 docs2synth tests
 echo "✅ flake8 passed"
 echo ""
 
-echo "4️⃣  Running tests with pytest..."
+echo "4️⃣  Cleaning notebook outputs..."
+if find notebooks -name "*.ipynb" -type f 2>/dev/null | grep -q .; then
+    find notebooks -name "*.ipynb" -type f | while read -r notebook; do
+        echo "  Cleaning: $notebook"
+        jupyter nbconvert --clear-output --inplace "$notebook" 2>/dev/null || true
+    done
+    echo "✅ notebooks cleaned"
+else
+    echo "  No notebooks found, skipping"
+fi
+echo ""
+
+echo "5️⃣  Running tests with pytest..."
 pytest
 echo "✅ tests passed"
 echo ""

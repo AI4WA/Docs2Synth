@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -184,7 +185,25 @@ def get_config() -> Config:
     """
     global _global_config
     if _global_config is None:
-        # Try to load from default config.yml
+        # Priority: DOCS2SYNTH_CONFIG env var > ./config.yml > defaults
+        env_path = os.getenv("DOCS2SYNTH_CONFIG")
+        if env_path:
+            path = Path(env_path)
+            if path.exists():
+                try:
+                    logger.info(f"Loading config from DOCS2SYNTH_CONFIG: {path}")
+                    _global_config = Config.from_yaml(path)
+                    return _global_config
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load config from DOCS2SYNTH_CONFIG ({path}): {e}; falling back"
+                    )
+            else:
+                logger.warning(
+                    f"DOCS2SYNTH_CONFIG set to {path} but file does not exist; falling back"
+                )
+
+        # Try local config.yml
         config_path = Path("config.yml")
         if config_path.exists():
             try:

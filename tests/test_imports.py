@@ -11,6 +11,7 @@ import pytest
         "docs2synth",
         "docs2synth.qa",
         "docs2synth.retriever",
+        "docs2synth.agent",
     ],
 )
 def test_import_module(module_name):
