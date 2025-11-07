@@ -78,10 +78,17 @@ class BaseLLMProvider(ABC):
             temperature: Sampling temperature (0.0-2.0)
             max_tokens: Maximum tokens to generate
             response_format: Response format ("json" for JSON mode, None for text)
-            **kwargs: Provider-specific parameters
+            **kwargs: Provider-specific parameters. May include:
+                - image: PIL.Image, image path, base64 string, or image URL (for vision models)
+                - images: List of images (for multimodal models)
+                - Other provider-specific parameters
 
         Returns:
             LLMResponse with generated content and metadata
+
+        Note:
+            For vision-language models, pass images via kwargs['image'] or kwargs['images'].
+            Supported formats depend on the provider (PIL.Image, file path, base64, URL).
         """
         pass
 
@@ -97,14 +104,23 @@ class BaseLLMProvider(ABC):
         """Chat completion with message history.
 
         Args:
-            messages: List of message dicts with 'role' and 'content' keys
+            messages: List of message dicts with 'role' and 'content' keys.
+                For vision models, content can be a list with text and image items.
             temperature: Sampling temperature (0.0-2.0)
             max_tokens: Maximum tokens to generate
             response_format: Response format ("json" for JSON mode, None for text)
-            **kwargs: Provider-specific parameters
+            **kwargs: Provider-specific parameters. May include:
+                - image: PIL.Image, image path, base64 string, or image URL (for vision models)
+                - images: List of images (for multimodal models)
+                - Other provider-specific parameters
 
         Returns:
             LLMResponse with generated content and metadata
+
+        Note:
+            For vision-language models, images can be passed:
+            1. Via kwargs['image'] or kwargs['images']
+            2. Or embedded in messages content (provider-specific format)
         """
         pass
 

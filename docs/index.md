@@ -163,6 +163,30 @@ source .venv/bin/activate
 pytest
 ```
 
+## Quick CLI Examples
+
+```bash
+# Download datasets
+docs2synth datasets list
+docs2synth datasets download funsd
+
+# Process documents
+docs2synth preprocess document.png --processor paddleocr
+
+# Generate text with LLM agents
+docs2synth agent generate "Explain quantum computing" --provider openai
+
+# Chat with history
+docs2synth agent chat "Hello" --history-file chat.json
+
+# Generate QA pairs
+docs2synth qa semantic "Form contains name field" "John Doe"
+docs2synth qa layout "What is the address?" --image doc.png
+docs2synth qa generate "Context" "Target" --image doc.png
+```
+
+[View Full CLI Reference →](cli-reference.md){ .md-button .md-button--primary }
+
 ## Workflow
 
 The typical Docs2Synth workflow follows these stages:

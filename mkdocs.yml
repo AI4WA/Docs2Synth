@@ -161,6 +161,7 @@ nav:
       - QA Generation: workflow/qa-generation.md
       - Retriever Training: workflow/retriever-training.md
       - RAG Path: workflow/rag-path.md
+  - CLI Reference: cli-reference.md
   - Development:
       - Dependency Management: development/dependency-management.md
       - Docker Builds: development/docker-builds.md

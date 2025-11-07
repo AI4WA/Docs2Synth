@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import io
 from typing import Any, Dict, List, Optional
 
 try:
@@ -51,6 +53,56 @@ class OllamaProvider(BaseLLMProvider):
         super().__init__(model, **kwargs)
         self.base_url = base_url.rstrip("/")
 
+    def _encode_image(self, image: Any) -> str:
+        """Encode image to base64 string for Ollama API.
+
+        Args:
+            image: PIL.Image, file path, or bytes
+
+        Returns:
+            Base64 encoded string (without data URI prefix)
+        """
+        try:
+            from PIL import Image as PILImage
+        except ImportError:
+            raise ImportError(
+                "PIL (Pillow) is required for image support. Install with: pip install Pillow"
+            )
+
+        # If it's a PIL Image, convert to base64
+        if isinstance(image, PILImage.Image):
+            buffer = io.BytesIO()
+            # Save as JPEG for compatibility
+            if image.mode in ("RGBA", "LA", "P"):
+                # Convert RGBA/LA/P to RGB for JPEG
+                rgb_image = PILImage.new("RGB", image.size, (255, 255, 255))
+                if image.mode == "P":
+                    image = image.convert("RGBA")
+                rgb_image.paste(
+                    image, mask=image.split()[-1] if image.mode == "RGBA" else None
+                )
+                image = rgb_image
+            image.save(buffer, format="JPEG")
+            image_bytes = buffer.getvalue()
+            return base64.b64encode(image_bytes).decode("utf-8")
+        # If it's a file path, load and encode
+        elif isinstance(image, str):
+            # Check if it's a URL (Ollama doesn't support URLs directly)
+            if image.startswith(("http://", "https://")):
+                raise ValueError(
+                    "Ollama API does not support image URLs directly. "
+                    "Please download the image first or pass a PIL Image."
+                )
+            # It's a file path
+            with open(image, "rb") as f:
+                image_bytes = f.read()
+            return base64.b64encode(image_bytes).decode("utf-8")
+        # If it's already bytes
+        elif isinstance(image, bytes):
+            return base64.b64encode(image).decode("utf-8")
+        else:
+            raise ValueError(f"Unsupported image type: {type(image)}")
+
     def generate(
         self,
         prompt: str,
@@ -61,6 +113,9 @@ class OllamaProvider(BaseLLMProvider):
         **kwargs: Any,
     ) -> LLMResponse:
         """Generate text using Ollama API."""
+        # Extract image from kwargs
+        image = kwargs.pop("image", None)
+
         # Ollama JSON mode via prompt engineering
         if response_format == "json":
             prompt = f"{prompt}\n\nIMPORTANT: You must respond with valid JSON only, no additional text or markdown."
@@ -92,6 +147,10 @@ class OllamaProvider(BaseLLMProvider):
 
         if system_prompt:
             payload["system"] = system_prompt
+
+        # Add image if provided (Ollama expects base64-encoded images in "images" array)
+        if image is not None:
+            payload["images"] = [self._encode_image(image)]
 
         # Extract timeout from options if present
         timeout = merged_options.pop("timeout", 300)
@@ -126,6 +185,9 @@ class OllamaProvider(BaseLLMProvider):
         **kwargs: Any,
     ) -> LLMResponse:
         """Chat completion with message history."""
+        # Extract image from kwargs
+        image = kwargs.pop("image", None)
+
         # Ollama JSON mode via prompt engineering
         if response_format == "json" and messages:
             # Add JSON instruction to the last user message
@@ -160,6 +222,10 @@ class OllamaProvider(BaseLLMProvider):
             "stream": False,
             "options": merged_options,
         }
+
+        # Add image if provided (Ollama expects base64-encoded images in "images" array)
+        if image is not None:
+            payload["images"] = [self._encode_image(image)]
 
         # Extract timeout from options if present
         timeout = merged_options.pop("timeout", 300)
