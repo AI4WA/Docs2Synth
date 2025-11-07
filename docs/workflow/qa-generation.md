@@ -24,6 +24,28 @@ Final QA Dataset
 
 ## Basic Usage
 
+### CLI Command
+
+The simplest way to generate a QA pair from text is using the CLI:
+
+```bash
+# Basic usage
+docs2synth agent qa "Python is a high-level programming language..."
+
+# With custom provider
+docs2synth agent qa "Your text here" --provider anthropic
+
+# With custom model and temperature
+docs2synth agent qa "Your text here" --provider openai --model gpt-4 --temperature 0.5
+```
+
+**Options:**
+- `--provider`: Provider name (openai, anthropic, gemini, doubao, ollama, huggingface) [default: openai]
+- `--model`: Model name (optional, uses provider default)
+- `--config-path`: Path to config.yml (optional)
+- `--temperature`: Sampling temperature (0.0-2.0)
+- `--max-tokens`: Maximum tokens to generate
+
 ### Python API
 
 === "Simple QA Generation (explicit provider)"
