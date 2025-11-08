@@ -11,6 +11,7 @@ import click
 # Import all command modules
 from docs2synth.cli.commands import (
     agent_group,
+    annotate_command,
     datasets,
     preprocess,
     qa_group,
@@ -60,6 +61,7 @@ cli.add_command(preprocess)
 cli.add_command(agent_group)
 cli.add_command(qa_group)
 cli.add_command(verify_group)
+cli.add_command(annotate_command)
 
 
 def main(argv: list[str] | None = None) -> None:  # pragma: no cover

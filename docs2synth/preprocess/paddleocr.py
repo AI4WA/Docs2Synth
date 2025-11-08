@@ -408,15 +408,19 @@ class PaddleOCRProcessor:
                             if points is None or text is None:
                                 continue
 
-                            # Convert quadrilateral to axis-aligned bounding box
-                            xs = [float(p[0]) for p in points]
-                            ys = [float(p[1]) for p in points]
+                            # Convert points to polygon format: [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+                            polygon = [(float(p[0]), float(p[1])) for p in points]
+
+                            # Also compute axis-aligned bounding box for backward compatibility
+                            xs = [p[0] for p in polygon]
+                            ys = [p[1] for p in polygon]
                             bbox = (min(xs), min(ys), max(xs), max(ys))
 
                             obj = DocumentObject(
                                 object_id=current_id,
                                 text=str(text) if text else "",
                                 bbox=bbox,
+                                polygon=polygon,
                                 label=LabelType.TEXT,
                                 page=page_idx,
                                 score=score,
@@ -455,15 +459,19 @@ class PaddleOCRProcessor:
                                 else None
                             )
 
-                            # Convert quadrilateral to axis-aligned bounding box
-                            xs = [float(p[0]) for p in points]
-                            ys = [float(p[1]) for p in points]
+                            # Convert points to polygon format: [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+                            polygon = [(float(p[0]), float(p[1])) for p in points]
+
+                            # Also compute axis-aligned bounding box for backward compatibility
+                            xs = [p[0] for p in polygon]
+                            ys = [p[1] for p in polygon]
                             bbox = (min(xs), min(ys), max(xs), max(ys))
 
                             obj = DocumentObject(
                                 object_id=current_id,
                                 text=str(text) if text is not None else "",
                                 bbox=bbox,
+                                polygon=polygon,
                                 label=LabelType.TEXT,
                                 page=page_idx,
                                 score=score,
