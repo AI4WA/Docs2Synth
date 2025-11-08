@@ -51,13 +51,16 @@ class QAPair:
         The answer to the question. Can be None or the text field from the object.
     strategy : Optional[str]
         The QA generation strategy used (e.g., "semantic", "layout_aware").
+    verification : Optional[Dict[str, Dict[str, Any]]]
+        Verification results from different verifiers (e.g., {"meaningful": {...}, "correctness": {...}}).
     extra : Dict[str, Any]
-        Free-form additional attributes (e.g., verification results).
+        Free-form additional attributes (e.g., provider, model).
     """
 
     question: str
     answer: Optional[str] = None
     strategy: Optional[str] = None
+    verification: Optional[Dict[str, Dict[str, Any]]] = None
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -68,18 +71,21 @@ class QAPair:
             data["answer"] = self.answer
         if self.strategy is not None:
             data["strategy"] = self.strategy
+        if self.verification is not None:
+            data["verification"] = self.verification
         if self.extra:
             data.update(self.extra)
         return data
 
     @staticmethod
     def from_dict(data: Mapping[str, Any]) -> "QAPair":
-        known_keys = {"question", "answer", "strategy"}
+        known_keys = {"question", "answer", "strategy", "verification"}
         extra = {k: v for k, v in data.items() if k not in known_keys}
         return QAPair(
             question=str(data.get("question", "")),
             answer=data.get("answer"),
             strategy=data.get("strategy"),
+            verification=data.get("verification"),
             extra=extra,
         )
 
