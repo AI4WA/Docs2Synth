@@ -137,6 +137,15 @@ agent:
 qa:
   # List of QA generation strategies to use
   # Each strategy can have its own provider, model, prompt_template, and generation parameters
+  # 
+  # Grouping strategies with group_id:
+  # - Strategies with the same group_id form a group
+  # - Each group should have one semantic strategy (generates base questions)
+  # - Each group can have multiple layout_aware and logical_aware strategies
+  # - layout_aware and logical_aware strategies transform the semantic question from the same group
+  # - If group_id is not specified, strategies are grouped by strategy type (backward compatible)
+  #
+  # Example group: semantic_openai_gpt-4o-mini
   - strategy: semantic
     provider: openai
     model: gpt-4o-mini
@@ -147,6 +156,7 @@ qa:
       of which answer is exactly same as "{target}"
     temperature: 0.7
     max_tokens: 256
+    group_id: semantic_openai_gpt-4o-mini
 
   - strategy: layout_aware
     provider: openai
@@ -157,23 +167,33 @@ qa:
       For example, where is the answer of xx located?
     temperature: 0.7
     max_tokens: 256
+    group_id: semantic_openai_gpt-4o-mini
 
   - strategy: logical_aware
-    provider: anthropic
-    model: claude-3-5-sonnet-20241022
+    provider: openai
+    model: gpt-4o-mini
     prompt_template: |
       Change the question {question} to a very short question 
       about finding the belonging sections of the answer from the input document.
       For example, which section you could find the information about the xx?
     temperature: 0.5
     max_tokens: 256
+    group_id: semantic_openai_gpt-4o-mini
 
-  # Example: Same strategy with different provider/model
+  # Example: Another group with different provider
   # - strategy: semantic
   #   provider: gemini
   #   model: gemini-1.5-pro
   #   temperature: 0.7
   #   max_tokens: 256
+  #   group_id: semantic_gemini_gemini-1.5-pro
+  #
+  # - strategy: layout_aware
+  #   provider: gemini
+  #   model: gemini-1.5-pro
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_gemini_gemini-1.5-pro
 
 # QA Verification configuration
 # Configure verifiers to validate QA pairs

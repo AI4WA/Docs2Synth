@@ -46,7 +46,7 @@ class TestCLIMain:
         config_file = tmp_path / "config.yml"
         config_file.write_text("data:\n  datasets_dir: ./test_data\n")
 
-        with patch("docs2synth.cli.load_config") as mock_load:
+        with patch("docs2synth.cli.cli_main.load_config") as mock_load:
             mock_load.return_value = MagicMock()
             result = runner.invoke(
                 cli, ["--config", str(config_file), "datasets", "list"]
@@ -56,14 +56,14 @@ class TestCLIMain:
 
     def test_cli_verbose_flag(self, runner):
         """Test -v flag increases verbosity."""
-        with patch("docs2synth.cli.setup_cli_logging") as mock_setup:
+        with patch("docs2synth.cli.cli_main.setup_cli_logging") as mock_setup:
             result = runner.invoke(cli, ["-v", "datasets", "list"])
             assert result.exit_code == 0
             mock_setup.assert_called_once()
 
     def test_cli_multiple_verbose_flags(self, runner):
         """Test -vv flag increases verbosity further."""
-        with patch("docs2synth.cli.setup_cli_logging") as mock_setup:
+        with patch("docs2synth.cli.cli_main.setup_cli_logging") as mock_setup:
             result = runner.invoke(cli, ["-vv", "datasets", "list"])
             assert result.exit_code == 0
             mock_setup.assert_called_once()
@@ -155,13 +155,13 @@ class TestMainFunction:
 
     def test_main_with_no_args(self):
         """Test main function with no arguments."""
-        with patch("docs2synth.cli.cli") as mock_cli:
+        with patch("docs2synth.cli.cli_main.cli") as mock_cli:
             with patch.object(sys, "argv", ["docs2synth"]):
                 main()
                 mock_cli.assert_called_once()
 
     def test_main_with_args(self):
         """Test main function with custom arguments."""
-        with patch("docs2synth.cli.cli") as mock_cli:
+        with patch("docs2synth.cli.cli_main.cli") as mock_cli:
             main(["datasets", "list"])
             mock_cli.assert_called_once_with(args=["datasets", "list"])

@@ -40,6 +40,57 @@ class LabelType(str, Enum):
 
 
 @dataclass
+class QAPair:
+    """A question-answer pair associated with a document object.
+
+    Attributes
+    ----------
+    question : str
+        The generated question.
+    answer : Optional[str]
+        The answer to the question. Can be None or the text field from the object.
+    strategy : Optional[str]
+        The QA generation strategy used (e.g., "semantic", "layout_aware").
+    verification : Optional[Dict[str, Dict[str, Any]]]
+        Verification results from different verifiers (e.g., {"meaningful": {...}, "correctness": {...}}).
+    extra : Dict[str, Any]
+        Free-form additional attributes (e.g., provider, model).
+    """
+
+    question: str
+    answer: Optional[str] = None
+    strategy: Optional[str] = None
+    verification: Optional[Dict[str, Dict[str, Any]]] = None
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "question": self.question,
+        }
+        if self.answer is not None:
+            data["answer"] = self.answer
+        if self.strategy is not None:
+            data["strategy"] = self.strategy
+        if self.verification is not None:
+            data["verification"] = self.verification
+        if self.extra:
+            data.update(self.extra)
+        return data
+
+    @staticmethod
+    def from_dict(data: Mapping[str, Any]) -> "QAPair":
+        known_keys = {"question", "answer", "strategy", "verification"}
+        extra = {k: v for k, v in data.items() if k not in known_keys}
+        return QAPair(
+            question=str(data.get("question", "")),
+            answer=data.get("answer"),
+            strategy=data.get("strategy"),
+            verification=data.get("verification"),
+            extra=extra,
+        )
+
+
+@dataclass
 class DocumentObject:
     """A single extracted object from a document (e.g., an OCR text box).
 
@@ -57,6 +108,8 @@ class DocumentObject:
         Optional page index (0-based) from which the object was extracted.
     score : Optional[float]
         Optional confidence/probability score emitted by the extractor.
+    qa : List[QAPair]
+        List of question-answer pairs generated for this object.
     extra : Dict[str, Any]
         Free-form additional attributes emitted by the pipeline.
     """
@@ -67,6 +120,7 @@ class DocumentObject:
     label: LabelType = LabelType.TEXT
     page: Optional[int] = None
     score: Optional[float] = None
+    qa: List[QAPair] = field(default_factory=list)
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -81,6 +135,8 @@ class DocumentObject:
             data["page"] = self.page
         if self.score is not None:
             data["score"] = self.score
+        if self.qa:
+            data["qa"] = [qa_pair.to_dict() for qa_pair in self.qa]
         if self.extra:
             data.update(self.extra)
         return data
@@ -102,8 +158,13 @@ class DocumentObject:
         )
         text_value = str(data.get("text", ""))
 
+        # Parse QA pairs if present
+        qa_list: List[QAPair] = []
+        if "qa" in data and isinstance(data["qa"], list):
+            qa_list = [QAPair.from_dict(qa_data) for qa_data in data["qa"]]
+
         # Extract known fields and keep the rest in extra
-        known_keys = {"text", "bbox", "label", "page", "score"}
+        known_keys = {"text", "bbox", "label", "page", "score", "qa"}
         extra = {k: v for k, v in data.items() if k not in known_keys}
 
         return DocumentObject(
@@ -121,6 +182,7 @@ class DocumentObject:
                 if "score" in data and data["score"] is not None
                 else None
             ),
+            qa=qa_list,
             extra=extra,
         )
 

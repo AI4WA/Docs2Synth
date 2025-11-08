@@ -22,6 +22,7 @@ class QAStrategyConfig:
         prompt_template: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        group_id: Optional[str] = None,
         **kwargs: Any,
     ):
         """Initialize QA strategy configuration.
@@ -33,6 +34,7 @@ class QAStrategyConfig:
             prompt_template: Custom prompt template (optional, uses default if not specified)
             temperature: Sampling temperature (optional)
             max_tokens: Maximum tokens to generate (optional)
+            group_id: Group identifier to group related strategies together (optional)
             **kwargs: Additional configuration parameters
         """
         self.strategy = strategy
@@ -41,6 +43,7 @@ class QAStrategyConfig:
         self.prompt_template = prompt_template
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.group_id = group_id
         self.extra_kwargs = kwargs
 
     def to_dict(self) -> Dict[str, Any]:
@@ -70,6 +73,7 @@ class QAStrategyConfig:
         prompt_template = config_dict.pop("prompt_template", None)
         temperature = config_dict.pop("temperature", None)
         max_tokens = config_dict.pop("max_tokens", None)
+        group_id = config_dict.pop("group_id", None)
 
         return cls(
             strategy=strategy,
@@ -78,6 +82,7 @@ class QAStrategyConfig:
             prompt_template=prompt_template,
             temperature=temperature,
             max_tokens=max_tokens,
+            group_id=group_id,
             **config_dict,
         )
 

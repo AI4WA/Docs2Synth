@@ -41,6 +41,8 @@ def _determine_output_dir(
     """Determine the output directory for processed files.
 
     Priority: explicit output_dir > preprocess.output_dir > data.processed_dir
+
+    If input is a directory, creates a subdirectory with the same name in the output directory.
     """
     if output_dir is not None:
         base_out_root = Path(output_dir).resolve()
@@ -53,9 +55,9 @@ def _determine_output_dir(
                 config.get("data.processed_dir", "./data/processed")
             ).resolve()
 
-    # If input is a directory, write outputs into a subfolder named after it
+    # If input is a directory, create a subdirectory with the same name
     if input_path.is_dir():
-        out_root = (base_out_root / input_path.name).resolve()
+        out_root = base_out_root / input_path.name
     else:
         out_root = base_out_root
 
@@ -152,7 +154,6 @@ def _process_single_file(
 
     out_filename = f"{file_path.stem}_{processor_name.lower()}.json"
     out_path = output_root / out_filename
-
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(result.to_json(indent=2))
 
