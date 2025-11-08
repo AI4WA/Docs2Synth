@@ -120,6 +120,15 @@ mcp = [
     "sse-starlette>=2.0.0",
 ]
 
+annotation = [
+    "streamlit>=1.30.0",
+    "plotly>=5.18.0",
+]
+
+docling = [
+    "docling>=2.0.0",
+]
+
 # Black configuration
 [tool.black]
 line-length = 88

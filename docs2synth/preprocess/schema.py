@@ -20,6 +20,10 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 # A bounding box is represented as (x1, y1, x2, y2) with float coordinates.
 BBox = Tuple[float, float, float, float]
 
+# A polygon is represented as a list of (x, y) coordinate pairs.
+# For quadrilaterals (common in OCR), this will have 4 points: [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+Polygon = List[Tuple[float, float]]
+
 
 class LabelType(str, Enum):
     """Semantic granularity label of an extracted object.
@@ -102,6 +106,11 @@ class DocumentObject:
         Text content associated with the object.
     bbox : Tuple[float, float, float, float]
         Bounding box as `(x1, y1, x2, y2)` in document/page coordinates.
+        This is the axis-aligned bounding box (for backward compatibility).
+    polygon : Optional[List[Tuple[float, float]]]
+        Optional polygon coordinates as list of (x, y) points.
+        For OCR detections, this is typically a quadrilateral with 4 points.
+        If provided, this is more accurate than bbox for rotated text.
     label : LabelType
         Semantic label describing the object's granularity.
     page : Optional[int]
@@ -118,6 +127,7 @@ class DocumentObject:
     text: str
     bbox: BBox
     label: LabelType = LabelType.TEXT
+    polygon: Optional[Polygon] = None
     page: Optional[int] = None
     score: Optional[float] = None
     qa: List[QAPair] = field(default_factory=list)
@@ -131,6 +141,8 @@ class DocumentObject:
                 self.label.value if isinstance(self.label, LabelType) else self.label
             ),
         }
+        if self.polygon is not None:
+            data["polygon"] = [list(point) for point in self.polygon]
         if self.page is not None:
             data["page"] = self.page
         if self.score is not None:
@@ -158,19 +170,25 @@ class DocumentObject:
         )
         text_value = str(data.get("text", ""))
 
+        # Parse polygon if present
+        polygon: Optional[Polygon] = None
+        if "polygon" in data and isinstance(data["polygon"], list):
+            polygon = [(float(p[0]), float(p[1])) for p in data["polygon"]]
+
         # Parse QA pairs if present
         qa_list: List[QAPair] = []
         if "qa" in data and isinstance(data["qa"], list):
             qa_list = [QAPair.from_dict(qa_data) for qa_data in data["qa"]]
 
         # Extract known fields and keep the rest in extra
-        known_keys = {"text", "bbox", "label", "page", "score", "qa"}
+        known_keys = {"text", "bbox", "polygon", "label", "page", "score", "qa"}
         extra = {k: v for k, v in data.items() if k not in known_keys}
 
         return DocumentObject(
             object_id=object_id,
             text=text_value,
             bbox=bbox,
+            polygon=polygon,
             label=label,
             page=(
                 int(data["page"])

@@ -126,6 +126,9 @@ class PDFPlumberProcessor:
     def process(  # noqa: C901
         self,
         pdf_path: str,
+        *,
+        lang: Optional[str] = None,
+        device: Optional[str] = None,
     ) -> DocumentProcessResult:
         """Extract text and layout information from a PDF file.
 
@@ -133,6 +136,12 @@ class PDFPlumberProcessor:
         ----------
         pdf_path : str
             Path to the PDF file to process.
+        lang : Optional[str]
+            Language override (ignored - pdfplumber is language-agnostic).
+            This parameter exists for API compatibility with other processors.
+        device : Optional[str]
+            Device override (ignored - pdfplumber runs on CPU only).
+            This parameter exists for API compatibility with other processors.
 
         Returns
         -------
@@ -143,6 +152,7 @@ class PDFPlumberProcessor:
         -----
         - Each word or text chunk is represented as a DocumentObject with bounding box.
         - All text objects are labeled as LabelType.TEXT.
+        - The lang and device parameters are ignored for API compatibility.
         - If extract_tables is True, table cells are extracted as separate objects.
         """
         if not _PDFPLUMBER_AVAILABLE:

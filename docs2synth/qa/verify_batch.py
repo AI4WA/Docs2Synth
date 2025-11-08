@@ -41,7 +41,7 @@ def find_image_for_json(json_path: Path, image_dirs: List[Path]) -> Optional[Pat
     json_stem = json_path.stem
 
     # Try to remove common processor suffixes
-    for suffix in ["_paddleocr", "_easyocr", "_tesseract", "_pdfplumber"]:
+    for suffix in ["_paddleocr", "_easyocr", "_tesseract", "_pdfplumber", "_docling"]:
         if json_stem.endswith(suffix):
             json_stem = json_stem[: -len(suffix)]
             break
