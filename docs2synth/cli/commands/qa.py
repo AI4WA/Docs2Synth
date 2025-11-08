@@ -692,8 +692,8 @@ def qa_batch(
         # Process a single image
         docs2synth qa batch data/images/document.png
     """
-    from docs2synth.qa.batch import process_batch
     from docs2synth.qa.config import QAGenerationConfig
+    from docs2synth.qa.qa_batch import process_batch
 
     cfg = ctx.obj.get("config")
 
