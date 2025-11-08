@@ -32,6 +32,10 @@ def _get_processor(name: str):
         from .easyocr_proc import EasyOCRProcessor
 
         return EasyOCRProcessor()
+    elif name_lower == "docling":
+        from .docling_proc import DoclingProcessor
+
+        return DoclingProcessor()
     raise ValueError(f"Unsupported processor: {name}")
 
 
@@ -55,11 +59,7 @@ def _determine_output_dir(
                 config.get("data.processed_dir", "./data/processed")
             ).resolve()
 
-    # If input is a directory, create a subdirectory with the same name
-    if input_path.is_dir():
-        out_root = base_out_root / input_path.name
-    else:
-        out_root = base_out_root
+    out_root = base_out_root
 
     out_root.mkdir(parents=True, exist_ok=True)
     return out_root

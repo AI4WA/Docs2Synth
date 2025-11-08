@@ -378,7 +378,7 @@ def test_determine_output_dir_for_directory_input(tmp_path):
     result = _determine_output_dir(input_dir, output_base, config)
 
     # Should create output/my_dataset/
-    assert result == (output_base / "my_dataset").resolve()
+    assert result == (output_base).resolve()
     assert result.exists()
 
 

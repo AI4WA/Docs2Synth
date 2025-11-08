@@ -113,6 +113,8 @@ class EasyOCRProcessor:
         self,
         image_path: str,
         *,
+        lang: Optional[str] = None,
+        device: Optional[str] = None,
         paragraph: bool = False,
         min_size: int = 10,
         contrast_ths: float = 0.1,
@@ -129,6 +131,12 @@ class EasyOCRProcessor:
         ----------
         image_path : str
             Path to the image file to process.
+        lang : Optional[str]
+            Language override (ignored - EasyOCR language is set at initialization).
+            This parameter exists for API compatibility with other processors.
+        device : Optional[str]
+            Device override (ignored - EasyOCR device is set at initialization).
+            This parameter exists for API compatibility with other processors.
         paragraph : bool
             Whether to combine results into paragraphs (default: False).
         min_size : int
@@ -158,6 +166,8 @@ class EasyOCRProcessor:
         - Bounding boxes are in (x1, y1, x2, y2) format.
         - All recognized text segments are labeled as LabelType.TEXT.
         - Confidence scores are provided by EasyOCR.
+        - The lang and device parameters are ignored; these must be set when
+          constructing the EasyOCRProcessor instance.
         """
         reader = self._get_reader()
         start = time.time()
@@ -201,15 +211,19 @@ class EasyOCRProcessor:
             if not text or not text.strip():
                 continue
 
-            # Convert quadrilateral to axis-aligned bounding box
-            xs = [float(point[0]) for point in bbox_points]
-            ys = [float(point[1]) for point in bbox_points]
+            # Convert points to polygon format: [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+            polygon = [(float(point[0]), float(point[1])) for point in bbox_points]
+
+            # Also compute axis-aligned bounding box for backward compatibility
+            xs = [p[0] for p in polygon]
+            ys = [p[1] for p in polygon]
             bbox = (min(xs), min(ys), max(xs), max(ys))
 
             obj = DocumentObject(
                 object_id=current_id,
                 text=str(text),
                 bbox=bbox,
+                polygon=polygon,
                 label=LabelType.TEXT,
                 page=0,  # EasyOCR processes single images, no page concept
                 score=float(confidence) if confidence is not None else None,
