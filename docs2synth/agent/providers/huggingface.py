@@ -6,8 +6,14 @@ from typing import Any, Dict, List, Optional
 
 try:
     import torch
-    from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer
+    from transformers import (
+        AutoModel,
+        AutoModelForCausalLM,
+        AutoProcessor,
+        AutoTokenizer,
+    )
 except ImportError:
+    AutoModel = None  # type: ignore
     AutoModelForCausalLM = None  # type: ignore
     AutoTokenizer = None  # type: ignore
     AutoProcessor = None  # type: ignore
@@ -130,7 +136,11 @@ class HuggingFaceProvider(BaseLLMProvider):
         elif load_in_4bit:
             load_kwargs["load_in_4bit"] = True
 
-        self.model = AutoModelForCausalLM.from_pretrained(
+        # For vision models, use AutoModel which auto-detects the correct model class
+        # For text-only models, use AutoModelForCausalLM for better compatibility
+        model_class = AutoModel if use_vision else AutoModelForCausalLM
+
+        self.model = model_class.from_pretrained(
             model,
             device_map=device_str if device_str != "cpu" else None,
             **load_kwargs,

@@ -8,6 +8,7 @@ from docs2synth.agent.providers.gemini import GeminiProvider
 from docs2synth.agent.providers.huggingface import HuggingFaceProvider
 from docs2synth.agent.providers.ollama import OllamaProvider
 from docs2synth.agent.providers.openai import OpenAIProvider
+from docs2synth.agent.providers.vllm import VLLMProvider
 
 __all__ = [
     "OpenAIProvider",
@@ -16,6 +17,7 @@ __all__ = [
     "DoubaoProvider",
     "OllamaProvider",
     "HuggingFaceProvider",
+    "VLLMProvider",
 ]
 
 PROVIDER_REGISTRY = {
@@ -25,4 +27,5 @@ PROVIDER_REGISTRY = {
     "doubao": DoubaoProvider,
     "ollama": OllamaProvider,
     "huggingface": HuggingFaceProvider,
+    "vllm": VLLMProvider,
 }

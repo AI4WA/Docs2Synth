@@ -68,7 +68,7 @@ preprocess:
 
 # Agent/LLM configuration (provider-driven presets)
 agent:
-  # Choose active provider here: openai | anthropic | gemini | doubao | ollama | huggingface
+  # Choose active provider here: openai | anthropic | gemini | doubao | ollama | huggingface | vllm
   provider: openai
 
   # Centralized API keys used to backfill per-provider configs
@@ -131,6 +131,67 @@ agent:
     load_in_4bit: false
     # If not provided here, will backfill from agent.keys.huggingface_token
     # hf_token: YOUR-HF-TOKEN
+
+  vllm:
+    # vLLM provider for high-performance local LLM inference
+    # Supports two modes:
+    # 1. "server" mode (default): Connects to a running vLLM OpenAI-compatible API server
+    # 2. "direct" mode: Uses vLLM Python API directly (no server needed, requires GPU)
+
+    # Mode: "server" (HTTP API) or "direct" (Python API)
+    mode: server  # server | direct
+
+    # Model name/identifier (Hugging Face model ID or local path)
+    model: meta-llama/Llama-2-7b-chat-hf
+
+    # ---- Server Mode Configuration ----
+    # Server mode: vLLM server URL (default: http://localhost:8000/v1)
+    # Start vLLM server with: python -m vllm.entrypoints.openai.api_server --model <model_name>
+    base_url: http://localhost:8000/v1
+    # Optional API key (only used in server mode, vLLM typically doesn't require auth)
+    # api_key: null
+
+    # ---- Direct Mode Configuration ----
+    # Direct mode: vLLM Python API initialization parameters
+    # Uncomment and adjust these parameters for direct mode:
+    # trust_remote_code: true  # Required for some models (e.g., Qwen, Phi)
+    # tensor_parallel_size: 1  # Number of GPUs to use for tensor parallelism
+    # gpu_memory_utilization: 0.9  # GPU memory utilization (0.0-1.0)
+    # max_model_len: null  # Maximum sequence length (null = model default)
+    # dtype: auto  # Data type: auto, float16, bfloat16, float32
+    # enforce_eager: false  # Disable CUDA graph (may help with unsupported architectures)
+    # quantization: null  # Quantization method: awq, gptq, squeezellm, or null
+
+    # ---- Generation Parameters (both modes) ----
+    temperature: 0.7
+    max_tokens: 1000
+    top_p: 1
+    frequency_penalty: 0
+    presence_penalty: 0
+    stop: null
+
+    # ---- Example configurations for different use cases ----
+
+    # Example 1: Vision-Language Model (direct mode)
+    # model: Qwen/Qwen-VL-Chat
+    # mode: direct
+    # trust_remote_code: true
+    # max_model_len: 2048  # Adjust based on GPU memory
+    # gpu_memory_utilization: 0.9
+    # enforce_eager: true  # May help with unsupported model architectures
+
+    # Example 2: Large Model with Multi-GPU (direct mode)
+    # model: meta-llama/Llama-2-70b-chat-hf
+    # mode: direct
+    # tensor_parallel_size: 4  # Use 4 GPUs
+    # gpu_memory_utilization: 0.95
+    # max_model_len: 4096
+
+    # Example 3: Server Mode with Remote vLLM Server
+    # mode: server
+    # model: meta-llama/Llama-2-7b-chat-hf
+    # base_url: http://remote-server:8000/v1
+    # api_key: your-api-key-if-needed
 
 # QA Generation configuration
 # Configure multiple QA generation strategies with different providers, models, and prompts

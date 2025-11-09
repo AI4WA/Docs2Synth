@@ -88,7 +88,7 @@ def get_current_qa():
     if not doc:
         return None
 
-    image = st.session_state.data_manager.current_image
+    dm = st.session_state.data_manager
 
     # Initialize current_obj_id if needed
     if st.session_state.current_obj_id is None:
@@ -98,10 +98,13 @@ def get_current_qa():
         else:
             # No objects - return placeholder to show image only
             st.session_state.current_obj_id = -1
+            # Use first page for PDFs, or the single image
+            image = dm.current_image
             return -1, 0, None, None, image
 
     # Handle case where there are no objects (obj_id = -1)
     if st.session_state.current_obj_id == -1:
+        image = dm.current_image
         return -1, 0, None, None, image
 
     # Get current object
@@ -109,6 +112,23 @@ def get_current_qa():
     obj = doc.objects.get(obj_id)
     if not obj:
         return None
+
+    # Get the appropriate image for this object
+    # For PDFs, use the page-specific image; for single images, use the current_image
+    if dm.is_pdf and dm.current_page_images:
+        # Get page number from object (default to 0 if not set)
+        obj_page = obj.page if obj.page is not None else 0
+        image = dm.current_page_images.get(obj_page)
+        if image is None:
+            # Fallback to first page if object's page not found
+            image = (
+                next(iter(dm.current_page_images.values()))
+                if dm.current_page_images
+                else dm.current_image
+            )
+    else:
+        # Single image document
+        image = dm.current_image
 
     # Get QA pair (or None if no QA)
     qa_pair = None

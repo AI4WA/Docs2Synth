@@ -15,6 +15,7 @@ from PIL import Image as PILImage
 
 from docs2synth.preprocess.schema import DocumentProcessResult, QAPair
 from docs2synth.qa.verify_batch import find_image_for_json
+from docs2synth.utils.pdf_images import get_pdf_images
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,8 @@ class AnnotationDataManager:
         self.current_document: Optional[DocumentProcessResult] = None
         self.current_image: Optional[PILImage.Image] = None
         self.current_image_path: Optional[Path] = None
+        self.current_page_images: Optional[dict[int, PILImage.Image]] = None
+        self.is_pdf: bool = False
 
     def load_files(self) -> int:
         """Load all JSON files from data directory.
@@ -93,31 +96,80 @@ class AnnotationDataManager:
             # Load corresponding image
             image_path = find_image_for_json(json_path, self.image_dirs)
             if image_path:
-                try:
-                    self.current_image = PILImage.open(image_path)
-                    # Verify image is loadable by trying to load the data
-                    self.current_image.load()
-                    self.current_image_path = image_path
-                    logger.info(f"Loaded document: {json_path.name}")
-                    logger.info(f"Loaded image: {image_path.name}")
-                    return True
-                except (OSError, SyntaxError) as e:
-                    logger.error(f"Failed to load image {image_path}: {e}")
-                    logger.warning("Creating placeholder for corrupted image")
-                    # Create a placeholder image
-                    self.current_image = PILImage.new(
-                        "RGB", (800, 600), color="lightgray"
-                    )
-                    from PIL import ImageDraw
+                # Check if this is a PDF (split into multiple images)
+                self.is_pdf = image_path.suffix.lower() == ".pdf"
 
-                    draw = ImageDraw.Draw(self.current_image)
-                    draw.text(
-                        (50, 300),
-                        f"Image Load Error\n{image_path.name}\n{str(e)[:50]}",
-                        fill="red",
-                    )
-                    self.current_image_path = image_path
-                    return True
+                if self.is_pdf:
+                    # Load PDF page images from folder structure
+                    try:
+                        pdf_images = get_pdf_images(image_path)
+                        if pdf_images:
+                            self.current_page_images = {}
+                            for page_idx, page_image_path in enumerate(pdf_images):
+                                try:
+                                    self.current_page_images[page_idx] = PILImage.open(
+                                        page_image_path
+                                    )
+                                    logger.debug(
+                                        f"Loaded PDF page {page_idx + 1}: {page_image_path.name}"
+                                    )
+                                except Exception as e:
+                                    logger.warning(
+                                        f"Failed to load PDF page {page_idx + 1}: {e}"
+                                    )
+
+                            # Set current_image to first page for compatibility
+                            if self.current_page_images:
+                                self.current_image = self.current_page_images[0]
+                                self.current_image_path = image_path
+                                logger.info(f"Loaded document: {json_path.name}")
+                                logger.info(
+                                    f"Loaded {len(self.current_page_images)} PDF pages from: {image_path.name}"
+                                )
+                                return True
+                            else:
+                                logger.error(
+                                    f"No PDF page images loaded for {image_path.name}"
+                                )
+                                return False
+                        else:
+                            logger.error(
+                                f"PDF page images not found for {image_path.name}. "
+                                f"Please run preprocessing first to convert PDF to images."
+                            )
+                            return False
+                    except Exception as e:
+                        logger.error(f"Failed to load PDF images {image_path}: {e}")
+                        return False
+                else:
+                    # Load single image file (non-PDF)
+                    try:
+                        self.current_image = PILImage.open(image_path)
+                        # Verify image is loadable by trying to load the data
+                        self.current_image.load()
+                        self.current_image_path = image_path
+                        self.current_page_images = None
+                        logger.info(f"Loaded document: {json_path.name}")
+                        logger.info(f"Loaded image: {image_path.name}")
+                        return True
+                    except (OSError, SyntaxError) as e:
+                        logger.error(f"Failed to load image {image_path}: {e}")
+                        logger.warning("Creating placeholder for corrupted image")
+                        # Create a placeholder image
+                        self.current_image = PILImage.new(
+                            "RGB", (800, 600), color="lightgray"
+                        )
+                        from PIL import ImageDraw
+
+                        draw = ImageDraw.Draw(self.current_image)
+                        draw.text(
+                            (50, 300),
+                            f"Image Load Error\n{image_path.name}\n{str(e)[:50]}",
+                            fill="red",
+                        )
+                        self.current_image_path = image_path
+                        self.current_page_images = None
+                        return True
             else:
                 logger.warning(f"Image not found for {json_path.name}")
                 return False

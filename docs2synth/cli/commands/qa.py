@@ -244,7 +244,7 @@ def qa_group(ctx: click.Context) -> None:
     type=str,
     default="openai",
     show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface)",
+    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
 )
 @click.option(
     "--model",
@@ -345,7 +345,7 @@ def qa_semantic(
     type=str,
     default="openai",
     show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface)",
+    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
 )
 @click.option(
     "--model",
@@ -448,7 +448,7 @@ def qa_layout(
     type=str,
     default="openai",
     show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface)",
+    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
 )
 @click.option(
     "--model",
