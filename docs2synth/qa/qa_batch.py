@@ -608,6 +608,20 @@ def _generate_transform_questions_for_group(
     # Process layout_aware generators
     if "layout_aware" in group:
         for layout_generator, layout_config in group["layout_aware"]:
+            layout_provider = layout_config.provider
+            layout_model = layout_config.model or "default"
+
+            # Check if layout_aware question already exists for this exact combination
+            if _has_existing_qa_for_group(
+                obj, group_id, "layout_aware", layout_provider, layout_config.model
+            ):
+                logger.info(
+                    f"Skipping layout_aware for object {obj_id} "
+                    f"(group: '{group_id or 'default'}', provider: '{layout_provider}', "
+                    f"model: '{layout_model}'): already exists"
+                )
+                continue
+
             try:
                 transformed_question = layout_generator.generate(
                     question=semantic_question,
@@ -643,6 +657,20 @@ def _generate_transform_questions_for_group(
     # Process logical_aware generators
     if "logical_aware" in group:
         for logical_generator, logical_config in group["logical_aware"]:
+            logical_provider = logical_config.provider
+            logical_model = logical_config.model or "default"
+
+            # Check if logical_aware question already exists for this exact combination
+            if _has_existing_qa_for_group(
+                obj, group_id, "logical_aware", logical_provider, logical_config.model
+            ):
+                logger.info(
+                    f"Skipping logical_aware for object {obj_id} "
+                    f"(group: '{group_id or 'default'}', provider: '{logical_provider}', "
+                    f"model: '{logical_model}'): already exists"
+                )
+                continue
+
             try:
                 transformed_question = logical_generator.generate(
                     question=semantic_question,
@@ -678,6 +706,74 @@ def _generate_transform_questions_for_group(
     return num_generated
 
 
+def _has_existing_qa_for_group(
+    obj: Any,
+    group_id: Optional[str],
+    strategy: str,
+    provider: str,
+    model: Optional[str],
+) -> bool:
+    """Check if object already has QA pairs for a given strategy + provider + model + group_id combination.
+
+    Args:
+        obj: DocumentObject instance
+        group_id: Group ID to check (None means default group)
+        strategy: Strategy type to check (e.g., "semantic", "layout_aware", "logical_aware")
+        provider: Provider name to check
+        model: Model name to check (None means "default")
+
+    Returns:
+        True if a QA pair exists with matching strategy + provider + model + group_id, False otherwise
+    """
+    if not obj.qa:
+        return False
+
+    # Normalize model: None or empty string means "default"
+    expected_model = model or "default"
+
+    # Debug: log all existing QA pairs for this strategy
+    existing_qa_for_strategy = [
+        (
+            qa.strategy,
+            qa.extra.get("provider") if qa.extra else None,
+            qa.extra.get("model") if qa.extra else None,
+            qa.extra.get("group_id") if qa.extra else None,
+        )
+        for qa in obj.qa
+        if qa.strategy == strategy
+    ]
+    if existing_qa_for_strategy:
+        logger.debug(
+            f"Existing QA pairs for strategy '{strategy}': {existing_qa_for_strategy}, "
+            f"looking for provider='{provider}', model='{expected_model}', group_id='{group_id}'"
+        )
+
+    for qa_pair in obj.qa:
+        if qa_pair.strategy == strategy:
+            # Check if provider, model, and group_id all match
+            # These fields are stored in extra dict (from JSON parsing)
+            qa_extra = qa_pair.extra if qa_pair.extra else {}
+            qa_provider = qa_extra.get("provider")
+            qa_model = (
+                qa_extra.get("model") or "default"
+            )  # Normalize None/empty to "default"
+            qa_group_id = qa_extra.get("group_id")
+
+            # Check all four fields match
+            if (
+                qa_provider == provider
+                and qa_model == expected_model
+                and qa_group_id == group_id
+            ):
+                logger.debug(
+                    f"Found existing QA pair: strategy='{strategy}', "
+                    f"provider='{qa_provider}', model='{qa_model}', group_id='{qa_group_id}' "
+                    f"(looking for provider='{provider}', model='{expected_model}', group_id='{group_id}')"
+                )
+                return True
+    return False
+
+
 def _process_object_with_groups(
     obj_id: int,
     obj: Any,
@@ -703,7 +799,34 @@ def _process_object_with_groups(
     start_time = time.perf_counter()
 
     for group in generator_groups:
+        group_id = group.get("group_id")
+
+        # Get semantic config to check provider and model
+        if "semantic" not in group:
+            continue
+
+        semantic_generator, semantic_config = group["semantic"]
+        semantic_provider = semantic_config.provider
+        semantic_model = semantic_config.model or "default"
+
+        # Check if semantic question already exists for this exact combination
+        has_existing = _has_existing_qa_for_group(
+            obj, group_id, "semantic", semantic_provider, semantic_config.model
+        )
+        if has_existing:
+            logger.info(
+                f"Skipping semantic for object {obj_id} "
+                f"(group: '{group_id or 'default'}', provider: '{semantic_provider}', "
+                f"model: '{semantic_model}'): already exists"
+            )
+            continue
+
         # Stage 1: Generate semantic question for this group
+        logger.debug(
+            f"Generating semantic question for object {obj_id} "
+            f"(group: '{group_id or 'default'}', provider: '{semantic_provider}', "
+            f"model: '{semantic_model}')"
+        )
         semantic_question = _generate_semantic_question_for_group(
             obj, obj_id, obj_image, context, group, config
         )
@@ -713,6 +836,7 @@ def _process_object_with_groups(
         num_questions_generated += 1  # Count semantic question
 
         # Stage 2: Transform semantic question using layout_aware and logical_aware strategies
+        # Check each transform strategy individually before generating
         num_questions_generated += _generate_transform_questions_for_group(
             obj, obj_id, obj_image, semantic_question, group
         )

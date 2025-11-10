@@ -196,6 +196,51 @@ def _prepare_verifier_kwargs(
     return verify_kwargs, False
 
 
+def _has_existing_verification(
+    qa_pair: QAPair,
+    verifier_type: str,
+    provider: str,
+    model: Optional[str],
+) -> bool:
+    """Check if QA pair already has verification for a given verifier_type + provider + model combination.
+
+    Args:
+        qa_pair: QA pair to check
+        verifier_type: Verifier type to check (e.g., "meaningful", "correctness")
+        provider: Provider name to check
+        model: Model name to check (None means "default")
+
+    Returns:
+        True if verification exists with matching verifier_type + provider + model, False otherwise
+    """
+    if not qa_pair.verification:
+        return False
+
+    # Normalize model: None or empty string means "default"
+    expected_model = model or "default"
+
+    # Check if this verifier_type already exists in verification results
+    if verifier_type not in qa_pair.verification:
+        return False
+
+    existing_result = qa_pair.verification[verifier_type]
+    existing_provider = existing_result.get("provider")
+    existing_model = (
+        existing_result.get("model") or "default"
+    )  # Normalize None/empty to "default"
+
+    # Check if provider and model match
+    if existing_provider == provider and existing_model == expected_model:
+        logger.debug(
+            f"Found existing verification: verifier_type='{verifier_type}', "
+            f"provider='{existing_provider}', model='{existing_model}' "
+            f"(looking for provider='{provider}', model='{expected_model}')"
+        )
+        return True
+
+    return False
+
+
 def _verify_qa_pair(
     qa_pair: QAPair,
     verifiers: List[Tuple[str, Any]],
@@ -219,6 +264,27 @@ def _verify_qa_pair(
         try:
             # Get verifier config from the instance
             verifier_config = getattr(verifier_instance, "_config", None)
+
+            if verifier_config:
+                verifier_provider = verifier_config.provider
+                verifier_model = verifier_config.model or "default"
+            else:
+                # Fallback if config is not available
+                verifier_provider = "unknown"
+                verifier_model = "default"
+
+            # Check if verification already exists for this exact combination
+            if _has_existing_verification(
+                qa_pair,
+                verifier_type,
+                verifier_provider,
+                verifier_config.model if verifier_config else None,
+            ):
+                logger.info(
+                    f"Skipping {verifier_type} verifier "
+                    f"(provider: '{verifier_provider}', model: '{verifier_model}'): already exists"
+                )
+                continue
 
             # Prepare kwargs
             verify_kwargs, should_skip = _prepare_verifier_kwargs(
@@ -364,6 +430,7 @@ def process_document_verification(
         if obj_image is None:
             continue
 
+        has_verified_qa = False  # Initialize for each object
         for qa_pair in obj.qa:
             qa_start_time = time.perf_counter()
             try:
@@ -372,8 +439,10 @@ def process_document_verification(
                 )
 
                 if verification_results:
-                    # Add verification results to QA pair
-                    qa_pair.verification = verification_results
+                    # Merge new verification results with existing ones
+                    if qa_pair.verification is None:
+                        qa_pair.verification = {}
+                    qa_pair.verification.update(verification_results)
                     num_qa_verified += 1
                     has_verified_qa = True
 
