@@ -27,6 +27,7 @@ from docs2synth.utils.pdf_images import (
     is_pdf_images_dir,
     save_pdf_images,
 )
+from docs2synth.utils.text import DEFAULT_MAX_CONTEXT_LENGTH, truncate_context
 from docs2synth.utils.timer import Timer, format_time, timeit, timer
 
 __all__ = [
@@ -56,4 +57,7 @@ __all__ = [
     "save_pdf_images",
     "convert_pdf_to_images",
     "convert_pdfs_in_directory",
+    # Text Processing
+    "truncate_context",
+    "DEFAULT_MAX_CONTEXT_LENGTH",
 ]
