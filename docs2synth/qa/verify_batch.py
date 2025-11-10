@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -333,6 +334,8 @@ def process_document_verification(
     num_objects_processed = 0
     num_qa_verified = 0
     num_qa_passed = 0
+    total_verifier_time = 0.0
+    document_start_time = time.perf_counter()
 
     # Filter objects that have QA pairs
     valid_objects = {
@@ -361,9 +364,8 @@ def process_document_verification(
         if obj_image is None:
             continue
 
-        # Verify each QA pair
-        has_verified_qa = False
         for qa_pair in obj.qa:
+            qa_start_time = time.perf_counter()
             try:
                 verification_results = _verify_qa_pair(
                     qa_pair, verifiers, result.context, obj_image
@@ -386,6 +388,8 @@ def process_document_verification(
             except Exception as e:
                 logger.error(f"Failed to verify QA pair in object {obj_id}: {e}")
                 continue
+            finally:
+                total_verifier_time += time.perf_counter() - qa_start_time
 
         if has_verified_qa:
             num_objects_processed += 1
@@ -398,10 +402,17 @@ def process_document_verification(
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
+    document_elapsed_time = time.perf_counter() - document_start_time
+    avg_time_per_qa = (
+        total_verifier_time / num_qa_verified if num_qa_verified > 0 else 0.0
+    )
+
     logger.info(
         f"Processed {num_objects_processed} objects, "
         f"verified {num_qa_verified} QA pairs, "
-        f"{num_qa_passed} passed all verifiers"
+        f"{num_qa_passed} passed all verifiers "
+        f"(total time: {document_elapsed_time:.2f}s, "
+        f"avg {avg_time_per_qa:.2f}s per QA)"
     )
     return num_objects_processed, num_qa_verified, num_qa_passed
 
@@ -450,6 +461,7 @@ def process_batch_verification(
     total_objects_processed = 0
     total_qa_verified = 0
     total_qa_passed = 0
+    batch_start_time = time.perf_counter()
 
     for json_file in json_files:
         try:
@@ -475,10 +487,17 @@ def process_batch_verification(
             logger.error(f"Failed to process {json_file}: {e}")
             continue
 
+    batch_elapsed_time = time.perf_counter() - batch_start_time
+    avg_time_per_qa = (
+        batch_elapsed_time / total_qa_verified if total_qa_verified > 0 else 0.0
+    )
+
     logger.info(
         f"Batch verification complete: {num_files_processed} files, "
         f"{total_objects_processed} objects, {total_qa_verified} QA pairs verified, "
-        f"{total_qa_passed} passed all verifiers"
+        f"{total_qa_passed} passed all verifiers "
+        f"(total time: {batch_elapsed_time:.2f}s, "
+        f"avg {avg_time_per_qa:.2f}s per QA)"
     )
 
     return (
@@ -487,3 +506,80 @@ def process_batch_verification(
         total_qa_verified,
         total_qa_passed,
     )
+
+
+def clean_document_verification(json_path: Path) -> Tuple[int, int]:
+    """Remove verification results from a single JSON document.
+
+    Args:
+        json_path: Path to the JSON file to clean
+
+    Returns:
+        Tuple of (qa_pairs_modified, verification_entries_removed)
+    """
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    result = DocumentProcessResult.from_dict(data)
+
+    qa_pairs_modified = 0
+    verification_entries_removed = 0
+
+    def _clear_verification(
+        qas: List[QAPair], *, count: bool = True
+    ) -> Tuple[int, int]:
+        pairs = 0
+        entries = 0
+        for qa_pair in qas:
+            if qa_pair.verification:
+                if count:
+                    entries += len(qa_pair.verification)
+                    pairs += 1
+                qa_pair.verification = None
+        return pairs, entries
+
+    for obj in result.objects.values():
+        pairs, entries = _clear_verification(obj.qa)
+        qa_pairs_modified += pairs
+        verification_entries_removed += entries
+
+    for obj in result.object_list:
+        _clear_verification(obj.qa, count=False)
+
+    if qa_pairs_modified > 0:
+        output_data = result.to_dict()
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=2)
+        logger.info(
+            f"Removed verification results from {qa_pairs_modified} QA pairs in {json_path.name}"
+        )
+    else:
+        logger.info(f"No verification results found in {json_path.name}")
+
+    return qa_pairs_modified, verification_entries_removed
+
+
+def clean_batch_verification(json_files: List[Path]) -> Tuple[int, int, int]:
+    """Clean verification results for multiple JSON files.
+
+    Args:
+        json_files: List of JSON file paths to clean
+
+    Returns:
+        Tuple of (files_processed, total_qa_pairs_modified, total_entries_removed)
+    """
+    files_processed = 0
+    total_pairs_modified = 0
+    total_entries_removed = 0
+
+    for json_path in json_files:
+        if not json_path.exists():
+            logger.warning(f"Skipping missing JSON file: {json_path}")
+            continue
+
+        pairs_modified, entries_removed = clean_document_verification(json_path)
+        files_processed += 1
+        total_pairs_modified += pairs_modified
+        total_entries_removed += entries_removed
+
+    return files_processed, total_pairs_modified, total_entries_removed

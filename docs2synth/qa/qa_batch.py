@@ -136,20 +136,24 @@ def _group_strategies_by_id(
 
 
 def _create_semantic_generator(
-    config: QAStrategyConfig, group_id: Optional[str]
+    config: QAStrategyConfig,
+    group_id: Optional[str],
+    config_path: Optional[str] = None,
 ) -> Optional[Tuple[Any, QAStrategyConfig]]:
     """Create a semantic generator from config.
 
     Args:
         config: QA strategy configuration
         group_id: Group ID for logging
+        config_path: Path to config.yml for agent initialization
 
     Returns:
         Tuple of (generator, config) or None if creation fails
     """
     try:
+        effective_config_path = config_path or "./config.yml"
         generator = QAGeneratorFactory.create_from_config(
-            config, config_path="./config.yml"
+            config, config_path=effective_config_path
         )
         logger.info(
             f"Group {group_id or 'default'}: Created semantic generator "
@@ -167,6 +171,7 @@ def _create_transform_generators(
     configs: List[QAStrategyConfig],
     strategy_type: str,
     group_id: Optional[str],
+    config_path: Optional[str] = None,
 ) -> List[Tuple[Any, QAStrategyConfig]]:
     """Create transform generators (layout_aware or logical_aware) from configs.
 
@@ -174,15 +179,17 @@ def _create_transform_generators(
         configs: List of QA strategy configurations
         strategy_type: Type of strategy ('layout_aware' or 'logical_aware')
         group_id: Group ID for logging
+        config_path: Path to config.yml for agent initialization
 
     Returns:
         List of (generator, config) tuples
     """
     generators = []
+    effective_config_path = config_path or "./config.yml"
     for config in configs:
         try:
             generator = QAGeneratorFactory.create_from_config(
-                config, config_path="./config.yml"
+                config, config_path=effective_config_path
             )
             generators.append((generator, config))
             logger.info(
@@ -198,11 +205,13 @@ def _create_transform_generators(
 
 def _create_qa_generators(
     qa_config: QAGenerationConfig,
+    config_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Create QA generators from config, grouped by group_id.
 
     Args:
         qa_config: QA generation configuration
+        config_path: Path to config.yml for agent initialization
 
     Returns:
         List of generator groups, each containing:
@@ -227,7 +236,7 @@ def _create_qa_generators(
         # Create semantic generator (use first config if multiple)
         if strategies_by_type["semantic"]:
             semantic_result = _create_semantic_generator(
-                strategies_by_type["semantic"][0], group_id
+                strategies_by_type["semantic"][0], group_id, config_path
             )
             if semantic_result is None:
                 continue  # Skip this group if semantic generator fails
@@ -236,7 +245,10 @@ def _create_qa_generators(
         # Create layout_aware generators (all configs in the group)
         if strategies_by_type["layout_aware"]:
             layout_generators = _create_transform_generators(
-                strategies_by_type["layout_aware"], "layout_aware", group_id
+                strategies_by_type["layout_aware"],
+                "layout_aware",
+                group_id,
+                config_path,
             )
             if layout_generators:
                 group_info["layout_aware"] = layout_generators
@@ -244,7 +256,10 @@ def _create_qa_generators(
         # Create logical_aware generators (all configs in the group)
         if strategies_by_type["logical_aware"]:
             logical_generators = _create_transform_generators(
-                strategies_by_type["logical_aware"], "logical_aware", group_id
+                strategies_by_type["logical_aware"],
+                "logical_aware",
+                group_id,
+                config_path,
             )
             if logical_generators:
                 group_info["logical_aware"] = logical_generators
@@ -365,6 +380,10 @@ def _generate_semantic_questions(
 
     for strategy, generator, strategy_config in semantic_generators:
         try:
+            image_available = obj_image is not None
+            logger.info(
+                f"[semantic/{strategy}] object {obj_id}: image_provided={image_available}"
+            )
             # Generate semantic question from context and target
             question = generator.generate(
                 context=truncated_context,
@@ -430,6 +449,10 @@ def _generate_transform_questions(
 
     for strategy, generator, strategy_config in transform_generators:
         try:
+            image_available = obj_image is not None
+            logger.info(
+                f"[transform/{strategy}] object {obj_id}: image_provided={image_available}"
+            )
             # Transform the semantic question
             transformed_question = generator.generate(
                 question=semantic_question,
@@ -703,6 +726,7 @@ def process_document(
     json_path: Path,
     qa_config: QAGenerationConfig,
     config: Optional[Any] = None,
+    config_path: Optional[str] = None,
 ) -> Tuple[int, int]:
     """Process a single document to generate QA pairs.
 
@@ -711,6 +735,7 @@ def process_document(
         json_path: Path to the preprocessed JSON file
         qa_config: QA generation configuration from config.yml
         config: Config object to read max_model_len for vLLM (optional)
+        config_path: Path to config.yml for agent initialization (optional)
 
     Returns:
         Tuple of (num_objects_processed, num_questions_generated)
@@ -731,7 +756,7 @@ def process_document(
         return 0, 0
 
     # Create generator groups
-    generator_groups = _create_qa_generators(qa_config)
+    generator_groups = _create_qa_generators(qa_config, config_path=config_path)
     if not generator_groups:
         logger.error("No generator groups created, skipping file")
         return 0, 0
@@ -808,6 +833,7 @@ def process_batch(
     qa_config: QAGenerationConfig,
     processor_name: str = "paddleocr",
     config: Optional[Any] = None,
+    config_path: Optional[str] = None,
 ) -> Tuple[int, int, int]:
     """Process image files to generate QA pairs.
 
@@ -817,6 +843,7 @@ def process_batch(
         qa_config: QA generation configuration from config.yml
         processor_name: Name of the processor used (for finding JSON files)
         config: Config object to read max_model_len for vLLM (optional)
+        config_path: Path to config.yml for agent initialization (optional)
 
     Returns:
         Tuple of (num_files_processed, total_objects_processed, total_questions_generated)
@@ -860,6 +887,7 @@ def process_batch(
                 json_path=json_path,
                 qa_config=qa_config,
                 config=config,
+                config_path=config_path,
             )
 
             num_files_processed += 1
@@ -885,3 +913,69 @@ def process_batch(
     )
 
     return num_files_processed, total_objects_processed, total_questions_generated
+
+
+def clean_document_qa(json_path: Path) -> Tuple[int, int]:
+    """Remove QA pairs from a single JSON document.
+
+    Args:
+        json_path: Path to the JSON file to clean
+
+    Returns:
+        Tuple of (objects_modified, qa_pairs_removed)
+    """
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    result = DocumentProcessResult.from_dict(data)
+
+    objects_modified = 0
+    qa_pairs_removed = 0
+
+    for obj in result.objects.values():
+        if obj.qa:
+            qa_pairs_removed += len(obj.qa)
+            obj.qa = []
+            objects_modified += 1
+
+    for obj in result.object_list:
+        if obj.qa:
+            obj.qa = []
+
+    if qa_pairs_removed > 0:
+        output_data = result.to_dict()
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=2)
+        logger.info(
+            f"Removed {qa_pairs_removed} QA pairs from {json_path.name} ({objects_modified} objects)"
+        )
+    else:
+        logger.info(f"No QA pairs found in {json_path.name}")
+
+    return objects_modified, qa_pairs_removed
+
+
+def clean_batch_qa(json_files: List[Path]) -> Tuple[int, int, int]:
+    """Clean QA pairs for multiple JSON files.
+
+    Args:
+        json_files: List of JSON file paths to clean
+
+    Returns:
+        Tuple of (files_processed, total_objects_modified, total_qa_removed)
+    """
+    files_processed = 0
+    total_objects_modified = 0
+    total_qa_removed = 0
+
+    for json_path in json_files:
+        if not json_path.exists():
+            logger.warning(f"Skipping missing JSON file: {json_path}")
+            continue
+
+        objects_modified, qa_removed = clean_document_qa(json_path)
+        files_processed += 1
+        total_objects_modified += objects_modified
+        total_qa_removed += qa_removed
+
+    return files_processed, total_objects_modified, total_qa_removed
