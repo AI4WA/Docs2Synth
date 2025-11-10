@@ -11,13 +11,14 @@ import json
 import logging
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image as PILImage
 from tqdm import tqdm
 
-from docs2synth.preprocess.schema import DocumentProcessResult, QAPair
+from docs2synth.preprocess.schema import DocumentProcessResult, QAPair, RunMetadata
 from docs2synth.qa.config import QAVerificationConfig
 from docs2synth.qa.verifiers import create_verifier
 from docs2synth.utils.pdf_images import get_pdf_images
@@ -358,6 +359,29 @@ def _create_verifiers(
     return verifiers
 
 
+def _collect_verifier_metadata(verifiers: List[Tuple[str, Any]]) -> List[Dict[str, Any]]:
+    """Collect metadata about verifiers used in the verification run.
+
+    Args:
+        verifiers: List of (verifier_type, verifier_instance) tuples
+
+    Returns:
+        List of dictionaries with verifier metadata
+    """
+    metadata = []
+    for verifier_type, verifier_instance in verifiers:
+        verifier_config = getattr(verifier_instance, "_config", None)
+        if verifier_config:
+            metadata.append(
+                {
+                    "verifier_type": verifier_type,
+                    "provider": verifier_config.provider,
+                    "model": verifier_config.model or "default",
+                }
+            )
+    return metadata
+
+
 def process_document_verification(
     json_path: Path,
     image_path: Path,
@@ -466,15 +490,30 @@ def process_document_verification(
         # Update progress bar
         progress_bar.set_postfix(verified=num_qa_verified, passed=num_qa_passed)
 
-    # Write back to JSON file
-    output_data = result.to_dict()
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(output_data, f, ensure_ascii=False, indent=2)
-
     document_elapsed_time = time.perf_counter() - document_start_time
     avg_time_per_qa = (
         total_verifier_time / num_qa_verified if num_qa_verified > 0 else 0.0
     )
+
+    # Add verify_metadata to result
+    result.verify_metadata = RunMetadata(
+        runner_name="verify_batch",
+        timestamp=datetime.utcnow().isoformat() + "Z",
+        latency=document_elapsed_time * 1000.0,  # Convert to milliseconds
+        extra={
+            "objects_processed": num_objects_processed,
+            "qa_verified": num_qa_verified,
+            "qa_passed": num_qa_passed,
+            "average_time_per_qa": avg_time_per_qa,
+            "total_verifier_time": total_verifier_time,
+            "verifiers_used": _collect_verifier_metadata(verifiers),
+        },
+    )
+
+    # Write back to JSON file
+    output_data = result.to_dict()
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
 
     logger.info(
         f"Processed {num_objects_processed} objects, "

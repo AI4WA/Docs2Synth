@@ -236,6 +236,50 @@ class ProcessMetadata:
 
 
 @dataclass
+class RunMetadata:
+    """Metadata describing a Docs2Synth pipeline run (QA generation, verification, etc.).
+
+    Attributes
+    ----------
+    runner_name : Optional[str]
+        Name/identifier of the runner component (e.g., "qa_batch", "verify_batch").
+    timestamp : str
+        Start time of the run in ISO-8601 format (UTC, suffixed with "Z").
+    latency : Optional[float]
+        Total processing latency in milliseconds.
+    extra : Dict[str, Any]
+        Free-form additional metadata (e.g., objects_processed, questions_generated).
+    """
+
+    runner_name: Optional[str] = None
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    latency: Optional[float] = None
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "runner_name": self.runner_name,
+            "timestamp": self.timestamp,
+            "latency": self.latency,
+        }
+        if self.extra:
+            data["extra"] = self.extra
+        return {k: v for k, v in data.items() if v is not None}
+
+    @staticmethod
+    def from_dict(data: Mapping[str, Any]) -> "RunMetadata":
+        if not isinstance(data, Mapping):
+            raise TypeError("RunMetadata.from_dict expects a mapping")
+        timestamp = data.get("timestamp", datetime.utcnow().isoformat() + "Z")
+        return RunMetadata(
+            runner_name=data.get("runner_name"),
+            timestamp=str(timestamp),
+            latency=data.get("latency"),
+            extra=dict(data.get("extra", {})),
+        )
+
+
+@dataclass
 class DocumentMetadata:
     """Metadata about the given input document.
 
@@ -319,6 +363,8 @@ class DocumentProcessResult:
     reading_order_ids: List[int] = field(default_factory=list)
     process_metadata: ProcessMetadata = field(default_factory=ProcessMetadata)
     document_metadata: DocumentMetadata = field(default_factory=DocumentMetadata)
+    qa_metadata: Optional[RunMetadata] = None
+    verify_metadata: Optional[RunMetadata] = None
 
     def to_dict(self) -> Dict[str, Any]:
         # Serialize objects both as a mapping and as a list to match expected shape
@@ -338,6 +384,16 @@ class DocumentProcessResult:
             "reading_order_ids": list(self.reading_order_ids),
             "process_metadata": self.process_metadata.to_dict(),
             "document_metadata": self.document_metadata.to_dict(),
+            **(
+                {"qa_metadata": self.qa_metadata.to_dict()}
+                if self.qa_metadata is not None
+                else {}
+            ),
+            **(
+                {"verify_metadata": self.verify_metadata.to_dict()}
+                if self.verify_metadata is not None
+                else {}
+            ),
         }
 
     def to_json(self, *, indent: Optional[int] = None) -> str:
@@ -372,6 +428,8 @@ class DocumentProcessResult:
         # Metadata
         process_metadata_raw = data.get("process_metadata", {})
         document_metadata_raw = data.get("document_metadata", {})
+        qa_metadata_raw = data.get("qa_metadata")
+        verify_metadata_raw = data.get("verify_metadata")
 
         process_metadata = ProcessMetadata(
             processor_name=process_metadata_raw.get("processor_name"),
@@ -402,6 +460,12 @@ class DocumentProcessResult:
             reading_order_ids=list(data.get("reading_order_ids", [])),
             process_metadata=process_metadata,
             document_metadata=document_metadata,
+            qa_metadata=RunMetadata.from_dict(qa_metadata_raw)
+            if isinstance(qa_metadata_raw, Mapping)
+            else None,
+            verify_metadata=RunMetadata.from_dict(verify_metadata_raw)
+            if isinstance(verify_metadata_raw, Mapping)
+            else None,
         )
 
 
@@ -410,6 +474,7 @@ __all__ = [
     "LabelType",
     "DocumentObject",
     "ProcessMetadata",
+    "RunMetadata",
     "DocumentMetadata",
     "DocumentProcessResult",
 ]

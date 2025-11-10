@@ -11,13 +11,14 @@ import json
 import logging
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image as PILImage
 from tqdm import tqdm
 
-from docs2synth.preprocess.schema import DocumentProcessResult, QAPair
+from docs2synth.preprocess.schema import DocumentProcessResult, QAPair, RunMetadata
 from docs2synth.qa import QAGeneratorFactory
 from docs2synth.qa.config import QAGenerationConfig, QAStrategyConfig
 from docs2synth.utils.pdf_images import get_pdf_images
@@ -270,6 +271,38 @@ def _create_qa_generators(
 
     logger.info(f"Created {len(generator_groups)} generator group(s)")
     return generator_groups
+
+
+def _collect_strategy_metadata(generator_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Collect lightweight metadata about configured QA strategies for serialization."""
+    strategies: List[Dict[str, Any]] = []
+
+    for group in generator_groups:
+        group_id = group.get("group_id")
+
+        if "semantic" in group:
+            _, semantic_config = group["semantic"]
+            strategies.append(
+                {
+                    "group_id": group_id,
+                    "strategy": "semantic",
+                    "provider": getattr(semantic_config, "provider", None),
+                    "model": getattr(semantic_config, "model", None),
+                }
+            )
+
+        for strategy_type in ("layout_aware", "logical_aware"):
+            for _, strategy_config in group.get(strategy_type, []):
+                strategies.append(
+                    {
+                        "group_id": group_id,
+                        "strategy": strategy_type,
+                        "provider": getattr(strategy_config, "provider", None),
+                        "model": getattr(strategy_config, "model", None),
+                    }
+                )
+
+    return strategies
 
 
 def _get_object_image(
@@ -931,17 +964,30 @@ def process_document(
         if obj.qa:
             num_objects_processed += 1
 
-    # Write back to JSON file
-    output_data = result.to_dict()
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(output_data, f, ensure_ascii=False, indent=2)
-
     document_elapsed_time = time.perf_counter() - document_start_time
     avg_time_per_question = (
         total_question_time / num_questions_generated
         if num_questions_generated > 0
         else 0.0
     )
+
+    result.qa_metadata = RunMetadata(
+        runner_name="qa_batch",
+        timestamp=datetime.utcnow().isoformat() + "Z",
+        latency=document_elapsed_time * 1000.0,  # Convert to milliseconds
+        extra={
+            "objects_processed": num_objects_processed,
+            "questions_generated": num_questions_generated,
+            "average_time_per_question": avg_time_per_question,
+            "total_question_time": total_question_time,
+            "strategies_used": _collect_strategy_metadata(generator_groups),
+        },
+    )
+
+    # Write back to JSON file
+    output_data = result.to_dict()
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
 
     logger.info(
         f"Processed {num_objects_processed} objects, generated {num_questions_generated} questions "
