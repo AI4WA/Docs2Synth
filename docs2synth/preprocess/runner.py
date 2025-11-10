@@ -17,6 +17,18 @@ from docs2synth.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+try:
+    from PIL import Image
+
+    _PIL_AVAILABLE = True
+except (
+    ImportError
+):  # pragma: no cover - Pillow should be installed, but guard just in case
+    Image = None  # type: ignore
+    _PIL_AVAILABLE = False
+
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"}
+
 
 def _get_processor(name: str):
     name_lower = name.lower()
@@ -108,6 +120,93 @@ def _get_file_list(path: Path, include_pdf_images: bool = False) -> List[Path]:
                 files.append(fp)
         return sorted(files)
     return [path]
+
+
+def _get_resample_filter():
+    """Return the appropriate Pillow resampling filter."""
+    if not _PIL_AVAILABLE:
+        raise RuntimeError(
+            "Pillow is required for image resizing, but it is not installed."
+        )
+
+    # Pillow>=9 exposes Image.Resampling, older versions use module-level constants
+    if hasattr(Image, "Resampling"):
+        return Image.Resampling.LANCZOS  # type: ignore[attr-defined]
+    return Image.LANCZOS  # type: ignore[attr-defined]
+
+
+def _downscale_image_if_needed(image_path: Path, max_long_edge: int) -> bool:
+    """Downscale a single image in-place if its longest edge exceeds max_long_edge."""
+    if not _PIL_AVAILABLE:
+        raise RuntimeError(
+            "Image resizing requested but Pillow is not available. "
+            "Install Pillow or disable preprocess.image_resize.enabled."
+        )
+
+    try:
+        with Image.open(image_path) as img:
+            width, height = img.size
+            longest_edge = max(width, height)
+            if longest_edge <= max_long_edge or longest_edge == 0:
+                return False
+
+            scale = max_long_edge / float(longest_edge)
+            new_width = max(1, int(round(width * scale)))
+            new_height = max(1, int(round(height * scale)))
+            if new_width == width and new_height == height:
+                return False
+
+            resample = _get_resample_filter()
+            resized = img.resize((new_width, new_height), resample=resample)
+
+            img_format = img.format or image_path.suffix.lstrip(".").upper()
+            save_kwargs = {}
+            if img_format and img_format.upper() in {"JPEG", "JPG"}:
+                # Preserve as much quality as possible while enabling optimization
+                save_kwargs["quality"] = img.info.get("quality", 95)
+                save_kwargs["optimize"] = True
+            elif img_format and img_format.upper() == "PNG":
+                save_kwargs["optimize"] = True
+
+            resized.save(image_path, format=img_format, **save_kwargs)
+
+            logger.debug(
+                f"Downscaled image {image_path} from {width}x{height} to {new_width}x{new_height}"
+            )
+            return True
+    except Exception as exc:  # pragma: no cover - depends on image contents
+        logger.warning(f"Failed to downscale image {image_path}: {exc}")
+    return False
+
+
+def _downscale_images_in_path(path: Path, max_long_edge: int) -> None:
+    """Downscale images under a path (file or directory) when needed."""
+    if max_long_edge <= 0:
+        logger.warning(
+            "preprocess.image_resize.max_long_edge must be positive; skipping downscale"
+        )
+        return
+
+    if path.is_file():
+        if path.suffix.lower() in _IMAGE_EXTENSIONS:
+            _downscale_image_if_needed(path, max_long_edge)
+        return
+
+    if not path.exists():
+        return
+
+    processed = 0
+    modified = 0
+    for file_path in path.rglob("*"):
+        if file_path.is_file() and file_path.suffix.lower() in _IMAGE_EXTENSIONS:
+            processed += 1
+            if _downscale_image_if_needed(file_path, max_long_edge):
+                modified += 1
+
+    if processed:
+        logger.info(
+            f"Checked {processed} image(s) in {path} for resizing; downscaled {modified}"
+        )
 
 
 def _prewarm_processor(
@@ -202,16 +301,55 @@ def run_preprocess(
         pdf_dpi = cfg.get("preprocess.pdf_dpi", 300)
         logger.info(f"Pre-converting PDFs to images (DPI: {pdf_dpi})...")
         convert_pdfs_in_directory(p, dpi=pdf_dpi, force=False)
+
+        resize_cfg = cfg.get("preprocess.image_resize", {})
+        resize_enabled = isinstance(resize_cfg, dict) and resize_cfg.get(
+            "enabled", False
+        )
+        if resize_enabled:
+            if not _PIL_AVAILABLE:
+                raise RuntimeError(
+                    "preprocess.image_resize.enabled is True, but Pillow is not installed."
+                )
+            max_long_edge = int(resize_cfg.get("max_long_edge", 1280))
+            _downscale_images_in_path(p, max_long_edge)
+
         # Get file list (only original files, processors will get images themselves if needed)
         files = _get_file_list(p, include_pdf_images=False)
     else:
         # Single file - convert PDF to images if needed (processors can use them)
         if p.suffix.lower() == ".pdf":
-            from docs2synth.utils.pdf_images import convert_pdf_to_images
+            from docs2synth.utils.pdf_images import (
+                convert_pdf_to_images,
+                get_pdf_images_dir,
+            )
 
             pdf_dpi = cfg.get("preprocess.pdf_dpi", 300)
             convert_pdf_to_images(p, dpi=pdf_dpi, force=False)
+            resize_cfg = cfg.get("preprocess.image_resize", {})
+            resize_enabled = isinstance(resize_cfg, dict) and resize_cfg.get(
+                "enabled", False
+            )
+            if resize_enabled:
+                if not _PIL_AVAILABLE:
+                    raise RuntimeError(
+                        "preprocess.image_resize.enabled is True, but Pillow is not installed."
+                    )
+                max_long_edge = int(resize_cfg.get("max_long_edge", 1280))
+                images_dir = get_pdf_images_dir(p)
+                _downscale_images_in_path(images_dir, max_long_edge)
         files = [p]
+        resize_cfg = cfg.get("preprocess.image_resize", {})
+        resize_enabled = isinstance(resize_cfg, dict) and resize_cfg.get(
+            "enabled", False
+        )
+        if resize_enabled and p.suffix.lower() in _IMAGE_EXTENSIONS:
+            if not _PIL_AVAILABLE:
+                raise RuntimeError(
+                    "preprocess.image_resize.enabled is True, but Pillow is not installed."
+                )
+            max_long_edge = int(resize_cfg.get("max_long_edge", 1280))
+            _downscale_images_in_path(p, max_long_edge)
 
     proc = _get_processor(processor)
 
