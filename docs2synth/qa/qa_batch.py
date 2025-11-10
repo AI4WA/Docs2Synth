@@ -11,13 +11,14 @@ import json
 import logging
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image as PILImage
 from tqdm import tqdm
 
-from docs2synth.preprocess.schema import DocumentProcessResult, QAPair
+from docs2synth.preprocess.schema import DocumentProcessResult, QAPair, RunMetadata
 from docs2synth.qa import QAGeneratorFactory
 from docs2synth.qa.config import QAGenerationConfig, QAStrategyConfig
 from docs2synth.utils.pdf_images import get_pdf_images
@@ -136,20 +137,24 @@ def _group_strategies_by_id(
 
 
 def _create_semantic_generator(
-    config: QAStrategyConfig, group_id: Optional[str]
+    config: QAStrategyConfig,
+    group_id: Optional[str],
+    config_path: Optional[str] = None,
 ) -> Optional[Tuple[Any, QAStrategyConfig]]:
     """Create a semantic generator from config.
 
     Args:
         config: QA strategy configuration
         group_id: Group ID for logging
+        config_path: Path to config.yml for agent initialization
 
     Returns:
         Tuple of (generator, config) or None if creation fails
     """
     try:
+        effective_config_path = config_path or "./config.yml"
         generator = QAGeneratorFactory.create_from_config(
-            config, config_path="./config.yml"
+            config, config_path=effective_config_path
         )
         logger.info(
             f"Group {group_id or 'default'}: Created semantic generator "
@@ -167,6 +172,7 @@ def _create_transform_generators(
     configs: List[QAStrategyConfig],
     strategy_type: str,
     group_id: Optional[str],
+    config_path: Optional[str] = None,
 ) -> List[Tuple[Any, QAStrategyConfig]]:
     """Create transform generators (layout_aware or logical_aware) from configs.
 
@@ -174,15 +180,17 @@ def _create_transform_generators(
         configs: List of QA strategy configurations
         strategy_type: Type of strategy ('layout_aware' or 'logical_aware')
         group_id: Group ID for logging
+        config_path: Path to config.yml for agent initialization
 
     Returns:
         List of (generator, config) tuples
     """
     generators = []
+    effective_config_path = config_path or "./config.yml"
     for config in configs:
         try:
             generator = QAGeneratorFactory.create_from_config(
-                config, config_path="./config.yml"
+                config, config_path=effective_config_path
             )
             generators.append((generator, config))
             logger.info(
@@ -198,11 +206,13 @@ def _create_transform_generators(
 
 def _create_qa_generators(
     qa_config: QAGenerationConfig,
+    config_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Create QA generators from config, grouped by group_id.
 
     Args:
         qa_config: QA generation configuration
+        config_path: Path to config.yml for agent initialization
 
     Returns:
         List of generator groups, each containing:
@@ -227,7 +237,7 @@ def _create_qa_generators(
         # Create semantic generator (use first config if multiple)
         if strategies_by_type["semantic"]:
             semantic_result = _create_semantic_generator(
-                strategies_by_type["semantic"][0], group_id
+                strategies_by_type["semantic"][0], group_id, config_path
             )
             if semantic_result is None:
                 continue  # Skip this group if semantic generator fails
@@ -236,7 +246,10 @@ def _create_qa_generators(
         # Create layout_aware generators (all configs in the group)
         if strategies_by_type["layout_aware"]:
             layout_generators = _create_transform_generators(
-                strategies_by_type["layout_aware"], "layout_aware", group_id
+                strategies_by_type["layout_aware"],
+                "layout_aware",
+                group_id,
+                config_path,
             )
             if layout_generators:
                 group_info["layout_aware"] = layout_generators
@@ -244,7 +257,10 @@ def _create_qa_generators(
         # Create logical_aware generators (all configs in the group)
         if strategies_by_type["logical_aware"]:
             logical_generators = _create_transform_generators(
-                strategies_by_type["logical_aware"], "logical_aware", group_id
+                strategies_by_type["logical_aware"],
+                "logical_aware",
+                group_id,
+                config_path,
             )
             if logical_generators:
                 group_info["logical_aware"] = logical_generators
@@ -255,6 +271,40 @@ def _create_qa_generators(
 
     logger.info(f"Created {len(generator_groups)} generator group(s)")
     return generator_groups
+
+
+def _collect_strategy_metadata(
+    generator_groups: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Collect lightweight metadata about configured QA strategies for serialization."""
+    strategies: List[Dict[str, Any]] = []
+
+    for group in generator_groups:
+        group_id = group.get("group_id")
+
+        if "semantic" in group:
+            _, semantic_config = group["semantic"]
+            strategies.append(
+                {
+                    "group_id": group_id,
+                    "strategy": "semantic",
+                    "provider": getattr(semantic_config, "provider", None),
+                    "model": getattr(semantic_config, "model", None),
+                }
+            )
+
+        for strategy_type in ("layout_aware", "logical_aware"):
+            for _, strategy_config in group.get(strategy_type, []):
+                strategies.append(
+                    {
+                        "group_id": group_id,
+                        "strategy": strategy_type,
+                        "provider": getattr(strategy_config, "provider", None),
+                        "model": getattr(strategy_config, "model", None),
+                    }
+                )
+
+    return strategies
 
 
 def _get_object_image(
@@ -365,6 +415,10 @@ def _generate_semantic_questions(
 
     for strategy, generator, strategy_config in semantic_generators:
         try:
+            image_available = obj_image is not None
+            logger.info(
+                f"[semantic/{strategy}] object {obj_id}: image_provided={image_available}"
+            )
             # Generate semantic question from context and target
             question = generator.generate(
                 context=truncated_context,
@@ -430,6 +484,10 @@ def _generate_transform_questions(
 
     for strategy, generator, strategy_config in transform_generators:
         try:
+            image_available = obj_image is not None
+            logger.info(
+                f"[transform/{strategy}] object {obj_id}: image_provided={image_available}"
+            )
             # Transform the semantic question
             transformed_question = generator.generate(
                 question=semantic_question,
@@ -585,6 +643,20 @@ def _generate_transform_questions_for_group(
     # Process layout_aware generators
     if "layout_aware" in group:
         for layout_generator, layout_config in group["layout_aware"]:
+            layout_provider = layout_config.provider
+            layout_model = layout_config.model or "default"
+
+            # Check if layout_aware question already exists for this exact combination
+            if _has_existing_qa_for_group(
+                obj, group_id, "layout_aware", layout_provider, layout_config.model
+            ):
+                logger.info(
+                    f"Skipping layout_aware for object {obj_id} "
+                    f"(group: '{group_id or 'default'}', provider: '{layout_provider}', "
+                    f"model: '{layout_model}'): already exists"
+                )
+                continue
+
             try:
                 transformed_question = layout_generator.generate(
                     question=semantic_question,
@@ -620,6 +692,20 @@ def _generate_transform_questions_for_group(
     # Process logical_aware generators
     if "logical_aware" in group:
         for logical_generator, logical_config in group["logical_aware"]:
+            logical_provider = logical_config.provider
+            logical_model = logical_config.model or "default"
+
+            # Check if logical_aware question already exists for this exact combination
+            if _has_existing_qa_for_group(
+                obj, group_id, "logical_aware", logical_provider, logical_config.model
+            ):
+                logger.info(
+                    f"Skipping logical_aware for object {obj_id} "
+                    f"(group: '{group_id or 'default'}', provider: '{logical_provider}', "
+                    f"model: '{logical_model}'): already exists"
+                )
+                continue
+
             try:
                 transformed_question = logical_generator.generate(
                     question=semantic_question,
@@ -655,6 +741,74 @@ def _generate_transform_questions_for_group(
     return num_generated
 
 
+def _has_existing_qa_for_group(
+    obj: Any,
+    group_id: Optional[str],
+    strategy: str,
+    provider: str,
+    model: Optional[str],
+) -> bool:
+    """Check if object already has QA pairs for a given strategy + provider + model + group_id combination.
+
+    Args:
+        obj: DocumentObject instance
+        group_id: Group ID to check (None means default group)
+        strategy: Strategy type to check (e.g., "semantic", "layout_aware", "logical_aware")
+        provider: Provider name to check
+        model: Model name to check (None means "default")
+
+    Returns:
+        True if a QA pair exists with matching strategy + provider + model + group_id, False otherwise
+    """
+    if not obj.qa:
+        return False
+
+    # Normalize model: None or empty string means "default"
+    expected_model = model or "default"
+
+    # Debug: log all existing QA pairs for this strategy
+    existing_qa_for_strategy = [
+        (
+            qa.strategy,
+            qa.extra.get("provider") if qa.extra else None,
+            qa.extra.get("model") if qa.extra else None,
+            qa.extra.get("group_id") if qa.extra else None,
+        )
+        for qa in obj.qa
+        if qa.strategy == strategy
+    ]
+    if existing_qa_for_strategy:
+        logger.debug(
+            f"Existing QA pairs for strategy '{strategy}': {existing_qa_for_strategy}, "
+            f"looking for provider='{provider}', model='{expected_model}', group_id='{group_id}'"
+        )
+
+    for qa_pair in obj.qa:
+        if qa_pair.strategy == strategy:
+            # Check if provider, model, and group_id all match
+            # These fields are stored in extra dict (from JSON parsing)
+            qa_extra = qa_pair.extra if qa_pair.extra else {}
+            qa_provider = qa_extra.get("provider")
+            qa_model = (
+                qa_extra.get("model") or "default"
+            )  # Normalize None/empty to "default"
+            qa_group_id = qa_extra.get("group_id")
+
+            # Check all four fields match
+            if (
+                qa_provider == provider
+                and qa_model == expected_model
+                and qa_group_id == group_id
+            ):
+                logger.debug(
+                    f"Found existing QA pair: strategy='{strategy}', "
+                    f"provider='{qa_provider}', model='{qa_model}', group_id='{qa_group_id}' "
+                    f"(looking for provider='{provider}', model='{expected_model}', group_id='{group_id}')"
+                )
+                return True
+    return False
+
+
 def _process_object_with_groups(
     obj_id: int,
     obj: Any,
@@ -680,7 +834,34 @@ def _process_object_with_groups(
     start_time = time.perf_counter()
 
     for group in generator_groups:
+        group_id = group.get("group_id")
+
+        # Get semantic config to check provider and model
+        if "semantic" not in group:
+            continue
+
+        semantic_generator, semantic_config = group["semantic"]
+        semantic_provider = semantic_config.provider
+        semantic_model = semantic_config.model or "default"
+
+        # Check if semantic question already exists for this exact combination
+        has_existing = _has_existing_qa_for_group(
+            obj, group_id, "semantic", semantic_provider, semantic_config.model
+        )
+        if has_existing:
+            logger.info(
+                f"Skipping semantic for object {obj_id} "
+                f"(group: '{group_id or 'default'}', provider: '{semantic_provider}', "
+                f"model: '{semantic_model}'): already exists"
+            )
+            continue
+
         # Stage 1: Generate semantic question for this group
+        logger.debug(
+            f"Generating semantic question for object {obj_id} "
+            f"(group: '{group_id or 'default'}', provider: '{semantic_provider}', "
+            f"model: '{semantic_model}')"
+        )
         semantic_question = _generate_semantic_question_for_group(
             obj, obj_id, obj_image, context, group, config
         )
@@ -690,6 +871,7 @@ def _process_object_with_groups(
         num_questions_generated += 1  # Count semantic question
 
         # Stage 2: Transform semantic question using layout_aware and logical_aware strategies
+        # Check each transform strategy individually before generating
         num_questions_generated += _generate_transform_questions_for_group(
             obj, obj_id, obj_image, semantic_question, group
         )
@@ -703,6 +885,7 @@ def process_document(
     json_path: Path,
     qa_config: QAGenerationConfig,
     config: Optional[Any] = None,
+    config_path: Optional[str] = None,
 ) -> Tuple[int, int]:
     """Process a single document to generate QA pairs.
 
@@ -711,6 +894,7 @@ def process_document(
         json_path: Path to the preprocessed JSON file
         qa_config: QA generation configuration from config.yml
         config: Config object to read max_model_len for vLLM (optional)
+        config_path: Path to config.yml for agent initialization (optional)
 
     Returns:
         Tuple of (num_objects_processed, num_questions_generated)
@@ -731,7 +915,7 @@ def process_document(
         return 0, 0
 
     # Create generator groups
-    generator_groups = _create_qa_generators(qa_config)
+    generator_groups = _create_qa_generators(qa_config, config_path=config_path)
     if not generator_groups:
         logger.error("No generator groups created, skipping file")
         return 0, 0
@@ -782,17 +966,30 @@ def process_document(
         if obj.qa:
             num_objects_processed += 1
 
-    # Write back to JSON file
-    output_data = result.to_dict()
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(output_data, f, ensure_ascii=False, indent=2)
-
     document_elapsed_time = time.perf_counter() - document_start_time
     avg_time_per_question = (
         total_question_time / num_questions_generated
         if num_questions_generated > 0
         else 0.0
     )
+
+    result.qa_metadata = RunMetadata(
+        runner_name="qa_batch",
+        timestamp=datetime.utcnow().isoformat() + "Z",
+        latency=document_elapsed_time * 1000.0,  # Convert to milliseconds
+        extra={
+            "objects_processed": num_objects_processed,
+            "questions_generated": num_questions_generated,
+            "average_time_per_question": avg_time_per_question,
+            "total_question_time": total_question_time,
+            "strategies_used": _collect_strategy_metadata(generator_groups),
+        },
+    )
+
+    # Write back to JSON file
+    output_data = result.to_dict()
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
 
     logger.info(
         f"Processed {num_objects_processed} objects, generated {num_questions_generated} questions "
@@ -808,6 +1005,7 @@ def process_batch(
     qa_config: QAGenerationConfig,
     processor_name: str = "paddleocr",
     config: Optional[Any] = None,
+    config_path: Optional[str] = None,
 ) -> Tuple[int, int, int]:
     """Process image files to generate QA pairs.
 
@@ -817,6 +1015,7 @@ def process_batch(
         qa_config: QA generation configuration from config.yml
         processor_name: Name of the processor used (for finding JSON files)
         config: Config object to read max_model_len for vLLM (optional)
+        config_path: Path to config.yml for agent initialization (optional)
 
     Returns:
         Tuple of (num_files_processed, total_objects_processed, total_questions_generated)
@@ -860,6 +1059,7 @@ def process_batch(
                 json_path=json_path,
                 qa_config=qa_config,
                 config=config,
+                config_path=config_path,
             )
 
             num_files_processed += 1
@@ -885,3 +1085,69 @@ def process_batch(
     )
 
     return num_files_processed, total_objects_processed, total_questions_generated
+
+
+def clean_document_qa(json_path: Path) -> Tuple[int, int]:
+    """Remove QA pairs from a single JSON document.
+
+    Args:
+        json_path: Path to the JSON file to clean
+
+    Returns:
+        Tuple of (objects_modified, qa_pairs_removed)
+    """
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    result = DocumentProcessResult.from_dict(data)
+
+    objects_modified = 0
+    qa_pairs_removed = 0
+
+    for obj in result.objects.values():
+        if obj.qa:
+            qa_pairs_removed += len(obj.qa)
+            obj.qa = []
+            objects_modified += 1
+
+    for obj in result.object_list:
+        if obj.qa:
+            obj.qa = []
+
+    if qa_pairs_removed > 0:
+        output_data = result.to_dict()
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=2)
+        logger.info(
+            f"Removed {qa_pairs_removed} QA pairs from {json_path.name} ({objects_modified} objects)"
+        )
+    else:
+        logger.info(f"No QA pairs found in {json_path.name}")
+
+    return objects_modified, qa_pairs_removed
+
+
+def clean_batch_qa(json_files: List[Path]) -> Tuple[int, int, int]:
+    """Clean QA pairs for multiple JSON files.
+
+    Args:
+        json_files: List of JSON file paths to clean
+
+    Returns:
+        Tuple of (files_processed, total_objects_modified, total_qa_removed)
+    """
+    files_processed = 0
+    total_objects_modified = 0
+    total_qa_removed = 0
+
+    for json_path in json_files:
+        if not json_path.exists():
+            logger.warning(f"Skipping missing JSON file: {json_path}")
+            continue
+
+        objects_modified, qa_removed = clean_document_qa(json_path)
+        files_processed += 1
+        total_objects_modified += objects_modified
+        total_qa_removed += qa_removed
+
+    return files_processed, total_objects_modified, total_qa_removed

@@ -65,6 +65,10 @@ preprocess:
   input_dir: ./data/datasets/docs2synth-dev/docs2synth-dev/images/
   # Default output directory (if not specified, uses data.processed_dir)
   output_dir: ./data/processed
+  # Optional: Downscale high-resolution images before processing
+  image_resize:
+    enabled: false
+    max_long_edge: 1280
 
 # Agent/LLM configuration (provider-driven presets)
 agent:

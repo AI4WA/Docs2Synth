@@ -11,9 +11,16 @@ from pathlib import Path
 from typing import Any
 
 import click
-from PIL import Image as PILImage
 
+from docs2synth.qa import QAVerificationConfig
+from docs2synth.qa.qa_batch import IMAGE_EXTENSIONS, find_json_for_image
+from docs2synth.qa.verify_batch import (
+    clean_batch_verification,
+    find_image_for_json,
+    process_document_verification,
+)
 from docs2synth.utils import get_logger
+from docs2synth.utils.config import Config
 
 logger = get_logger(__name__)
 
@@ -196,25 +203,7 @@ def verify_group(ctx: click.Context) -> None:
 
 
 @verify_group.command("run")
-@click.argument("question", type=str)
-@click.option(
-    "--answer",
-    type=str,
-    default=None,
-    help="Target answer (required for correctness verification)",
-)
-@click.option(
-    "--context",
-    type=str,
-    default=None,
-    help="Document context (required for meaningful verification)",
-)
-@click.option(
-    "--image",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to document image (optional)",
-)
+@click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.option(
     "--config-path",
     type=click.Path(exists=True),
@@ -222,97 +211,152 @@ def verify_group(ctx: click.Context) -> None:
     help="Path to config.yml (optional, uses ./config.yml if present)",
 )
 @click.option(
-    "--temperature",
-    type=float,
+    "--verifier-type",
+    type=str,
     default=None,
-    help="Sampling temperature for verifier (overrides config)",
-)
-@click.option(
-    "--max-tokens",
-    type=int,
-    default=None,
-    help="Maximum tokens for verifier (overrides config)",
+    help="Only run the specified verifier type (defaults to all configured verifiers)",
 )
 @click.pass_context
-def verify_run(
+def verify_run(  # noqa: C901
     ctx: click.Context,
-    question: str,
-    answer: str | None,
-    context: str | None,
-    image: str | None,
+    input_path: Path,
     config_path: str | None,
-    temperature: float | None,
-    max_tokens: int | None,
+    verifier_type: str | None,
 ) -> None:
-    """Verify a question using configured verifiers.
+    """Verify QA pairs in a single JSON file (minimal API).
 
-    QUESTION: The question to verify
+    INPUT_PATH: Path to a JSON file with QA pairs or the corresponding document image
 
-    Examples:
-        docs2synth verify run "What is the total?" --answer "42" --context "Invoice total: 42"
-        docs2synth verify run "What is shown?" --context "Document text" --image doc.png
+    The command will:
+      - Load verifiers from config.yml
+      - Resolve the matching JSON/Image pair
+      - Verify all QA pairs in the JSON and write results back
+
+    Example:
+        docs2synth verify run data/processed/dev/document_docling.json
+        docs2synth verify run data/images/document.png
     """
     try:
-        # Load verification config
-        verification_config, _ = _load_verification_config(config_path)
+        # Resolve config
+        if not config_path and Path("./config.yml").exists():
+            config_path = "./config.yml"
 
-        # Load image if provided
-        image_obj = None
-        if image:
-            image_obj = PILImage.open(image)
-            click.echo(click.style(f"Loaded image: {image}", fg="blue"))
-
-        # Display what we're verifying
-        click.echo(click.style("\nVerifying Question:", fg="cyan", bold=True))
-        click.echo(f"Question: {question}")
-        if answer:
-            click.echo(f"Answer: {answer}")
-        if context:
-            click.echo(f"Context: {context[:100]}...")
-        if image:
-            click.echo(f"Image: {image}")
-
-        # Run all configured verifiers
-        results = {}
-        for verifier_config in verification_config.verifiers:
-            result = _run_single_verifier(
-                verifier_config,
-                question,
-                answer,
-                context,
-                image_obj,
-                temperature,
-                max_tokens,
-            )
-            if result:
-                verifier_type = verifier_config.strategy
-                results[verifier_type] = result
-                _display_verification_result(result)
-
-        # Summary
-        if results:
-            click.echo(click.style("\n" + "=" * 50, fg="cyan"))
-            click.echo(click.style("Verification Summary:", fg="cyan", bold=True))
-            for verifier_type, result in results.items():
-                response = result.get("response", result.get("Response", "Unknown"))
-                if response.lower() == "yes":
-                    symbol, color = "✓", "green"
-                elif response.lower() == "no":
-                    symbol, color = "✗", "red"
-                else:
-                    symbol, color = "?", "yellow"
-                click.echo(
-                    click.style(
-                        f"  {symbol} {verifier_type}: {response}", fg=color, bold=True
-                    )
-                )
-        else:
+        if not config_path:
             click.echo(
                 click.style(
-                    "\n⚠ No verifiers were run (missing required inputs)",
-                    fg="yellow",
-                )
+                    "✗ Error: config.yml not found. Please specify --config-path or create config.yml",
+                    fg="red",
+                ),
+                err=True,
             )
+            sys.exit(1)
+
+        verification_config = QAVerificationConfig.from_yaml(str(config_path))
+        if verification_config is None:
+            click.echo(
+                click.style(
+                    "✗ Error: No verifiers configured in config.yml (qa.verifiers).",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+
+        if verifier_type:
+            verifier_config = verification_config.get_verifier_config(verifier_type)
+            if verifier_config is None:
+                available = ", ".join(verification_config.list_verifiers())
+                click.echo(
+                    click.style(
+                        f"✗ Error: Verifier type '{verifier_type}' not found in config. Available: {available}",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+            verification_config = QAVerificationConfig(verifiers=[verifier_config])
+
+        # Load config for locating paired files
+        image_dirs: list[Path] = []
+        json_dirs: list[Path] = []
+        processor_name = "docling"
+        try:
+            full_cfg = Config.from_yaml(str(config_path))
+            preprocess_input_dir = full_cfg.get("preprocess.input_dir")
+            preprocess_output_dir = full_cfg.get("preprocess.output_dir")
+            data_processed_dir = full_cfg.get("data.processed_dir")
+            processor_name = full_cfg.get("preprocess.processor", processor_name)
+            if preprocess_input_dir:
+                image_dirs.append(Path(preprocess_input_dir))
+            if preprocess_output_dir:
+                json_dirs.append(Path(preprocess_output_dir))
+            if data_processed_dir:
+                json_dirs.append(Path(data_processed_dir))
+        except Exception:
+            pass
+
+        # Resolve JSON and image paths based on input
+        if input_path.suffix.lower() == ".json":
+            json_path = input_path
+            image_dirs.insert(0, json_path.parent)
+            image_path = find_image_for_json(json_path, image_dirs)
+            if not image_path:
+                click.echo(
+                    click.style(
+                        f"✗ Error: Image not found for {json_path.name}",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+        else:
+            image_path = input_path
+            json_dirs.insert(0, image_path.parent)
+            json_path = None
+            for candidate_dir in json_dirs:
+                candidate = find_json_for_image(
+                    image_path, candidate_dir, processor_name
+                )
+                if candidate:
+                    json_path = candidate
+                    break
+            if json_path is None:
+                click.echo(
+                    click.style(
+                        f"✗ Error: JSON not found for {image_path.name}",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+
+        if json_path is None or image_path is None:
+            click.echo(
+                click.style(
+                    "✗ Error: Unable to resolve both JSON and image paths for input",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+
+        # Execute verification
+        num_objects, num_verified, num_passed = process_document_verification(
+            json_path=json_path,
+            image_path=image_path,
+            verification_config=verification_config,
+            config_path=str(config_path),
+        )
+
+        # Report
+        click.echo(
+            click.style(
+                f"Done! Processed {num_objects} objects, verified {num_verified} QA pairs, "
+                f"{num_passed} passed all verifiers",
+                fg="green",
+                bold=True,
+            )
+        )
 
     except Exception as e:
         logger.exception("Verification command failed")
@@ -513,3 +557,163 @@ def verify_batch(
         logger.exception("Batch verification command failed")
         click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
         sys.exit(1)
+
+
+@verify_group.command("clean")
+@click.argument("input_path", type=click.Path(path_type=Path), required=False)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Directory containing preprocessed JSON files (defaults to config.preprocess.output_dir)",
+)
+@click.option(
+    "--processor",
+    type=str,
+    default=None,
+    help="Processor name used for JSON files (defaults to config.preprocess.processor)",
+)
+@click.option(
+    "--config-path",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to config.yml (optional, uses ./config.yml if present)",
+)
+@click.pass_context
+def verify_clean(  # noqa: C901
+    ctx: click.Context,
+    input_path: Path | None,
+    output_dir: Path | None,
+    processor: str | None,
+    config_path: str | None,
+) -> None:
+    """Remove verification results from JSON outputs.
+
+    INPUT_PATH can be a JSON file, an image file, or a directory. When omitted,
+    all JSON files in config.preprocess.output_dir are cleaned.
+
+    Examples:
+        docs2synth verify clean data/processed/dev/document_docling.json
+        docs2synth verify clean data/images/document.png
+        docs2synth verify clean data/processed/dev
+        docs2synth verify clean --config-path config.yml
+    """
+    cfg: Config | None = None
+    if config_path:
+        cfg = Config.from_yaml(config_path)
+    else:
+        cfg = ctx.obj.get("config")
+        if cfg is None:
+            default_cfg = Path("./config.yml")
+            if default_cfg.exists():
+                cfg = Config.from_yaml(default_cfg)
+            else:
+                click.echo(
+                    click.style(
+                        "✗ Error: config.yml not found. Please specify --config-path or run from docs2synth CLI.",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+
+    if processor is None:
+        processor = cfg.get("preprocess.processor", "docling")
+
+    default_output_dir = cfg.get("preprocess.output_dir") or cfg.get(
+        "data.processed_dir"
+    )
+    if output_dir is None and default_output_dir is not None:
+        output_dir = Path(default_output_dir)
+    elif output_dir is not None:
+        output_dir = Path(output_dir)
+
+    json_files: set[Path] = set()
+
+    def collect_from_image(image_path: Path) -> None:
+        if output_dir is None:
+            click.echo(
+                click.style(
+                    "✗ Error: --output-dir is required when cleaning from image paths",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+        json_path = find_json_for_image(image_path, output_dir, processor)
+        if json_path:
+            json_files.add(json_path)
+        else:
+            click.echo(
+                click.style(
+                    f"⚠ Warning: JSON not found for image {image_path.name}",
+                    fg="yellow",
+                ),
+                err=True,
+            )
+
+    def collect_from_directory(directory: Path) -> None:
+        found_json = False
+        for json_path in directory.glob("*.json"):
+            json_files.add(json_path)
+            found_json = True
+        if found_json:
+            return
+        for ext in IMAGE_EXTENSIONS:
+            for image_path in directory.glob(f"*{ext}"):
+                collect_from_image(image_path)
+
+    if input_path is None:
+        if output_dir is None or not output_dir.exists():
+            click.echo(
+                click.style(
+                    "✗ Error: No OUTPUT_DIR configured. Provide --output-dir or set config.preprocess.output_dir",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+        collect_from_directory(output_dir)
+    else:
+        input_path = Path(input_path)
+        if input_path.is_file():
+            if input_path.suffix.lower() == ".json":
+                json_files.add(input_path)
+            elif input_path.suffix.lower() in IMAGE_EXTENSIONS:
+                collect_from_image(input_path)
+            else:
+                click.echo(
+                    click.style(
+                        f"✗ Error: Unsupported file type: {input_path}",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+        elif input_path.is_dir():
+            collect_from_directory(input_path)
+        else:
+            click.echo(
+                click.style(
+                    f"✗ Error: Input path does not exist: {input_path}",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+
+    if not json_files:
+        click.echo(click.style("⚠ No JSON files found to clean", fg="yellow"), err=True)
+        return
+
+    files_processed, pairs_modified, entries_removed = clean_batch_verification(
+        sorted(json_files)
+    )
+
+    click.echo(
+        click.style(
+            f"Cleaned {files_processed} file(s): cleared verification results from {pairs_modified} QA pairs (removed {entries_removed} verifier responses)",
+            fg="green",
+            bold=True,
+        )
+    )

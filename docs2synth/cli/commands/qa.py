@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import click
-from PIL import Image as PILImage
 
+from docs2synth.qa.qa_batch import IMAGE_EXTENSIONS, clean_batch_qa, find_json_for_image
 from docs2synth.utils import get_logger
 from docs2synth.utils.text import truncate_context
 
@@ -271,416 +271,175 @@ def qa_group(ctx: click.Context) -> None:
     pass
 
 
-@qa_group.command("semantic")
-@click.argument("context", type=str)
-@click.argument("target", type=str)
-@click.option(
-    "--provider",
-    type=str,
-    default="openai",
-    show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
-)
-@click.option(
-    "--model",
-    type=str,
-    default=None,
-    help="Model name (optional, uses provider default if not specified)",
-)
+@qa_group.command("run")
+@click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.option(
     "--config-path",
     type=click.Path(exists=True),
     default=None,
-    help="Path to config.yml (optional, uses DOCS2SYNTH_CONFIG env var or ./config.yml if set)",
-)
-@click.option(
-    "--temperature",
-    type=float,
-    default=0.7,
-    show_default=True,
-    help="Sampling temperature (0.0-2.0)",
-)
-@click.option(
-    "--max-tokens",
-    type=int,
-    default=None,
-    help="Maximum tokens to generate",
-)
-@click.option(
-    "--image",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to document image (optional, for vision models)",
-)
-@click.pass_context
-def qa_semantic(
-    ctx: click.Context,
-    context: str,
-    target: str,
-    provider: str,
-    model: str | None,
-    config_path: str | None,
-    temperature: float,
-    max_tokens: int | None,
-    image: str | None,
-) -> None:
-    """Generate semantic question from context and target.
-
-    CONTEXT: Document context (e.g., OCR text from document)
-    TARGET: Target answer or object to generate question for
-
-    Examples:
-        docs2synth qa semantic "Form contains name, address fields" "John Doe"
-        docs2synth qa semantic "Context here" "Target" --provider anthropic --image doc.png
-    """
-    from docs2synth.qa import QAGeneratorFactory
-
-    try:
-        # Resolve config_path
-        if not config_path and Path("./config.yml").exists():
-            config_path = "./config.yml"
-
-        gen_kwargs: dict[str, Any] = {
-            "temperature": temperature,
-        }
-        if max_tokens is not None:
-            gen_kwargs["max_tokens"] = max_tokens
-
-        # Load image if provided
-        if image:
-            img = PILImage.open(image)
-            gen_kwargs["image"] = img
-
-        click.echo(
-            click.style(f"Generating semantic question with {provider}...", fg="blue")
-        )
-
-        # Truncate context if too long
-        truncated_context, was_truncated = truncate_context(
-            context,
-            max_tokens=max_tokens,
-            provider=provider,
-            model=model,
-        )
-        if was_truncated:
-            click.echo(
-                click.style(
-                    f"⚠ Warning: Context length ({len(context)} chars) exceeds maximum. "
-                    f"Truncated to {len(truncated_context)} chars.",
-                    fg="yellow",
-                ),
-                err=True,
-            )
-
-        generator = QAGeneratorFactory.create(
-            strategy="semantic",
-            provider=provider,
-            model=model,
-            config_path=config_path,
-        )
-
-        question = generator.generate(
-            context=truncated_context, target=target, **gen_kwargs
-        )
-
-        click.echo(click.style("\nGenerated Question:", fg="green", bold=True))
-        click.echo(question)
-
-    except Exception as e:
-        logger.exception("QA semantic generation failed")
-        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
-        sys.exit(1)
-
-
-@qa_group.command("layout")
-@click.argument("question", type=str)
-@click.option(
-    "--provider",
-    type=str,
-    default="openai",
-    show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
-)
-@click.option(
-    "--model",
-    type=str,
-    default=None,
-    help="Model name (optional, uses provider default if not specified)",
-)
-@click.option(
-    "--config-path",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to config.yml (optional, uses DOCS2SYNTH_CONFIG env var or ./config.yml if set)",
-)
-@click.option(
-    "--temperature",
-    type=float,
-    default=0.7,
-    show_default=True,
-    help="Sampling temperature (0.0-2.0)",
-)
-@click.option(
-    "--max-tokens",
-    type=int,
-    default=None,
-    help="Maximum tokens to generate",
-)
-@click.option(
-    "--image",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to document image (recommended for understanding spatial layout)",
-)
-@click.pass_context
-def qa_layout(
-    ctx: click.Context,
-    question: str,
-    provider: str,
-    model: str | None,
-    config_path: str | None,
-    temperature: float,
-    max_tokens: int | None,
-    image: str | None,
-) -> None:
-    """Transform question to layout-aware (spatial position) question.
-
-    QUESTION: Original question to transform
-
-    Examples:
-        docs2synth qa layout "What is the name?"
-        docs2synth qa layout "What is the address?" --provider anthropic --image doc.png
-    """
-    from docs2synth.qa import QAGeneratorFactory
-
-    try:
-        # Resolve config_path
-        if not config_path and Path("./config.yml").exists():
-            config_path = "./config.yml"
-
-        gen_kwargs: dict[str, Any] = {
-            "temperature": temperature,
-        }
-        if max_tokens is not None:
-            gen_kwargs["max_tokens"] = max_tokens
-
-        # Load image if provided
-        if image:
-            img = PILImage.open(image)
-            gen_kwargs["image"] = img
-
-        click.echo(
-            click.style(
-                f"Generating layout-aware question with {provider}...", fg="blue"
-            )
-        )
-
-        generator = QAGeneratorFactory.create(
-            strategy="layout_aware",
-            provider=provider,
-            model=model,
-            config_path=config_path,
-        )
-
-        layout_question = generator.generate(question=question, **gen_kwargs)
-
-        click.echo(click.style("\nOriginal Question:", fg="yellow", bold=True))
-        click.echo(question)
-        click.echo(click.style("\nLayout-Aware Question:", fg="green", bold=True))
-        click.echo(layout_question)
-
-    except Exception as e:
-        logger.exception("QA layout generation failed")
-        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
-        sys.exit(1)
-
-
-@qa_group.command("logical")
-@click.argument("question", type=str)
-@click.option(
-    "--provider",
-    type=str,
-    default="openai",
-    show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
-)
-@click.option(
-    "--model",
-    type=str,
-    default=None,
-    help="Model name (optional, uses provider default if not specified)",
-)
-@click.option(
-    "--config-path",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to config.yml (optional, uses DOCS2SYNTH_CONFIG env var or ./config.yml if set)",
-)
-@click.option(
-    "--temperature",
-    type=float,
-    default=0.7,
-    show_default=True,
-    help="Sampling temperature (0.0-2.0)",
-)
-@click.option(
-    "--max-tokens",
-    type=int,
-    default=None,
-    help="Maximum tokens to generate",
-)
-@click.option(
-    "--image",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to document image (optional, can help understand document structure)",
-)
-@click.pass_context
-def qa_logical(
-    ctx: click.Context,
-    question: str,
-    provider: str,
-    model: str | None,
-    config_path: str | None,
-    temperature: float,
-    max_tokens: int | None,
-    image: str | None,
-) -> None:
-    """Transform question to logical-aware (document sections) question.
-
-    QUESTION: Original question to transform
-
-    Examples:
-        docs2synth qa logical "What is the address?"
-        docs2synth qa logical "What is the name?" --provider anthropic --image doc.png
-    """
-    from docs2synth.qa import QAGeneratorFactory
-
-    try:
-        # Resolve config_path
-        if not config_path and Path("./config.yml").exists():
-            config_path = "./config.yml"
-
-        gen_kwargs: dict[str, Any] = {
-            "temperature": temperature,
-        }
-        if max_tokens is not None:
-            gen_kwargs["max_tokens"] = max_tokens
-
-        # Load image if provided
-        if image:
-            img = PILImage.open(image)
-            gen_kwargs["image"] = img
-
-        click.echo(
-            click.style(
-                f"Generating logical-aware question with {provider}...", fg="blue"
-            )
-        )
-
-        generator = QAGeneratorFactory.create(
-            strategy="logical_aware",
-            provider=provider,
-            model=model,
-            config_path=config_path,
-        )
-
-        logical_question = generator.generate(question=question, **gen_kwargs)
-
-        click.echo(click.style("\nOriginal Question:", fg="yellow", bold=True))
-        click.echo(question)
-        click.echo(click.style("\nLogical-Aware Question:", fg="green", bold=True))
-        click.echo(logical_question)
-
-    except Exception as e:
-        logger.exception("QA logical generation failed")
-        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
-        sys.exit(1)
-
-
-@qa_group.command("generate")
-@click.argument("context", type=str)
-@click.argument("target", type=str)
-@click.option(
-    "--config-path",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to config.yml (optional, uses DOCS2SYNTH_CONFIG env var or ./config.yml if set)",
-)
-@click.option(
-    "--image",
-    type=click.Path(exists=True),
-    default=None,
-    help="Path to document image (optional, for vision models)",
+    help="Path to config.yml (optional, uses ./config.yml if present)",
 )
 @click.option(
     "--strategy",
     type=str,
     default=None,
-    help="Specific strategy to use (optional, uses all configured strategies if not specified)",
+    help="Only run the specified strategy (defaults to all configured strategies)",
 )
 @click.pass_context
-def qa_generate(
+def qa_run(  # noqa: C901
     ctx: click.Context,
-    context: str,
-    target: str,
+    input_path: Path,
     config_path: str | None,
-    image: str | None,
     strategy: str | None,
 ) -> None:
-    """Generate QA questions using strategies configured in config.yml.
+    """Run QA generation for a single document (image or JSON).
 
-    CONTEXT: Document context (e.g., OCR text from document)
-    TARGET: Target answer or object to generate question for
-
-    This command reads QA generation strategies from config.yml and generates
-    questions using all configured strategies (or a specific one if --strategy is provided).
+    INPUT_PATH can be either a preprocessed JSON file with OCR results or the
+    corresponding document image. The command will locate the paired file,
+    generate QA pairs using configured strategies, and write the results back to
+    the JSON file.
 
     Examples:
-        docs2synth qa generate "Form contains name, address fields" "John Doe"
-        docs2synth qa generate "Context here" "Target" --image doc.png
-        docs2synth qa generate "Context" "Target" --strategy semantic
+        docs2synth qa run data/processed/dev/document_docling.json
+        docs2synth qa run data/datasets/docs2synth-dev/docs2synth-dev/images/document.png
+        docs2synth qa run data/.../document.png --strategy semantic
     """
-    try:
-        # Load configuration
-        qa_config, config_path = _load_qa_config(config_path)
-        strategies_to_run = _filter_strategies(qa_config, strategy)
+    from docs2synth.qa import QAGenerationConfig
+    from docs2synth.qa.qa_batch import find_json_for_image, process_document
+    from docs2synth.qa.verify_batch import find_image_for_json
+    from docs2synth.utils.config import Config
 
-        # Load image if provided
-        image_obj = None
-        if image:
-            image_obj = PILImage.open(image)
+    try:
+        # Resolve configuration
+        resolved_config_path = None
+        if config_path:
+            cfg = Config.from_yaml(config_path)
+            resolved_config_path = config_path
+        else:
+            cfg = ctx.obj.get("config")
+            if cfg is None:
+                default_cfg = Path("./config.yml")
+                if default_cfg.exists():
+                    cfg = Config.from_yaml(default_cfg)
+                    resolved_config_path = str(default_cfg)
+                else:
+                    click.echo(
+                        click.style(
+                            "✗ Error: config.yml not found. Please specify --config-path or create config.yml",
+                            fg="red",
+                        ),
+                        err=True,
+                    )
+                    sys.exit(1)
+            else:
+                default_cfg = Path("./config.yml")
+                if default_cfg.exists():
+                    resolved_config_path = str(default_cfg)
+
+        qa_config = QAGenerationConfig.from_config(cfg)
+        if qa_config is None or not qa_config.strategies:
+            click.echo(
+                click.style(
+                    "✗ Error: No QA strategies found in config.yml. Please configure 'qa' section.",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+
+        strategies_to_run = _filter_strategies(qa_config, strategy)
+        filtered_qa_config = QAGenerationConfig(strategies=strategies_to_run)
+
+        # Resolve paired image/JSON paths
+        input_path = Path(input_path)
+        processor_name = cfg.get("preprocess.processor", "docling")
+        preprocess_input_dir = cfg.get("preprocess.input_dir")
+        preprocess_output_dir = cfg.get("preprocess.output_dir")
+        data_processed_dir = cfg.get("data.processed_dir")
+
+        json_path: Optional[Path] = None
+        image_path: Optional[Path] = None
+
+        if input_path.suffix.lower() == ".json":
+            json_path = input_path
+            image_dirs = [json_path.parent]
+            if preprocess_input_dir:
+                image_dirs.append(Path(preprocess_input_dir))
+            image_path = find_image_for_json(json_path, image_dirs)
+            if not image_path:
+                click.echo(
+                    click.style(
+                        f"✗ Error: Image not found for {json_path.name}",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+        else:
+            image_path = input_path
+            candidate_dirs = []
+            if preprocess_output_dir:
+                candidate_dirs.append(Path(preprocess_output_dir))
+            if data_processed_dir:
+                candidate_dirs.append(Path(data_processed_dir))
+            candidate_dirs.append(image_path.parent)
+
+            json_path = None
+            for candidate_dir in candidate_dirs:
+                candidate = find_json_for_image(
+                    image_path, candidate_dir, processor_name
+                )
+                if candidate:
+                    json_path = candidate
+                    break
+
+            if json_path is None:
+                click.echo(
+                    click.style(
+                        f"✗ Error: JSON not found for {image_path.name}",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+
+        if json_path is None or image_path is None:
+            click.echo(
+                click.style(
+                    "✗ Error: Unable to resolve both JSON and image paths for input",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
 
         click.echo(
             click.style(
-                f"Generating QA questions using {len(strategies_to_run)} strategy(ies) from config...",
+                f"Generating QA pairs using {len(strategies_to_run)} strategy(ies) from config...",
                 fg="blue",
                 bold=True,
             )
         )
 
-        # First pass: Generate semantic questions
-        semantic_strategies = [s for s in strategies_to_run if s.strategy == "semantic"]
-        results, semantic_question = _run_semantic_strategies(
-            semantic_strategies, context, target, image_obj, config_path
+        # Run generation
+        num_objects, num_questions = process_document(
+            image_path=image_path,
+            json_path=json_path,
+            qa_config=filtered_qa_config,
+            config=cfg,
+            config_path=resolved_config_path,
         )
 
-        # Second pass: Transform questions (layout_aware, logical_aware)
-        transform_strategies = [
-            s
-            for s in strategies_to_run
-            if s.strategy in ["layout_aware", "logical_aware"]
-        ]
-        transform_results = _run_transform_strategies(
-            transform_strategies, semantic_question, image_obj, config_path
+        click.echo(
+            click.style(
+                f"Done! Processed {json_path.name}: {num_objects} objects, {num_questions} questions",
+                fg="green",
+                bold=True,
+            )
         )
-        results.extend(transform_results)
-
-        # Print summary
-        _print_qa_summary(results)
 
     except Exception as e:
-        logger.exception("QA generate command failed")
+        logger.exception("QA run command failed")
         click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
         sys.exit(1)
 
@@ -850,3 +609,147 @@ def qa_batch(
         logger.exception("Batch QA command failed")
         click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
         sys.exit(1)
+
+
+@qa_group.command("clean")
+@click.argument("input_path", type=click.Path(path_type=Path), required=False)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Directory containing preprocessed JSON files (defaults to config.preprocess.output_dir)",
+)
+@click.option(
+    "--processor",
+    type=str,
+    default=None,
+    help="Processor name used for JSON files (defaults to config.preprocess.processor)",
+)
+@click.pass_context
+def qa_clean(  # noqa: C901
+    ctx: click.Context,
+    input_path: Path | None,
+    output_dir: Path | None,
+    processor: str | None,
+) -> None:
+    """Remove QA pairs from JSON outputs.
+
+    INPUT_PATH can be a JSON file, an image file, or a directory. When omitted,
+    all JSON files in config.preprocess.output_dir are cleaned.
+
+    Examples:
+        docs2synth qa clean data/processed/dev/document_docling.json
+        docs2synth qa clean data/images/document.png
+        docs2synth qa clean data/processed/dev
+        docs2synth qa clean
+    """
+    cfg = ctx.obj.get("config")
+    if cfg is None:
+        click.echo(
+            click.style(
+                "✗ Error: Configuration not loaded. Run command via docs2synth CLI.",
+                fg="red",
+            ),
+            err=True,
+        )
+        sys.exit(1)
+
+    if processor is None:
+        processor = cfg.get("preprocess.processor", "docling")
+
+    # Determine output directory when needed
+    default_output_dir = cfg.get("preprocess.output_dir") or cfg.get(
+        "data.processed_dir"
+    )
+    if output_dir is None and default_output_dir is not None:
+        output_dir = Path(default_output_dir)
+    elif output_dir is not None:
+        output_dir = Path(output_dir)
+
+    json_files: set[Path] = set()
+
+    def collect_from_image(image_path: Path) -> None:
+        if output_dir is None:
+            click.echo(
+                click.style(
+                    "✗ Error: --output-dir is required when cleaning from image paths",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+        json_path = find_json_for_image(image_path, output_dir, processor)
+        if json_path:
+            json_files.add(json_path)
+        else:
+            click.echo(
+                click.style(
+                    f"⚠ Warning: JSON not found for image {image_path.name}",
+                    fg="yellow",
+                ),
+                err=True,
+            )
+
+    def collect_from_directory(directory: Path) -> None:
+        found_json = False
+        for json_path in directory.glob("*.json"):
+            json_files.add(json_path)
+            found_json = True
+        if found_json:
+            return
+        for ext in IMAGE_EXTENSIONS:
+            for image_path in directory.glob(f"*{ext}"):
+                collect_from_image(image_path)
+
+    if input_path is None:
+        if output_dir is None or not output_dir.exists():
+            click.echo(
+                click.style(
+                    "✗ Error: No OUTPUT_DIR configured. Provide --output-dir or set config.preprocess.output_dir",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+        collect_from_directory(output_dir)
+    else:
+        input_path = Path(input_path)
+        if input_path.is_file():
+            if input_path.suffix.lower() == ".json":
+                json_files.add(input_path)
+            elif input_path.suffix.lower() in IMAGE_EXTENSIONS:
+                collect_from_image(input_path)
+            else:
+                click.echo(
+                    click.style(
+                        f"✗ Error: Unsupported file type: {input_path}",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+        elif input_path.is_dir():
+            collect_from_directory(input_path)
+        else:
+            click.echo(
+                click.style(
+                    f"✗ Error: Input path does not exist: {input_path}",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+
+    if not json_files:
+        click.echo(click.style("⚠ No JSON files found to clean", fg="yellow"), err=True)
+        return
+
+    files_processed, objects_modified, qa_removed = clean_batch_qa(sorted(json_files))
+
+    click.echo(
+        click.style(
+            f"Cleaned {files_processed} file(s): removed {qa_removed} QA pairs from {objects_modified} objects",
+            fg="green",
+            bold=True,
+        )
+    )
