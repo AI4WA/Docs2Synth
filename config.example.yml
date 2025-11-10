@@ -68,7 +68,7 @@ preprocess:
 
 # Agent/LLM configuration (provider-driven presets)
 agent:
-  # Choose active provider here: openai | anthropic | gemini | doubao | ollama | huggingface
+  # Choose active provider here: openai | anthropic | gemini | doubao | ollama | huggingface | vllm
   provider: openai
 
   # Centralized API keys used to backfill per-provider configs
@@ -131,6 +131,55 @@ agent:
     load_in_4bit: false
     # If not provided here, will backfill from agent.keys.huggingface_token
     # hf_token: YOUR-HF-TOKEN
+
+  vllm:
+    # vLLM provider for high-performance local LLM inference
+    # Uses OpenAI-compatible API server mode
+    # Start server: docs2synth agent vllm-server
+    # Or manually: python -m vllm.entrypoints.openai.api_server --model <model_name>
+
+    # Model name/identifier (Hugging Face model ID or local path)
+    model: meta-llama/Llama-2-7b-chat-hf
+
+    # vLLM server URL (default: http://localhost:8000/v1)
+    base_url: http://localhost:8000/v1
+
+    # Optional API key (vLLM typically doesn't require auth)
+    # api_key: null
+
+    # ---- Server Startup Parameters (used by 'docs2synth agent vllm-server') ----
+    # These parameters are used when starting the vLLM server
+    trust_remote_code: true  # Required for some models (e.g., Qwen, Phi)
+    max_model_len: 4096  # Maximum sequence length
+    gpu_memory_utilization: 0.9  # GPU memory utilization (0.0-1.0)
+    # tensor_parallel_size: 1  # Number of GPUs to use for tensor parallelism
+
+    # ---- Generation Parameters ----
+    temperature: 0.7
+    max_tokens: 1000
+    top_p: 1
+    frequency_penalty: 0
+    presence_penalty: 0
+    stop: null
+
+    # ---- Example configurations for different use cases ----
+
+    # Example 1: Vision-Language Model
+    # model: Qwen/Qwen-VL-Chat
+    # trust_remote_code: true
+    # max_model_len: 2048  # Adjust based on GPU memory
+    # gpu_memory_utilization: 0.9
+
+    # Example 2: Large Model with Multi-GPU
+    # model: meta-llama/Llama-2-70b-chat-hf
+    # tensor_parallel_size: 4  # Use 4 GPUs
+    # gpu_memory_utilization: 0.95
+    # max_model_len: 4096
+
+    # Example 3: Remote vLLM Server
+    # model: meta-llama/Llama-2-7b-chat-hf
+    # base_url: http://remote-server:8000/v1
+    # api_key: your-api-key-if-needed
 
 # QA Generation configuration
 # Configure multiple QA generation strategies with different providers, models, and prompts

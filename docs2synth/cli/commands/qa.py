@@ -14,6 +14,7 @@ import click
 from PIL import Image as PILImage
 
 from docs2synth.utils import get_logger
+from docs2synth.utils.text import truncate_context
 
 logger = get_logger(__name__)
 
@@ -95,6 +96,38 @@ def _run_semantic_strategies(
     results = []
     semantic_question = None
 
+    # Truncate context if too long (use first strategy config for model info)
+    strategy_config_for_truncation = (
+        semantic_strategies[0] if semantic_strategies else None
+    )
+    truncated_context, was_truncated = truncate_context(
+        context,
+        max_tokens=(
+            strategy_config_for_truncation.max_tokens
+            if strategy_config_for_truncation
+            else None
+        ),
+        provider=(
+            strategy_config_for_truncation.provider
+            if strategy_config_for_truncation
+            else None
+        ),
+        model=(
+            strategy_config_for_truncation.model
+            if strategy_config_for_truncation
+            else None
+        ),
+    )
+    if was_truncated:
+        click.echo(
+            click.style(
+                f"⚠ Warning: Context length ({len(context)} chars) exceeds maximum. "
+                f"Truncated to {len(truncated_context)} chars.",
+                fg="yellow",
+            ),
+            err=True,
+        )
+
     for strategy_config in semantic_strategies:
         try:
             model_display = (
@@ -112,7 +145,9 @@ def _run_semantic_strategies(
             )
             gen_kwargs = _build_qa_gen_kwargs(strategy_config, image_obj)
 
-            question = generator.generate(context=context, target=target, **gen_kwargs)
+            question = generator.generate(
+                context=truncated_context, target=target, **gen_kwargs
+            )
             semantic_question = question
             results.append(
                 {
@@ -244,7 +279,7 @@ def qa_group(ctx: click.Context) -> None:
     type=str,
     default="openai",
     show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface)",
+    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
 )
 @click.option(
     "--model",
@@ -320,6 +355,23 @@ def qa_semantic(
             click.style(f"Generating semantic question with {provider}...", fg="blue")
         )
 
+        # Truncate context if too long
+        truncated_context, was_truncated = truncate_context(
+            context,
+            max_tokens=max_tokens,
+            provider=provider,
+            model=model,
+        )
+        if was_truncated:
+            click.echo(
+                click.style(
+                    f"⚠ Warning: Context length ({len(context)} chars) exceeds maximum. "
+                    f"Truncated to {len(truncated_context)} chars.",
+                    fg="yellow",
+                ),
+                err=True,
+            )
+
         generator = QAGeneratorFactory.create(
             strategy="semantic",
             provider=provider,
@@ -327,7 +379,9 @@ def qa_semantic(
             config_path=config_path,
         )
 
-        question = generator.generate(context=context, target=target, **gen_kwargs)
+        question = generator.generate(
+            context=truncated_context, target=target, **gen_kwargs
+        )
 
         click.echo(click.style("\nGenerated Question:", fg="green", bold=True))
         click.echo(question)
@@ -345,7 +399,7 @@ def qa_semantic(
     type=str,
     default="openai",
     show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface)",
+    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
 )
 @click.option(
     "--model",
@@ -448,7 +502,7 @@ def qa_layout(
     type=str,
     default="openai",
     show_default=True,
-    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface)",
+    help="Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm)",
 )
 @click.option(
     "--model",
@@ -782,6 +836,7 @@ def qa_batch(
             output_dir=output_dir,
             qa_config=qa_config,
             processor_name=processor,
+            config=cfg,
         )
 
         click.echo(

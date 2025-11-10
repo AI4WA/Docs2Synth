@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from docs2synth.agent.wrapper import AgentWrapper
 from docs2synth.qa.generators.base import BaseQAGenerator
+from docs2synth.utils.text import truncate_context
 
 
 class SemanticQAGenerator(BaseQAGenerator):
@@ -76,8 +77,38 @@ class SemanticQAGenerator(BaseQAGenerator):
         if image is None:
             image = kwargs.pop("image", None)
 
+        # Truncate context if too long
+        # Note: In batch processing, context is already truncated in qa_batch.py
+        # This truncation is for direct calls (e.g., from CLI)
+        # Get provider and model from agent if available
+        provider = None
+        model = None
+        max_model_len = kwargs.pop(
+            "max_model_len", None
+        )  # Allow passing max_model_len via kwargs
+        if hasattr(self.agent, "provider_name"):
+            provider = self.agent.provider_name
+        if hasattr(self.agent, "model"):
+            model = self.agent.model
+
+        # Always truncate to ensure we don't exceed limits
+        # Even if context was truncated before, we need to ensure it's within limits
+        # (in case truncation parameters changed or context was truncated with different settings)
+        truncated_context, was_truncated = truncate_context(
+            context,
+            max_tokens=max_tokens,
+            provider=provider,
+            model=model,
+            max_model_len=max_model_len,
+        )
+        if was_truncated:
+            self.logger.warning(
+                f"Context truncated in semantic generator (original length: {len(context)} chars, "
+                f"truncated to: {len(truncated_context)} chars)"
+            )
+
         # Format prompt
-        prompt = self.prompt_template.format(context=context, target=target)
+        prompt = self.prompt_template.format(context=truncated_context, target=target)
 
         # Pass image to agent if provided
         if image is not None:

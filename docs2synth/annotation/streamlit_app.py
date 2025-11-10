@@ -565,6 +565,18 @@ def render_image_panel():
     with col2:
         # Original size info
         st.caption(f"📐 {image.width}×{image.height}")
+        # Show PDF page info if applicable
+        if st.session_state.data_manager and st.session_state.data_manager.is_pdf:
+            current = state.get_current_qa()
+            if current and current[3]:  # obj exists
+                obj = current[3]
+                page_num = obj.page if obj.page is not None else 0
+                total_pages = (
+                    len(st.session_state.data_manager.current_page_images)
+                    if st.session_state.data_manager.current_page_images
+                    else 1
+                )
+                st.caption(f"📄 Page {page_num + 1}/{total_pages}")
 
     # Show cropped or full image
     _render_image_display(image, obj, obj_id, show_cropped)

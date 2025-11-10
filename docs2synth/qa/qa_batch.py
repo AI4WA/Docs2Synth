@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -20,6 +21,7 @@ from docs2synth.preprocess.schema import DocumentProcessResult, QAPair
 from docs2synth.qa import QAGeneratorFactory
 from docs2synth.qa.config import QAGenerationConfig, QAStrategyConfig
 from docs2synth.utils.pdf_images import get_pdf_images
+from docs2synth.utils.text import truncate_context
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +305,7 @@ def _generate_semantic_questions(
     obj_image: PILImage.Image,
     context: str,
     semantic_generators: List[Tuple[str, Any, Any]],
+    config: Optional[Any] = None,
 ) -> Tuple[Optional[str], int]:
     """Generate semantic questions for an object.
 
@@ -312,6 +315,7 @@ def _generate_semantic_questions(
         obj_image: Image for this object
         context: Document context
         semantic_generators: List of (strategy, generator, config) tuples
+        config: Config object to read max_model_len for vLLM (optional)
 
     Returns:
         Tuple of (first semantic question generated, number of questions generated)
@@ -319,11 +323,51 @@ def _generate_semantic_questions(
     semantic_question = None
     num_generated = 0
 
+    # Truncate context if too long (use first strategy config for model info)
+    strategy_config_for_truncation = (
+        semantic_generators[0][2] if semantic_generators else None
+    )
+
+    # Get max_model_len from config for vLLM
+    max_model_len = None
+    if (
+        config
+        and strategy_config_for_truncation
+        and strategy_config_for_truncation.provider
+    ):
+        if "vllm" in strategy_config_for_truncation.provider.lower():
+            max_model_len = config.get("agent.vllm.max_model_len")
+
+    truncated_context, was_truncated = truncate_context(
+        context,
+        max_tokens=(
+            strategy_config_for_truncation.max_tokens
+            if strategy_config_for_truncation
+            else None
+        ),
+        provider=(
+            strategy_config_for_truncation.provider
+            if strategy_config_for_truncation
+            else None
+        ),
+        model=(
+            strategy_config_for_truncation.model
+            if strategy_config_for_truncation
+            else None
+        ),
+        max_model_len=max_model_len,
+    )
+    if was_truncated:
+        logger.warning(
+            f"Context truncated for object {obj_id} "
+            f"(original length: {len(context)} chars, truncated to: {len(truncated_context)} chars)"
+        )
+
     for strategy, generator, strategy_config in semantic_generators:
         try:
             # Generate semantic question from context and target
             question = generator.generate(
-                context=context,
+                context=truncated_context,
                 target=obj.text,
                 image=obj_image,
                 temperature=strategy_config.temperature,
@@ -430,6 +474,7 @@ def _generate_semantic_question_for_group(
     obj_image: PILImage.Image,
     context: str,
     group: Dict[str, Any],
+    config: Optional[Any] = None,
 ) -> Optional[str]:
     """Generate semantic question for an object using a generator group.
 
@@ -439,6 +484,7 @@ def _generate_semantic_question_for_group(
         obj_image: Image for this object
         context: Document context
         group: Generator group dictionary
+        config: Config object to read max_model_len for vLLM (optional)
 
     Returns:
         Semantic question string or None if generation fails
@@ -449,13 +495,42 @@ def _generate_semantic_question_for_group(
     group_id = group.get("group_id")
     semantic_generator, semantic_config = group["semantic"]
 
+    # Get max_model_len from config for vLLM
+    max_model_len = None
+    if (
+        config
+        and semantic_config.provider
+        and "vllm" in semantic_config.provider.lower()
+    ):
+        max_model_len = config.get("agent.vllm.max_model_len")
+
+    # Truncate context if too long
+    truncated_context, was_truncated = truncate_context(
+        context,
+        max_tokens=semantic_config.max_tokens,
+        provider=semantic_config.provider,
+        model=semantic_config.model,
+        max_model_len=max_model_len,
+    )
+    if was_truncated:
+        logger.warning(
+            f"Context truncated for object {obj_id} (group: {group_id or 'default'}, "
+            f"original length: {len(context)} chars, truncated to: {len(truncated_context)} chars)"
+        )
+
     try:
+        # Pass max_model_len via kwargs so semantic generator can use it for truncation if needed
+        gen_kwargs = {}
+        if max_model_len is not None:
+            gen_kwargs["max_model_len"] = max_model_len
+
         question = semantic_generator.generate(
-            context=context,
+            context=truncated_context,
             target=obj.text,
             image=obj_image,
             temperature=semantic_config.temperature,
             max_tokens=semantic_config.max_tokens,
+            **gen_kwargs,
         )
         semantic_question = question.strip()
 
@@ -586,7 +661,8 @@ def _process_object_with_groups(
     obj_image: PILImage.Image,
     context: str,
     generator_groups: List[Dict[str, Any]],
-) -> int:
+    config: Optional[Any] = None,
+) -> Tuple[int, float]:
     """Process a single object across all generator groups.
 
     Args:
@@ -595,16 +671,18 @@ def _process_object_with_groups(
         obj_image: Image for this object
         context: Document context
         generator_groups: List of generator groups
+        config: Config object to read max_model_len for vLLM (optional)
 
     Returns:
-        Number of questions generated
+        Tuple of (number of questions generated, total time taken in seconds)
     """
     num_questions_generated = 0
+    start_time = time.perf_counter()
 
     for group in generator_groups:
         # Stage 1: Generate semantic question for this group
         semantic_question = _generate_semantic_question_for_group(
-            obj, obj_id, obj_image, context, group
+            obj, obj_id, obj_image, context, group, config
         )
         if semantic_question is None:
             continue  # Skip transform strategies if semantic fails
@@ -616,13 +694,15 @@ def _process_object_with_groups(
             obj, obj_id, obj_image, semantic_question, group
         )
 
-    return num_questions_generated
+    elapsed_time = time.perf_counter() - start_time
+    return num_questions_generated, elapsed_time
 
 
 def process_document(
     image_path: Path,
     json_path: Path,
     qa_config: QAGenerationConfig,
+    config: Optional[Any] = None,
 ) -> Tuple[int, int]:
     """Process a single document to generate QA pairs.
 
@@ -630,6 +710,7 @@ def process_document(
         image_path: Path to the image file
         json_path: Path to the preprocessed JSON file
         qa_config: QA generation configuration from config.yml
+        config: Config object to read max_model_len for vLLM (optional)
 
     Returns:
         Tuple of (num_objects_processed, num_questions_generated)
@@ -658,6 +739,8 @@ def process_document(
     # Process each object
     num_objects_processed = 0
     num_questions_generated = 0
+    total_question_time = 0.0
+    document_start_time = time.perf_counter()
 
     # Filter out empty objects for progress tracking
     valid_objects = {
@@ -690,10 +773,11 @@ def process_document(
             continue
 
         # Process object with all generator groups
-        questions_generated = _process_object_with_groups(
-            obj_id, obj, obj_image, result.context, generator_groups
+        questions_generated, question_time = _process_object_with_groups(
+            obj_id, obj, obj_image, result.context, generator_groups, config
         )
         num_questions_generated += questions_generated
+        total_question_time += question_time
 
         if obj.qa:
             num_objects_processed += 1
@@ -703,8 +787,17 @@ def process_document(
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
+    document_elapsed_time = time.perf_counter() - document_start_time
+    avg_time_per_question = (
+        total_question_time / num_questions_generated
+        if num_questions_generated > 0
+        else 0.0
+    )
+
     logger.info(
-        f"Processed {num_objects_processed} objects, generated {num_questions_generated} questions"
+        f"Processed {num_objects_processed} objects, generated {num_questions_generated} questions "
+        f"(total time: {document_elapsed_time:.2f}s, "
+        f"avg {avg_time_per_question:.2f}s per question)"
     )
     return num_objects_processed, num_questions_generated
 
@@ -714,6 +807,7 @@ def process_batch(
     output_dir: Path,
     qa_config: QAGenerationConfig,
     processor_name: str = "paddleocr",
+    config: Optional[Any] = None,
 ) -> Tuple[int, int, int]:
     """Process image files to generate QA pairs.
 
@@ -722,6 +816,7 @@ def process_batch(
         output_dir: Directory containing preprocessed JSON files
         qa_config: QA generation configuration from config.yml
         processor_name: Name of the processor used (for finding JSON files)
+        config: Config object to read max_model_len for vLLM (optional)
 
     Returns:
         Tuple of (num_files_processed, total_objects_processed, total_questions_generated)
@@ -750,6 +845,7 @@ def process_batch(
     num_files_processed = 0
     total_objects_processed = 0
     total_questions_generated = 0
+    batch_start_time = time.perf_counter()
 
     for image_file in image_files:
         try:
@@ -763,6 +859,7 @@ def process_batch(
                 image_path=image_file,
                 json_path=json_path,
                 qa_config=qa_config,
+                config=config,
             )
 
             num_files_processed += 1
@@ -773,9 +870,18 @@ def process_batch(
             logger.error(f"Failed to process {image_file}: {e}")
             continue
 
+    batch_elapsed_time = time.perf_counter() - batch_start_time
+    avg_time_per_question = (
+        batch_elapsed_time / total_questions_generated
+        if total_questions_generated > 0
+        else 0.0
+    )
+
     logger.info(
         f"Batch processing complete: {num_files_processed} files, "
-        f"{total_objects_processed} objects, {total_questions_generated} questions"
+        f"{total_objects_processed} objects, {total_questions_generated} questions "
+        f"(total time: {batch_elapsed_time:.2f}s, "
+        f"avg {avg_time_per_question:.2f}s per question)"
     )
 
     return num_files_processed, total_objects_processed, total_questions_generated

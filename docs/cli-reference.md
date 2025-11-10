@@ -140,6 +140,45 @@ docs2synth preprocess ./images/ \
 
 Interact with LLM agents for text generation and chat.
 
+### Start vLLM Server
+
+Start a vLLM OpenAI-compatible API server for high-performance local inference:
+
+```bash
+# Start with config.yml settings
+docs2synth agent vllm-server
+
+# Override model
+docs2synth agent vllm-server --model meta-llama/Llama-2-7b-chat-hf
+
+# Custom port and GPU settings
+docs2synth agent vllm-server --port 8080 --gpu-memory-utilization 0.8
+
+# Enable trust_remote_code for models like Qwen
+docs2synth agent vllm-server --trust-remote-code
+
+# Multi-GPU setup (use 2 GPUs)
+docs2synth agent vllm-server --tensor-parallel-size 2
+```
+
+**Server Options:**
+- `--config-path`: Path to config.yml (default: ./config.yml)
+- `--model`: Model to load (overrides config)
+- `--host`: Host to bind (default: 0.0.0.0)
+- `--port`: Port to bind (default: 8000)
+- `--trust-remote-code`: Enable for custom models (Qwen, Phi, etc.)
+- `--max-model-len`: Maximum context length
+- `--gpu-memory-utilization`: GPU memory usage (0.0-1.0)
+- `--tensor-parallel-size`: Number of GPUs for parallelism
+
+**After starting the server:**
+1. Keep the terminal open (press Ctrl+C to stop)
+2. Test: `curl http://localhost:8000/health`
+3. Use the vLLM provider in another terminal:
+   ```bash
+   docs2synth agent generate "Your prompt" --provider vllm
+   ```
+
 ### Generate Text
 
 Basic text generation:
@@ -170,6 +209,21 @@ docs2synth agent generate "Your prompt" --provider ollama
 
 # Hugging Face
 docs2synth agent generate "Your prompt" --provider huggingface
+
+# vLLM (high-performance local inference)
+# Fastest option for local deployment, best with server mode
+
+# Server mode (recommended): Start server then use provider
+# 1. Start vLLM server (easy way):
+docs2synth agent vllm-server
+
+# 2. Then use the provider (in another terminal):
+docs2synth agent generate "Your prompt" --provider vllm
+
+# With images (if model supports vision):
+docs2synth agent generate "What's in this image?" \
+  --image photo.jpg \
+  --provider vllm
 ```
 
 #### Model Selection
@@ -560,6 +614,7 @@ export OPENAI_API_KEY="sk-..."
 export ANTHROPIC_API_KEY="sk-ant-..."
 export GEMINI_API_KEY="..."
 export DOUBAO_API_KEY="..."
+export HUGGINGFACE_TOKEN="hf_..."  # For gated HF models
 ```
 
 Or use a `.env` file:
@@ -569,7 +624,99 @@ Or use a `.env` file:
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=...
+HUGGINGFACE_TOKEN=hf_...
 ```
+
+### vLLM Setup
+
+vLLM is a high-performance inference engine for local LLM deployment. It uses a server mode with an OpenAI-compatible API.
+
+#### Server Mode Setup
+
+1. **Install vLLM** (requires CUDA-capable GPU):
+```bash
+pip install vllm
+```
+
+2. **Start the vLLM server**:
+```bash
+# Easy way: Use the built-in command
+docs2synth agent vllm-server
+
+# Or manually with python
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Llama-2-7b-chat-hf \
+  --host 0.0.0.0 \
+  --port 8000
+
+# With advanced options
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Llama-2-7b-chat-hf \
+  --tensor-parallel-size 2 \
+  --gpu-memory-utilization 0.9 \
+  --max-model-len 4096
+```
+
+3. **Configure in config.yml**:
+```yaml
+agent:
+  vllm:
+    model: meta-llama/Llama-2-7b-chat-hf
+    base_url: http://localhost:8000/v1
+
+    # Server startup parameters (used by 'docs2synth agent vllm-server')
+    trust_remote_code: true  # Required for some models
+    max_model_len: 4096
+    gpu_memory_utilization: 0.9
+```
+
+4. **Use the provider**:
+```bash
+docs2synth agent generate "Your prompt" --provider vllm
+```
+
+#### Vision-Language Models with vLLM
+
+For vision models like Qwen-VL:
+
+```yaml
+agent:
+  vllm:
+    model: Qwen/Qwen-VL-Chat
+    base_url: http://localhost:8000/v1
+    trust_remote_code: true
+    max_model_len: 2048
+    gpu_memory_utilization: 0.9
+```
+
+Start the server with vision model support:
+```bash
+docs2synth agent vllm-server --trust-remote-code
+```
+
+Then use with images:
+```bash
+docs2synth agent generate "Describe this image" \
+  --image document.png \
+  --provider vllm
+```
+
+#### Troubleshooting vLLM
+
+**GPU Out of Memory:**
+- Reduce `max_model_len` (try 4096, 2048, or 1024)
+- Reduce `gpu_memory_utilization` (try 0.8 or 0.7)
+- Use a smaller model or quantization
+
+**Model Loading Errors:**
+- Set `trust_remote_code: true` for custom models
+- Check vLLM version: `pip install --upgrade vllm`
+- Ensure your GPU has sufficient VRAM for the model
+
+**Server Connection Issues:**
+- Verify server is running: `curl http://localhost:8000/health`
+- Check firewall settings
+- Ensure `base_url` matches server address in config.yml
 
 ---
 
