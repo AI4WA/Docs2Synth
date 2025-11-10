@@ -359,7 +359,9 @@ def _create_verifiers(
     return verifiers
 
 
-def _collect_verifier_metadata(verifiers: List[Tuple[str, Any]]) -> List[Dict[str, Any]]:
+def _collect_verifier_metadata(
+    verifiers: List[Tuple[str, Any]]
+) -> List[Dict[str, Any]]:
     """Collect metadata about verifiers used in the verification run.
 
     Args:

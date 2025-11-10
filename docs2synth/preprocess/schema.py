@@ -460,12 +460,16 @@ class DocumentProcessResult:
             reading_order_ids=list(data.get("reading_order_ids", [])),
             process_metadata=process_metadata,
             document_metadata=document_metadata,
-            qa_metadata=RunMetadata.from_dict(qa_metadata_raw)
-            if isinstance(qa_metadata_raw, Mapping)
-            else None,
-            verify_metadata=RunMetadata.from_dict(verify_metadata_raw)
-            if isinstance(verify_metadata_raw, Mapping)
-            else None,
+            qa_metadata=(
+                RunMetadata.from_dict(qa_metadata_raw)
+                if isinstance(qa_metadata_raw, Mapping)
+                else None
+            ),
+            verify_metadata=(
+                RunMetadata.from_dict(verify_metadata_raw)
+                if isinstance(verify_metadata_raw, Mapping)
+                else None
+            ),
         )
 
 

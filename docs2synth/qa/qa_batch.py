@@ -273,7 +273,9 @@ def _create_qa_generators(
     return generator_groups
 
 
-def _collect_strategy_metadata(generator_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _collect_strategy_metadata(
+    generator_groups: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     """Collect lightweight metadata about configured QA strategies for serialization."""
     strategies: List[Dict[str, Any]] = []
 
