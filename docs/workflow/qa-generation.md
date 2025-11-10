@@ -121,9 +121,7 @@ The agent wrapper supports multiple LLM providers:
 ### Local Models
 - **Ollama** (`ollama`): llama2, mistral, codellama, etc. (requires local Ollama server)
 - **Hugging Face** (`huggingface` or `hf`): Any Hugging Face model (requires local GPU/CPU)
-- **vLLM** (`vllm`): High-performance local LLM inference
-  - **Server mode** (default): Connects to vLLM OpenAI-compatible API server
-  - **Direct mode**: Uses vLLM Python API directly (no server needed, requires GPU)
+- **vLLM** (`vllm`): High-performance local LLM inference via OpenAI-compatible API server
 
 ## Configuration
 
@@ -176,19 +174,11 @@ agent:
     temperature: 0.7
 
   vllm:
-    # Server mode (default): requires vLLM server running
-    mode: server
+    # Server mode: requires vLLM server running (docs2synth agent vllm-server)
     model: meta-llama/Llama-2-7b-chat-hf
     base_url: http://localhost:8000/v1
     temperature: 0.7
     max_tokens: 1000
-
-  # vllm:
-  #   # Direct mode: uses vLLM Python API directly (no server needed)
-  #   mode: direct
-  #   model: meta-llama/Llama-2-7b-chat-hf
-  #   temperature: 0.7
-  #   max_tokens: 1000
 ```
 
 Loading behavior:

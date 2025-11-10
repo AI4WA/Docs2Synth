@@ -629,9 +629,9 @@ HUGGINGFACE_TOKEN=hf_...
 
 ### vLLM Setup
 
-vLLM is a high-performance inference engine for local LLM deployment. It supports two modes:
+vLLM is a high-performance inference engine for local LLM deployment. It uses a server mode with an OpenAI-compatible API.
 
-#### Server Mode (Recommended for Production)
+#### Server Mode Setup
 
 1. **Install vLLM** (requires CUDA-capable GPU):
 ```bash
@@ -640,7 +640,10 @@ pip install vllm
 
 2. **Start the vLLM server**:
 ```bash
-# Basic usage
+# Easy way: Use the built-in command
+docs2synth agent vllm-server
+
+# Or manually with python
 python -m vllm.entrypoints.openai.api_server \
   --model meta-llama/Llama-2-7b-chat-hf \
   --host 0.0.0.0 \
@@ -658,37 +661,16 @@ python -m vllm.entrypoints.openai.api_server \
 ```yaml
 agent:
   vllm:
-    mode: server
     model: meta-llama/Llama-2-7b-chat-hf
     base_url: http://localhost:8000/v1
+
+    # Server startup parameters (used by 'docs2synth agent vllm-server')
+    trust_remote_code: true  # Required for some models
+    max_model_len: 4096
+    gpu_memory_utilization: 0.9
 ```
 
 4. **Use the provider**:
-```bash
-docs2synth agent generate "Your prompt" --provider vllm
-```
-
-#### Direct Mode (Simpler, Single-Process)
-
-Direct mode loads the model in the same process, eliminating the need for a separate server.
-
-1. **Install vLLM**:
-```bash
-pip install vllm
-```
-
-2. **Configure in config.yml**:
-```yaml
-agent:
-  vllm:
-    mode: direct
-    model: meta-llama/Llama-2-7b-chat-hf
-    trust_remote_code: true  # Required for some models
-    gpu_memory_utilization: 0.9
-    max_model_len: 4096
-```
-
-3. **Use the provider**:
 ```bash
 docs2synth agent generate "Your prompt" --provider vllm
 ```
@@ -700,12 +682,16 @@ For vision models like Qwen-VL:
 ```yaml
 agent:
   vllm:
-    mode: direct  # Direct mode recommended for vision models
     model: Qwen/Qwen-VL-Chat
+    base_url: http://localhost:8000/v1
     trust_remote_code: true
     max_model_len: 2048
     gpu_memory_utilization: 0.9
-    enforce_eager: true  # May help with model compatibility
+```
+
+Start the server with vision model support:
+```bash
+docs2synth agent vllm-server --trust-remote-code
 ```
 
 Then use with images:
@@ -724,13 +710,13 @@ docs2synth agent generate "Describe this image" \
 
 **Model Loading Errors:**
 - Set `trust_remote_code: true` for custom models
-- Set `enforce_eager: true` for unsupported architectures
 - Check vLLM version: `pip install --upgrade vllm`
+- Ensure your GPU has sufficient VRAM for the model
 
-**Server Mode Connection Issues:**
+**Server Connection Issues:**
 - Verify server is running: `curl http://localhost:8000/health`
 - Check firewall settings
-- Ensure `base_url` matches server address
+- Ensure `base_url` matches server address in config.yml
 
 ---
 
