@@ -203,6 +203,51 @@ class DoclingProcessor:
             logger.debug(f"  Item: {text_item}")
             return None
 
+    def _process_single_image(
+        self, image_path: Path, page_idx: int
+    ) -> List[DocumentObject]:
+        """Process a single image and return objects.
+
+        Parameters
+        ----------
+        image_path : Path
+            Path to the image file.
+        page_idx : int
+            Page index (0-based) for this image.
+
+        Returns
+        -------
+        List[DocumentObject]
+            List of DocumentObjects from this page.
+        """
+        result = self.converter.convert(str(image_path))
+        doc = result.document
+
+        # Get page height for coordinate conversion
+        # When processing a single image, docling treats it as page 1
+        page_height = None
+        for page_no, page_item in doc.pages.items():
+            if hasattr(page_item, "size") and hasattr(page_item.size, "height"):
+                page_height = float(page_item.size.height)
+                break
+
+        # Create page_heights dict for coordinate conversion
+        # Docling uses page 1 for single images
+        page_heights = {1: page_height} if page_height is not None else {}
+
+        # Process all text items from this page
+        page_objects: List[DocumentObject] = []
+        temp_id = 0  # Temporary ID, will be reassigned later
+        for text_item in doc.texts:
+            obj = self._process_text_item(text_item, temp_id, page_heights)
+            if obj is not None:
+                # Update page index to match our document structure
+                obj.page = page_idx
+                page_objects.append(obj)
+            temp_id += 1
+
+        return page_objects
+
     def process(
         self,
         file_path: str,
@@ -211,6 +256,10 @@ class DoclingProcessor:
         device: Optional[str] = None,
     ) -> DocumentProcessResult:
         """Process a document using Docling.
+
+        For PDF files, if pre-converted images exist (e.g., from preprocessing
+        with image resizing), those images will be used instead of the PDF to
+        ensure bbox coordinates match the actual images used for annotation.
 
         Parameters
         ----------
@@ -233,78 +282,161 @@ class DoclingProcessor:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        logger.info(f"Processing document with Docling: {file_path}")
+        # Check if this is a PDF and if pre-converted images exist
+        is_pdf = file_path.suffix.lower() == ".pdf"
+        pdf_images: Optional[List[Path]] = None
+
+        if is_pdf:
+            from docs2synth.utils.pdf_images import get_pdf_images
+
+            pdf_images = get_pdf_images(file_path)
+            if pdf_images:
+                logger.info(
+                    f"Using pre-converted images for PDF {file_path} "
+                    f"({len(pdf_images)} pages) to ensure bbox coordinates match"
+                )
+
         start = time.time()
 
-        # Convert document
-        result = self.converter.convert(str(file_path))
+        # Process using images if available, otherwise use original file
+        if is_pdf and pdf_images:
+            # Process each page image separately and combine results
+            all_objects: Dict[int, DocumentObject] = {}
+            bbox_list: List[Tuple[float, float, float, float]] = []
+            context_parts: List[str] = []
+            reading_order_ids: List[int] = []
 
-        end = time.time()
-        logger.info(f"Docling processing completed in {end - start:.2f}s")
+            current_id = 0
+            for page_idx, image_path in enumerate(pdf_images):
+                logger.debug(
+                    f"Processing PDF page {page_idx + 1}/{len(pdf_images)}: {image_path.name}"
+                )
+                page_objects = self._process_single_image(image_path, page_idx)
 
-        # Extract objects from Docling result
-        objects: Dict[int, DocumentObject] = {}
-        bbox_list: List[Tuple[float, float, float, float]] = []
-        context_parts: List[str] = []
-        reading_order_ids: List[int] = []
+                # Add objects from this page
+                for obj in page_objects:
+                    # Update object ID to be unique across all pages
+                    obj.object_id = current_id
+                    all_objects[current_id] = obj
+                    bbox_list.append(obj.bbox)
+                    context_parts.append(obj.text)
+                    reading_order_ids.append(current_id)
+                    current_id += 1
 
-        current_id = 0
+            end = time.time()
+            logger.info(
+                f"Docling processing completed in {end - start:.2f}s "
+                f"(processed {len(pdf_images)} page images)"
+            )
+            logger.info(f"Extracted {current_id} text objects from {file_path.name}")
 
-        # Process document structure
-        doc = result.document
+            # Create metadata
+            process_metadata = ProcessMetadata(
+                processor_name="docling",
+                timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start)),
+                latency=(end - start) * 1000.0,
+            )
 
-        # Get page heights for coordinate conversion (Docling uses bottom-left origin)
-        page_heights = {}
-        for page_no, page_item in doc.pages.items():
-            if hasattr(page_item, "size") and hasattr(page_item.size, "height"):
-                page_heights[page_no] = float(page_item.size.height)
+            # Document metadata (use original PDF file info)
+            mime_type = mimetypes.guess_type(str(file_path))[0]
+            size_bytes = file_path.stat().st_size if file_path.exists() else None
 
-        # Iterate through all text items in the document
-        for text_item in doc.texts:
-            obj = self._process_text_item(text_item, current_id, page_heights)
-            if obj is not None:
-                objects[current_id] = obj
-                bbox_list.append(obj.bbox)
-                context_parts.append(obj.text)
-                reading_order_ids.append(current_id)
-                current_id += 1
+            document_metadata = DocumentMetadata(
+                filename=file_path.name,
+                size_bytes=size_bytes,
+                mime_type=mime_type,
+            )
 
-        logger.info(f"Extracted {current_id} text objects from {file_path.name}")
+            # Full context text
+            full_context = "\n".join(context_parts)
 
-        # Create metadata
-        process_metadata = ProcessMetadata(
-            processor_name="docling",
-            timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start)),
-            latency=(end - start) * 1000.0,
-        )
+            # Create object_list from objects dict in reading order
+            object_list = [
+                all_objects[obj_id]
+                for obj_id in reading_order_ids
+                if obj_id in all_objects
+            ]
 
-        # Document metadata
-        mime_type = mimetypes.guess_type(str(file_path))[0]
-        size_bytes = file_path.stat().st_size if file_path.exists() else None
+            return DocumentProcessResult(
+                objects=all_objects,
+                object_list=object_list,
+                bbox_list=bbox_list,
+                context=full_context,
+                reading_order_ids=reading_order_ids,
+                process_metadata=process_metadata,
+                document_metadata=document_metadata,
+            )
+        else:
+            # Original behavior: process file directly (PDF, image, DOCX, etc.)
+            logger.info(f"Processing document with Docling: {file_path}")
+            result = self.converter.convert(str(file_path))
 
-        document_metadata = DocumentMetadata(
-            filename=file_path.name,
-            size_bytes=size_bytes,
-            mime_type=mime_type,
-        )
+            end = time.time()
+            logger.info(f"Docling processing completed in {end - start:.2f}s")
 
-        # Full context text
-        full_context = "\n".join(context_parts)
+            # Extract objects from Docling result
+            objects: Dict[int, DocumentObject] = {}
+            bbox_list: List[Tuple[float, float, float, float]] = []
+            context_parts: List[str] = []
+            reading_order_ids: List[int] = []
 
-        # Create object_list from objects dict in reading order
-        object_list = [
-            objects[obj_id] for obj_id in reading_order_ids if obj_id in objects
-        ]
+            current_id = 0
 
-        return DocumentProcessResult(
-            objects=objects,
-            object_list=object_list,
-            bbox_list=bbox_list,
-            context=full_context,
-            reading_order_ids=reading_order_ids,
-            process_metadata=process_metadata,
-            document_metadata=document_metadata,
-        )
+            # Process document structure
+            doc = result.document
+
+            # Get page heights for coordinate conversion (Docling uses bottom-left origin)
+            page_heights = {}
+            for page_no, page_item in doc.pages.items():
+                if hasattr(page_item, "size") and hasattr(page_item.size, "height"):
+                    page_heights[page_no] = float(page_item.size.height)
+
+            # Iterate through all text items in the document
+            for text_item in doc.texts:
+                obj = self._process_text_item(text_item, current_id, page_heights)
+                if obj is not None:
+                    objects[current_id] = obj
+                    bbox_list.append(obj.bbox)
+                    context_parts.append(obj.text)
+                    reading_order_ids.append(current_id)
+                    current_id += 1
+
+            logger.info(f"Extracted {current_id} text objects from {file_path.name}")
+
+            # Create metadata
+            process_metadata = ProcessMetadata(
+                processor_name="docling",
+                timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start)),
+                latency=(end - start) * 1000.0,
+            )
+
+            # Document metadata
+            mime_type = mimetypes.guess_type(str(file_path))[0]
+            size_bytes = file_path.stat().st_size if file_path.exists() else None
+
+            document_metadata = DocumentMetadata(
+                filename=file_path.name,
+                size_bytes=size_bytes,
+                mime_type=mime_type,
+            )
+
+            # Full context text
+            full_context = "\n".join(context_parts)
+
+            # Create object_list from objects dict in reading order
+            object_list = [
+                objects[obj_id] for obj_id in reading_order_ids if obj_id in objects
+            ]
+
+            return DocumentProcessResult(
+                objects=objects,
+                object_list=object_list,
+                bbox_list=bbox_list,
+                context=full_context,
+                reading_order_ids=reading_order_ids,
+                process_metadata=process_metadata,
+                document_metadata=document_metadata,
+            )
 
 
 # For backward compatibility
