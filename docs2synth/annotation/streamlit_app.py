@@ -97,13 +97,12 @@ def render_sidebar():
             )
 
             # QA progress
-            qa_list = st.session_state.data_manager.get_qa_list()
-            total_qa = len(qa_list)
-            st.write(f"**QA Pair:** {st.session_state.current_qa_idx + 1} / {total_qa}")
+            current_idx, total_qa = state.get_global_qa_position()
+            st.write(f"**QA Pair:** {current_idx + 1} / {total_qa}")
 
             # Progress bar
             if total_qa > 0:
-                progress = (st.session_state.current_qa_idx + 1) / total_qa
+                progress = (current_idx + 1) / total_qa
                 st.progress(progress)
 
             # Annotation stats
@@ -134,10 +133,23 @@ def render_sidebar():
                 value=st.session_state.show_cropped,
             )
 
-            st.session_state.filter_unannotated = st.checkbox(
-                "Filter Unannotated Only",
-                value=st.session_state.filter_unannotated,
+            # Focus mode to reduce visual noise
+            st.session_state.focus_mode = st.checkbox(
+                "Focus Mode (hide image & nav)",
+                value=st.session_state.get("focus_mode", False),
+                help="Emphasize text, question, answer, and actions",
             )
+            st.session_state.compact_nav = st.checkbox(
+                "Compact Navigation (right panel)",
+                value=st.session_state.get("compact_nav", True),
+                help="Show a compact grid of essential navigation buttons",
+            )
+
+            with st.expander("Advanced Filters & Options", expanded=False):
+                st.session_state.filter_unannotated = st.checkbox(
+                    "Filter Unannotated Only",
+                    value=st.session_state.filter_unannotated,
+                )
 
 
 def render_verifier_results(qa_pair):
@@ -189,13 +201,9 @@ def _render_qa_progress():
     """Render progress bar for current QA."""
     current = state.get_current_qa()
     if current:
-        dm = st.session_state.data_manager
-        qa_list = dm.get_qa_list()
-        current_idx = st.session_state.current_qa_idx
-        total_qa = len(qa_list)
-
+        current_idx, total_qa = state.get_global_qa_position()
         # Mini progress bar at top
-        progress_pct = (current_idx + 1) / total_qa if total_qa > 0 else 0
+        progress_pct = ((current_idx + 1) / total_qa) if total_qa > 0 else 0
         st.progress(progress_pct, text=f"QA {current_idx + 1} of {total_qa}")
         st.caption(
             f"📊 Progress: {current_idx + 1}/{total_qa} ({progress_pct*100:.1f}%)"
@@ -204,34 +212,35 @@ def _render_qa_progress():
 
 def _render_qa_content(qa_pair, obj):
     """Render question, answer, and additional info."""
-    # Question - large and prominent
-    st.markdown("### 🔵 Question")
-    st.info(f"**{qa_pair.question}**", icon="❓")
+    # Object text - primary content
+    if obj and obj.text:
+        st.markdown("### Text")
+        st.text_area(
+            "Object Text",
+            value=obj.text,
+            height=160,
+            disabled=True,
+        )
+        st.divider()
 
-    # Answer - large and prominent
-    st.markdown("### 🟢 Answer")
-    st.success(f"**{qa_pair.answer}**", icon="💬")
+    # Question and Answer in one row
+    col_q, col_a = st.columns(2)
+    with col_q:
+        st.markdown("### Question")
+        st.info(f"**{qa_pair.question}**", icon="❓")
+    with col_a:
+        st.markdown("### Answer")
+        st.success(f"**{qa_pair.answer}**", icon="💬")
 
     # Additional info - collapsed by default
-    with st.expander("📋 Additional Info", expanded=False):
-        # Show object text if available
-        if obj.text:
-            st.markdown("**📄 Full Object Text:**")
-            st.text_area(
-                "",
-                value=obj.text,
-                height=100,
-                disabled=True,
-                label_visibility="collapsed",
-            )
-
+    with st.expander("Additional Info", expanded=False):
         # Verifier results
         if qa_pair.verification:
             num_verifiers = len(
                 [k for k in qa_pair.verification.keys() if k != "human"]
             )
             if num_verifiers > 0:
-                st.markdown(f"**🤖 Verifier Results ({num_verifiers}):**")
+                st.markdown(f"**Verifier Results ({num_verifiers}):**")
                 render_verifier_results(qa_pair)
 
 
@@ -264,10 +273,56 @@ def _handle_annotation_button(response: str, auto_advance: bool):
     if state.save_annotation(response, explanation):
         st.session_state.temp_explanation = ""  # Clear explanation
         if auto_advance:
-            # Auto advance to next QA
-            state.next_qa()
-            if state.get_current_qa() is None:  # Reached end of object
-                state.next_object()
+            # Cascading auto-advance: QA -> Object -> Document
+            try:
+                dm = st.session_state.data_manager
+                doc = dm.current_document if dm else None
+                cur = state.get_current_qa()
+                if doc and cur:
+                    cur_obj_id, cur_qa_idx, _qa, _obj, _img = cur
+                    # Determine if we can move to next QA within current object
+                    can_next_qa = False
+                    if cur_obj_id != -1:
+                        obj = doc.objects.get(cur_obj_id)
+                        if obj and obj.qa and cur_qa_idx < len(obj.qa) - 1:
+                            can_next_qa = True
+                    if can_next_qa:
+                        state.next_qa()
+                    else:
+                        # Move to next object with at least one QA; else to next document
+                        # Safety counter to avoid infinite loops
+                        safety = 0
+                        moved = False
+                        while safety < 100:
+                            safety += 1
+                            prev_obj_id = st.session_state.current_obj_id
+                            state.next_object()
+                            # If object didn't change, we're at last object in document
+                            if st.session_state.current_obj_id == prev_obj_id:
+                                # Try next document
+                                prev_file_idx = st.session_state.current_file_idx
+                                state.next_document()
+                                # If document didn't change, we're at the very end
+                                if st.session_state.current_file_idx == prev_file_idx:
+                                    break
+                                # After moving document, stop; get_current_qa will init first object/qa
+                                moved = True
+                                break
+                            # After moving object, if it has QA, stop; else continue to next object
+                            new_obj = (
+                                doc.objects.get(st.session_state.current_obj_id)
+                                if doc
+                                else None
+                            )
+                            if new_obj and new_obj.qa and len(new_obj.qa) > 0:
+                                st.session_state.current_qa_idx = 0
+                                moved = True
+                                break
+                        # If nothing moved, do nothing (end reached)
+                        _ = moved
+            except Exception:
+                # Fail-safe: ignore navigation errors and proceed
+                pass
         emoji = "✅" if response == "Yes" else "❌"
         status = "Approved!" if response == "Yes" else "Rejected!"
         st.success(f"{emoji} {status}")
@@ -280,7 +335,43 @@ def _render_annotation_buttons(auto_advance: bool):
     """Render annotation buttons and settings."""
     st.subheader("👤 Quick Annotate")
 
-    # Settings in one row
+    # Large approval buttons
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button(
+            "✅ CORRECT",
+            width="stretch",
+            type="primary",
+            key="approve_btn",
+            use_container_width=True,
+        ):
+            _handle_annotation_button("Yes", auto_advance)
+
+    with col2:
+        if st.button(
+            "❌ WRONG",
+            width="stretch",
+            key="reject_btn",
+            use_container_width=True,
+        ):
+            _handle_annotation_button("No", auto_advance)
+
+    st.divider()
+
+    # Explanation directly below action buttons
+    explanation = st.text_area(
+        "Explanation (optional)",
+        value=st.session_state.get("temp_explanation", ""),
+        height=100,
+        placeholder="Why is this correct or wrong?",
+        key="explanation_input",
+    )
+    st.session_state.temp_explanation = explanation
+
+    st.divider()
+
+    # Settings and stats below buttons
     col1, col2 = st.columns(2)
 
     with col1:
@@ -311,43 +402,7 @@ def _render_annotation_buttons(auto_advance: bool):
             delta=None if total == 0 else f"{annotated/total*100:.0f}%",
         )
 
-    # Big buttons - most common action
-    st.markdown("### Is this QA pair correct?")
-
-    # Large approval buttons
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button(
-            "✅ CORRECT",
-            width="stretch",
-            type="primary",
-            key="approve_btn",
-            use_container_width=True,
-        ):
-            _handle_annotation_button("Yes", auto_advance)
-
-    with col2:
-        if st.button(
-            "❌ WRONG",
-            width="stretch",
-            key="reject_btn",
-            use_container_width=True,
-        ):
-            _handle_annotation_button("No", auto_advance)
-
     st.divider()
-
-    # Optional explanation at bottom
-    with st.expander("💬 Add explanation (optional)", expanded=False):
-        explanation = st.text_area(
-            "Why is this correct/wrong?",
-            value=st.session_state.temp_explanation,
-            height=80,
-            placeholder="Optional: Explain your reasoning...",
-            key="explanation_input",
-        )
-        st.session_state.temp_explanation = explanation
 
     # Keyboard shortcuts hint
     st.caption("💡 Tip: Click 'CORRECT' for good QA, 'WRONG' for bad QA")
@@ -365,7 +420,7 @@ def render_qa_panel():
 
     # Check if this is an empty document (no objects)
     if obj_id == -1:
-        st.info("📭 No text objects detected in this document")
+        st.info("No text objects detected in this document")
         st.caption(
             "The OCR processor did not find any text in this image. You can still view the image in the left panel."
         )
@@ -373,7 +428,7 @@ def render_qa_panel():
 
     # Check if this object has QA pairs
     if qa_pair is None:
-        st.warning(f"⚠️ Object {obj_id} has no QA pairs yet")
+        st.warning(f"Object {obj_id} has no QA pairs yet")
         st.info(
             "This object was detected but no questions were generated. You can still view the object text and bounding box."
         )
@@ -391,29 +446,64 @@ def render_qa_panel():
         return
 
     # QA Display (when QA pair exists) - optimized layout
-    st.header("❓ Review This QA")
-
-    # Show current progress
-    _render_qa_progress()
-
-    st.divider()
+    st.header("Review This QA")
 
     # Question, answer, and additional info
     _render_qa_content(qa_pair, obj)
 
-    st.divider()
-
-    # Check if already annotated - show prominently
-    _render_annotation_status(qa_pair)
-
     # Human annotation buttons
     _render_annotation_buttons(st.session_state.get("auto_advance", True))
 
+    # Bottom details: status and progress
+    st.divider()
+    with st.expander("Details", expanded=False):
+        _render_annotation_status(qa_pair)
+        _render_qa_progress()
 
-def render_navigation():
-    """Render navigation controls - simplified."""
-    st.subheader("🧭 Quick Nav")
 
+def _render_navigation_compact():
+    """Render compact grid navigation to reduce scroll."""
+    current_idx, total_qa = state.get_global_qa_position()
+    st.metric("QA Position", f"{current_idx + 1}/{total_qa}")
+
+    row1_col1, row1_col2 = st.columns(2)
+    with row1_col1:
+        if st.button("⬅️ Doc", use_container_width=True, key="c_prev_doc"):
+            state.prev_document()
+            st.rerun()
+    with row1_col2:
+        if st.button("Doc ➡️", use_container_width=True, key="c_next_doc"):
+            state.next_document()
+            st.rerun()
+
+    row2_col1, row2_col2 = st.columns(2)
+    with row2_col1:
+        if st.button("⬅️ Obj", use_container_width=True, key="c_prev_obj"):
+            state.prev_object()
+            st.rerun()
+    with row2_col2:
+        if st.button("Obj ➡️", use_container_width=True, key="c_next_obj"):
+            state.next_object()
+            st.rerun()
+
+    row3_col1, row3_col2 = st.columns(2)
+    with row3_col1:
+        if st.button("⬆️ QA", use_container_width=True, key="c_prev_qa"):
+            state.prev_qa()
+            st.rerun()
+    with row3_col2:
+        if st.button("QA ⬇️", use_container_width=True, key="c_next_qa"):
+            state.next_qa()
+            st.rerun()
+
+    st.divider()
+    if st.button("⏭️ Skip to Next Document", use_container_width=True, key="c_skip_doc"):
+        state.next_document()
+        st.rerun()
+
+
+def _render_navigation_detailed():
+    """Render detailed navigation controls with expanders."""
     # Skip buttons for faster navigation
     if st.button(
         "⏭️ Skip to Next Document",
@@ -467,6 +557,16 @@ def render_navigation():
             if st.button("Next ⬇️", width="stretch", key="next_qa"):
                 state.next_qa()
                 st.rerun()
+
+
+def render_navigation():
+    """Render navigation controls - simplified."""
+    compact = st.session_state.get("compact_nav", True)
+    st.subheader("🧭 Navigation")
+    if compact:
+        _render_navigation_compact()
+    else:
+        _render_navigation_detailed()
 
 
 def _render_image_display(image, obj, obj_id, show_cropped):
@@ -646,18 +746,20 @@ def main():
         )
         return
 
-    # Three-column layout: Image (compact) | QA Info (larger) | Navigation (compact)
-    # Now that image is small thumbnail, give more space to QA content
-    col1, col2, col3 = st.columns([2, 3, 1])
-
-    with col1:
-        render_image_panel()
-
-    with col2:
+    # Layout respects Focus Mode
+    focus_mode = st.session_state.get("focus_mode", False)
+    if focus_mode:
+        # Single-column focus on core annotation tasks
         render_qa_panel()
-
-    with col3:
-        render_navigation()
+    else:
+        # Three-column layout: Image | QA | Navigation
+        col1, col2, col3 = st.columns([2, 5, 2])
+        with col1:
+            render_image_panel()
+        with col2:
+            render_qa_panel()
+        with col3:
+            render_navigation()
 
     # Simple footer
     st.divider()

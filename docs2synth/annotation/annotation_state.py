@@ -259,8 +259,6 @@ def save_annotation(response: str, explanation: str = ""):
     if success:
         # Clear explanation
         st.session_state.temp_explanation = ""
-        # Auto advance to next QA
-        next_qa()
 
     return success
 
@@ -296,3 +294,30 @@ def jump_to_qa(list_idx: int):
         list_idx: Index in the QA list
     """
     st.session_state.current_qa_idx = list_idx
+
+
+def get_global_qa_position() -> tuple[int, int]:
+    """Return (current_index, total) for QA across the document list.
+
+    Maps the current (obj_id, qa_idx) to its index within the flattened QA list
+    provided by the data manager.
+    """
+    if not st.session_state.data_manager:
+        return 0, 0
+
+    current = get_current_qa()
+    if not current:
+        return 0, 0
+
+    cur_obj_id, cur_qa_idx, _qa_pair, _obj, _image = current
+
+    qa_list = st.session_state.data_manager.get_qa_list()
+    total = len(qa_list)
+    current_index = 0
+
+    for idx, (obj_id, qa_idx, _pair) in enumerate(qa_list):
+        if obj_id == cur_obj_id and qa_idx == cur_qa_idx:
+            current_index = idx
+            break
+
+    return current_index, total
