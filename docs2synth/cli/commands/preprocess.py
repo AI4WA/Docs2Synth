@@ -37,7 +37,7 @@ logger = get_logger(__name__)
     "--device",
     type=click.Choice(["cpu", "gpu", "cuda"], case_sensitive=False),
     default=None,
-    help="Device for OCR inference. Defaults to config.preprocess.device (or auto-select GPU when available).",
+    help="Device for OCR inference. Defaults to global device config (or auto-select GPU when available).",
 )
 @click.pass_context
 def preprocess(
@@ -98,7 +98,8 @@ def preprocess(
         lang = cfg.get("preprocess.lang")
 
     if device is None:
-        device = cfg.get("preprocess.device")
+        # Priority: global device config > preprocess.device (backward compat) > None (auto-detect)
+        device = cfg.get("device") or cfg.get("preprocess.device")
 
     # Get output_dir from config if not provided via CLI
     if output_dir is None:

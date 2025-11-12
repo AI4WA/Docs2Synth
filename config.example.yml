@@ -187,10 +187,13 @@ agent:
 
 # QA Generation configuration
 # Configure multiple QA generation strategies with different providers, models, and prompts
+
+# --- QA Generation configuration ---
+# Configure multiple QA generation strategies with different providers, models, and prompts
 qa:
   # List of QA generation strategies to use
   # Each strategy can have its own provider, model, prompt_template, and generation parameters
-  # 
+  #
   # Grouping strategies with group_id:
   # - Strategies with the same group_id form a group
   # - Each group should have one semantic strategy (generates base questions)
@@ -198,63 +201,218 @@ qa:
   # - layout_aware and logical_aware strategies transform the semantic question from the same group
   # - If group_id is not specified, strategies are grouped by strategy type (backward compatible)
   #
-  # Example group: semantic_openai_gpt-4o-mini
+  # Testing all 6 providers for semantic strategy
+  # - strategy: semantic
+  #   provider: openai
+  #   model: gpt-4o
+  #   prompt_template: |
+  #     Context: {context}
+  #     Based on the above context and target document image, 
+  #     generate a human-asked SHORT question (output question only) 
+  #     of which answer is exactly same as "{target}"
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_openai_gpt-4o
+
+  # Quick switch: Change 'provider' below to switch between providers
+  # - ollama: Vision model, most stable (qwen3-vl:8b already installed)
+  # - vllm: Text only, fastest (Llama-2-7b-chat-hf) - CURRENT
+  # - huggingface: Vision model, most flexible (Qwen2-VL-7B-Instruct)
   - strategy: semantic
-    provider: openai
-    model: gpt-4o-mini
+    provider: vllm  # Using vLLM server (must be running)
     prompt_template: |
       Context: {context}
-      Based on the above context and target document image, 
-      generate a human-asked SHORT question (output question only) 
+      Based on the above context and target document image,
+      generate a human-asked SHORT question (output question only)
       of which answer is exactly same as "{target}"
     temperature: 0.7
     max_tokens: 256
-    group_id: semantic_openai_gpt-4o-mini
+    group_id: semantic_vllm_llama2-7b
 
+  # - strategy: semantic
+  #   provider: anthropic
+  #   prompt_template: |
+  #     Context: {context}
+  #     Based on the above context and target document image, 
+  #     generate a human-asked SHORT question (output question only) 
+  #     of which answer is exactly same as "{target}"
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_anthropic_claude-sonnet-4-5-20250929
+  # - strategy: semantic
+  #   provider: gemini
+  #   prompt_template: |
+  #     Context: {context}
+  #     Based on the above context and target document image, 
+  #     generate a human-asked SHORT question (output question only) 
+  #     of which answer is exactly same as "{target}"
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_gemini_default
+
+  # - strategy: semantic
+  #   provider: doubao
+  #   prompt_template: |
+  #     Context: {context}
+  #     Based on the above context and target document image, 
+  #     generate a human-asked SHORT question (output question only) 
+  #     of which answer is exactly same as "{target}"
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_doubao_default
+
+  # - strategy: semantic
+  #   provider: ollama
+  #   prompt_template: |
+  #     Context: {context}
+  #     Based on the above context and target document image, 
+  #     generate a human-asked SHORT question (output question only) 
+  #     of which answer is exactly same as "{target}"
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_ollama_default
+
+  # - strategy: semantic
+  #   provider: huggingface
+  #   prompt_template: |
+  #     Context: {context}
+  #     Based on the above context and target document image, 
+  #     generate a human-asked SHORT question (output question only) 
+  #     of which answer is exactly same as "{target}"
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_huggingface_default
+
+  # Testing all 6 providers for layout_aware strategy
+  # These layout_aware strategies belong to their respective semantic groups
   - strategy: layout_aware
-    provider: openai
-    model: gpt-4o-mini
+    provider: vllm
     prompt_template: |
       Change the question {question} to a very short question 
       about finding the position of the answer from the input document image.
       For example, where is the answer of xx located?
     temperature: 0.7
     max_tokens: 256
-    group_id: semantic_openai_gpt-4o-mini
+    group_id: semantic_vllm_llama2-7b
 
+  # - strategy: layout_aware
+  #   provider: anthropic
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the position of the answer from the input document image.
+  #     For example, where is the answer of xx located?
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_anthropic_claude-sonnet-4-5-20250929
+
+  # - strategy: layout_aware
+  #   provider: gemini
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the position of the answer from the input document image.
+  #     For example, where is the answer of xx located?
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_gemini_default
+
+  # - strategy: layout_aware
+  #   provider: doubao
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the position of the answer from the input document image.
+  #     For example, where is the answer of xx located?
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_doubao_default
+
+  # - strategy: layout_aware
+  #   provider: ollama
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the position of the answer from the input document image.
+  #     For example, where is the answer of xx located?
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_ollama_default
+
+  # - strategy: layout_aware
+  #   provider: huggingface
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the position of the answer from the input document image.
+  #     For example, where is the answer of xx located?
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_huggingface_default
+
+  # Testing all 6 providers for logical_aware strategy
+  # These logical_aware strategies belong to their respective semantic groups
   - strategy: logical_aware
-    provider: openai
-    model: gpt-4o-mini
+    provider: vllm
     prompt_template: |
       Change the question {question} to a very short question 
       about finding the belonging sections of the answer from the input document.
       For example, which section you could find the information about the xx?
-    temperature: 0.5
+    temperature: 0.7
     max_tokens: 256
-    group_id: semantic_openai_gpt-4o-mini
+    group_id: semantic_vllm_llama2-7b
 
-  # Example: Another group with different provider
-  # - strategy: semantic
-  #   provider: gemini
-  #   model: gemini-1.5-pro
+  # - strategy: logical_aware
+  #   provider: anthropic
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the belonging sections of the answer from the input document.
+  #     For example, which section you could find the information about the xx?
   #   temperature: 0.7
   #   max_tokens: 256
-  #   group_id: semantic_gemini_gemini-1.5-pro
-  #
-  # - strategy: layout_aware
+  #   group_id: semantic_anthropic_claude-sonnet-4-5-20250929
+
+  # - strategy: logical_aware
   #   provider: gemini
-  #   model: gemini-1.5-pro
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the belonging sections of the answer from the input document.
+  #     For example, which section you could find the information about the xx?
   #   temperature: 0.7
   #   max_tokens: 256
-  #   group_id: semantic_gemini_gemini-1.5-pro
+  #   group_id: semantic_gemini_default
 
-# QA Verification configuration
-# Configure verifiers to validate QA pairs
+  # - strategy: logical_aware
+  #   provider: doubao
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the belonging sections of the answer from the input document.
+  #     For example, which section you could find the information about the xx?
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_doubao_default
+
+  # - strategy: logical_aware
+  #   provider: ollama
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the belonging sections of the answer from the input document.
+  #     For example, which section you could find the information about the xx?
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_ollama_default
+
+  # - strategy: logical_aware
+  #   provider: huggingface
+  #   prompt_template: |
+  #     Change the question {question} to a very short question 
+  #     about finding the belonging sections of the answer from the input document.
+  #     For example, which section you could find the information about the xx?
+  #   temperature: 0.7
+  #   max_tokens: 256
+  #   group_id: semantic_huggingface_default
+
+# --- QA Verifiers configuration ---
 verifiers:
   # Correctness verifier: checks if answer matches question
   - verifier_type: correctness
-    provider: openai
-    model: gpt-4o-mini
+    provider: vllm
+
     prompt_template: |
       Ignore the context information and domain knowledge (e.g. ABN or ACN/ARSN).
       Just consider whether '{answer}' could be the expected answer to the question '{question}'.
@@ -264,8 +422,8 @@ verifiers:
 
   # Meaningful verifier: checks if target was entered by user (not part of template)
   - verifier_type: meaningful
-    provider: openai
-    model: gpt-4o-mini
+    provider: vllm
+
     prompt_template: |
       Question: {question}
       Answer: {answer}
@@ -278,3 +436,24 @@ verifiers:
       Output format (JSON with double quotes): {{"Response": "Yes/No", "Explanation": "xxx"}}.
     temperature: 0.7
     max_tokens: 256
+
+
+# --- Retriever configuration ---
+retriever:
+  # Identifier to scope retriever preprocessing, checkpoints, and model artifacts
+  run_id: default
+
+  # Preprocessed training data (DataLoader pickle file)
+  preprocessed_data_path: ./data/retriever/{run_id}/preprocessed_train.pkl
+
+  # Directory for training checkpoints
+  checkpoint_dir: ./models/retriever/{run_id}/checkpoints/
+
+  # Final trained model path
+  model_path: ./models/retriever/{run_id}/final_model.pth
+
+  # Default training hyperparameters
+  learning_rate: 1e-5
+  batch_size: 8
+  epochs: 10
+  save_every: 2  # Save checkpoint every N epochs

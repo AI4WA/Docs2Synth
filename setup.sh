@@ -1,7 +1,7 @@
 #!/bin/bash
 # Setup script for Unix-based systems (macOS, Linux, WSL)
-# Usage: ./setup.sh [--gpu]
-# Options: --gpu (install GPU-enabled PyTorch)
+# Usage: ./setup.sh [--gpu|--cpu]
+# Options: --gpu (force GPU-enabled PyTorch), --cpu (force CPU-only PyTorch)
 
 set -e  # Exit on error
 
@@ -24,16 +24,18 @@ echo_error() {
 }
 
 # Parse arguments
-INSTALL_GPU=false
-
+INSTALL_GPU=""
 for arg in "$@"; do
     case $arg in
         --gpu)
-            INSTALL_GPU=true
+            INSTALL_GPU="true"
+            ;;
+        --cpu)
+            INSTALL_GPU="false"
             ;;
         *)
             echo_error "Unknown argument: $arg"
-            echo_info "Usage: ./setup.sh [--gpu]"
+            echo_info "Usage: ./setup.sh [--gpu|--cpu]"
             exit 1
             ;;
     esac
@@ -86,23 +88,6 @@ detect_gpu() {
     return 1
 }
 
-# Auto-detect GPU if not manually specified
-if [ "$INSTALL_GPU" = false ]; then
-    if detect_gpu; then
-        read -p "GPU detected. Install GPU-enabled PyTorch? (Y/n): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            INSTALL_GPU=true
-        fi
-    fi
-fi
-
-if [ "$INSTALL_GPU" = true ]; then
-    echo_info "Will install GPU-enabled PyTorch (CUDA 11.8)"
-else
-    echo_info "Will install CPU-only PyTorch"
-fi
-
 # Check Python version
 check_python_version() {
     if command -v python3 &> /dev/null; then
@@ -142,30 +127,53 @@ setup_venv() {
         echo_warn "Virtual environment already exists, skipping creation..."
     fi
 
+    # Auto-detect GPU if not manually specified
+    if [ -z "$INSTALL_GPU" ]; then
+        if detect_gpu; then
+            read -p "GPU detected. Install GPU-enabled PyTorch? (Y/n): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                INSTALL_GPU="true"
+            else
+                INSTALL_GPU="false"
+            fi
+        else
+            INSTALL_GPU="false"
+        fi
+    fi
+
+    if [ "$INSTALL_GPU" = "true" ]; then
+        echo_info "Will install GPU-enabled PyTorch (CUDA 12.8)"
+    else
+        echo_info "Will install CPU-only PyTorch"
+    fi
+
     # Activate virtual environment
     echo_info "Activating virtual environment..."
     source .venv/bin/activate
 
-    # Install PyTorch (CPU or GPU)
-    echo_info "Installing PyTorch with uv..."
-    if [ "$INSTALL_GPU" = true ]; then
-        uv pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
-    else
-        uv pip install -r requirements-cpu.txt
-    fi
+    # Sync dependencies with uv (excluding torch which will be installed separately)
+    echo_info "Syncing dependencies with uv (all extras)..."
+    uv sync --all-extras
 
-    # Install the package in editable mode with dev dependencies
-    echo_info "Installing docs2synth with dev dependencies..."
-    uv pip install -e ".[dev]"
+    # Install PyTorch based on GPU detection
+    echo_info "Installing PyTorch..."
+    if [ "$INSTALL_GPU" = "true" ]; then
+        echo_info "Installing GPU-enabled PyTorch from requirements-gpu.in..."
+        uv pip install -r requirements-gpu.in
+    else
+        echo_info "Installing CPU-only PyTorch from requirements-cpu.in..."
+        uv pip install -r requirements-cpu.in
+    fi
 
     # Uninstall paddlex if it was installed
     echo_info "Uninstalling paddlex..."
-    uv pip uninstall paddlex
+    uv pip uninstall paddlex || true
 
     echo_info ""
     echo_info "=========================================="
     echo_info "Setup complete!"
-    if [ "$INSTALL_GPU" = true ]; then
+    if [ "$INSTALL_GPU" = "true" ]; then
         echo_info "GPU-enabled PyTorch installed."
     else
         echo_info "CPU-only PyTorch installed."
@@ -195,7 +203,7 @@ fi
 echo_info ""
 echo_info "Verifying PyTorch installation..."
 if python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null; then
-    if [ "$INSTALL_GPU" = true ]; then
+    if [ "$INSTALL_GPU" = "true" ]; then
         if python -c "import torch; exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
             echo_info "GPU support verified successfully!"
         else

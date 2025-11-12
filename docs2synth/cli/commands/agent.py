@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -359,6 +360,138 @@ def _display_vllm_startup_info(
     click.echo()
 
 
+def _check_platform_compatibility() -> str:
+    """Check if platform is compatible with vLLM.
+
+    Returns:
+        System name (e.g., 'Linux', 'Darwin', 'Windows')
+    """
+    import platform
+
+    system = platform.system()
+    if system == "Darwin":  # macOS
+        click.echo(
+            click.style(
+                "✗ Error: vLLM is not supported on macOS.\n"
+                "   vLLM requires CUDA-capable GPUs and is designed for Linux systems.\n"
+                "   Alternatives:\n"
+                "   - Use Ollama (docs2synth agent generate --provider ollama)\n"
+                "   - Use cloud-based LLM providers (OpenAI, Anthropic, etc.)\n"
+                "   - Run vLLM on a Linux machine with CUDA support",
+                fg="red",
+            ),
+            err=True,
+        )
+        sys.exit(1)
+    return system
+
+
+def _check_cuda_availability(system: str) -> None:
+    """Check CUDA availability on Linux systems."""
+    if system == "Linux":
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                click.echo(
+                    click.style(
+                        "⚠ Warning: CUDA is not available. vLLM requires CUDA-capable GPUs.\n"
+                        "   The server may fail to start or run very slowly.",
+                        fg="yellow",
+                    ),
+                    err=True,
+                )
+        except ImportError:
+            click.echo(
+                click.style(
+                    "⚠ Warning: PyTorch not found. Cannot verify CUDA availability.",
+                    fg="yellow",
+                ),
+                err=True,
+            )
+
+
+def _handle_vllm_process_error(e: subprocess.CalledProcessError, system: str) -> None:
+    """Handle subprocess.CalledProcessError from vLLM server."""
+    error_msg = str(e)
+    # Check for common error patterns
+    if "get_device_capability" in error_msg or "NoneType" in error_msg:
+        if system == "Darwin":
+            click.echo(
+                click.style(
+                    "✗ Error: vLLM failed to initialize on macOS.\n"
+                    "   This usually means vLLM was not built for macOS CPU mode.\n\n"
+                    "   To fix:\n"
+                    "   1. Build vLLM from source for macOS:\n"
+                    "      git clone https://github.com/vllm-project/vllm.git\n"
+                    "      cd vllm && pip install -e .\n"
+                    "   2. Or use alternatives:\n"
+                    "      - Ollama: docs2synth agent generate --provider ollama\n"
+                    "      - Cloud providers (OpenAI, Anthropic, etc.)",
+                    fg="red",
+                ),
+                err=True,
+            )
+        else:
+            click.echo(
+                click.style(
+                    "✗ Error: vLLM failed to detect GPU capabilities.\n"
+                    "   This usually means:\n"
+                    "   - No CUDA-capable GPU is available\n"
+                    "   - CUDA drivers are not properly installed\n\n"
+                    "   vLLM requires NVIDIA GPUs with CUDA support on Linux.",
+                    fg="red",
+                ),
+                err=True,
+            )
+    elif (
+        "GatedRepoError" in error_msg
+        or "401" in error_msg
+        or "authentication" in error_msg.lower()
+    ):
+        click.echo(
+            click.style(
+                "✗ Error: Model requires Hugging Face authentication.\n"
+                "   The model you're trying to use is gated and requires access.\n\n"
+                "   To fix:\n"
+                "   1. Request access on the model's Hugging Face page\n"
+                "   2. Login: huggingface-cli login\n"
+                "   3. Or set HUGGINGFACE_TOKEN environment variable",
+                fg="red",
+            ),
+            err=True,
+        )
+    else:
+        click.echo(click.style(f"✗ Error: vLLM server failed: {e}", fg="red"), err=True)
+
+
+def _handle_vllm_generic_error(e: Exception, system: str) -> None:
+    """Handle generic exceptions from vLLM server."""
+    logger.exception("vLLM server command failed")
+    error_msg = str(e)
+    if "get_device_capability" in error_msg or "NoneType" in error_msg:
+        if system == "Darwin":
+            click.echo(
+                click.style(
+                    "✗ Error: vLLM failed to initialize on macOS.\n"
+                    "   vLLM needs to be built from source for macOS CPU mode.",
+                    fg="red",
+                ),
+                err=True,
+            )
+        else:
+            click.echo(
+                click.style(
+                    "✗ Error: vLLM failed to detect GPU capabilities.\n"
+                    "   vLLM requires NVIDIA GPUs with CUDA support on Linux.",
+                    fg="red",
+                ),
+                err=True,
+            )
+    else:
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+
+
 @agent_group.command("vllm-server")
 @click.option(
     "--config-path",
@@ -439,7 +572,9 @@ def agent_vllm_server(
         # Multi-GPU setup
         docs2synth agent vllm-server --tensor-parallel-size 2
     """
-    import subprocess
+    # Check platform compatibility
+    system = _check_platform_compatibility()
+    _check_cuda_availability(system)
 
     try:
         config_path = resolve_config_path(config_path)
@@ -484,9 +619,8 @@ def agent_vllm_server(
         )
         sys.exit(1)
     except subprocess.CalledProcessError as e:
-        click.echo(click.style(f"✗ Error: vLLM server failed: {e}", fg="red"), err=True)
+        _handle_vllm_process_error(e, system)
         sys.exit(1)
     except Exception as e:
-        logger.exception("vLLM server command failed")
-        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        _handle_vllm_generic_error(e, system)
         sys.exit(1)

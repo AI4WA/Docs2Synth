@@ -1,11 +1,11 @@
 @echo off
 REM Setup script for Windows
-REM Usage: setup.bat [--gpu]
-REM Options: --gpu (install GPU-enabled PyTorch)
+REM Usage: setup.bat [--gpu|--cpu]
+REM Options: --gpu (force GPU-enabled PyTorch), --cpu (force CPU-only PyTorch)
 
 setlocal enabledelayedexpansion
 
-SET INSTALL_GPU=false
+SET INSTALL_GPU=
 
 REM Parse arguments
 :parse_args
@@ -15,8 +15,13 @@ IF /I "%~1"=="--gpu" (
     SHIFT
     GOTO parse_args
 )
+IF /I "%~1"=="--cpu" (
+    SET INSTALL_GPU=false
+    SHIFT
+    GOTO parse_args
+)
 echo [ERROR] Unknown argument: %~1
-echo [INFO] Usage: setup.bat [--gpu]
+echo [INFO] Usage: setup.bat [--gpu|--cpu]
 exit /b 1
 
 :args_done
@@ -42,7 +47,7 @@ IF %ERRORLEVEL% NEQ 0 (
 REM Check if Python is installed
 where python >nul 2>nul
 IF %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Python not found. Please install Python 3.8 or higher.
+    echo [ERROR] Python not found. Please install Python 3.11 or higher.
     echo [INFO] Visit: https://www.python.org/downloads/
     exit /b 1
 )
@@ -52,7 +57,7 @@ for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
 echo [INFO] Python %PYTHON_VERSION% detected
 
 REM Detect GPU if not manually specified
-IF "%INSTALL_GPU%"=="false" (
+IF "!INSTALL_GPU!"=="" (
     echo [INFO] Detecting GPU availability...
     where nvidia-smi >nul 2>nul
     IF %ERRORLEVEL% EQU 0 (
@@ -61,17 +66,22 @@ IF "%INSTALL_GPU%"=="false" (
             echo [INFO] NVIDIA GPU detected!
             set /p GPU_CHOICE="Install GPU-enabled PyTorch? (Y/n): "
             IF /I "!GPU_CHOICE!"=="" SET GPU_CHOICE=Y
-            IF /I "!GPU_CHOICE!"=="Y" SET INSTALL_GPU=true
+            IF /I "!GPU_CHOICE!"=="Y" (
+                SET INSTALL_GPU=true
+            ) ELSE (
+                SET INSTALL_GPU=false
+            )
+        ) ELSE (
+            SET INSTALL_GPU=false
         )
+    ) ELSE (
+        echo [INFO] No compatible GPU detected. Installing CPU version.
+        SET INSTALL_GPU=false
     )
 )
 
-IF "%INSTALL_GPU%"=="false" (
-    echo [INFO] No compatible GPU detected. Installing CPU version.
-)
-
-IF "%INSTALL_GPU%"=="true" (
-    echo [INFO] Will install GPU-enabled PyTorch (CUDA 11.8^)
+IF "!INSTALL_GPU!"=="true" (
+    echo [INFO] Will install GPU-enabled PyTorch (CUDA 12.8^)
 ) ELSE (
     echo [INFO] Will install CPU-only PyTorch
 )
@@ -94,26 +104,28 @@ REM Activate virtual environment
 echo [INFO] Activating virtual environment...
 call .venv\Scripts\activate.bat
 
-REM Install PyTorch (CPU or GPU)
-echo [INFO] Installing PyTorch with uv...
-IF "%INSTALL_GPU%"=="true" (
-    uv pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
-) ELSE (
-    uv pip install -r requirements-cpu.txt
-)
+REM Sync dependencies with uv (excluding torch which will be installed separately)
+echo [INFO] Syncing dependencies with uv (all extras)...
+uv sync --all-extras
 
-REM Install the package in editable mode with dev dependencies
-echo [INFO] Installing docs2synth with dev dependencies...
-uv pip install -e ".[dev]"
+REM Install PyTorch based on GPU detection
+echo [INFO] Installing PyTorch...
+IF "!INSTALL_GPU!"=="true" (
+    echo [INFO] Installing GPU-enabled PyTorch from requirements-gpu.in...
+    uv pip install -r requirements-gpu.in
+) ELSE (
+    echo [INFO] Installing CPU-only PyTorch from requirements-cpu.in...
+    uv pip install -r requirements-cpu.in
+)
 
 REM Uninstall paddlex if it was installed
 echo [INFO] Uninstalling paddlex...
-uv pip uninstall paddlex
+uv pip uninstall -y paddlex >nul 2>nul
 
 echo.
 echo ==========================================
 echo Setup complete!
-IF "%INSTALL_GPU%"=="true" (
+IF "!INSTALL_GPU!"=="true" (
     echo GPU-enabled PyTorch installed.
 ) ELSE (
     echo CPU-only PyTorch installed.
@@ -137,7 +149,7 @@ echo.
 echo [INFO] Verifying PyTorch installation...
 python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')" 2>nul
 IF %ERRORLEVEL% EQU 0 (
-    IF "%INSTALL_GPU%"=="true" (
+    IF "!INSTALL_GPU!"=="true" (
         python -c "import torch; exit(0 if torch.cuda.is_available() else 1)" 2>nul
         IF !ERRORLEVEL! EQU 0 (
             echo [INFO] GPU support verified successfully!
