@@ -6,8 +6,6 @@ including ANLS (Average Normalized Levenshtein Similarity) for QA evaluation.
 
 from __future__ import annotations
 
-from typing import Optional
-
 
 def calculate_anls(pred_text: str, gt_text: str) -> float:
     """Calculate Average Normalized Levenshtein Similarity (ANLS) score.
@@ -85,4 +83,3 @@ def _levenshtein_distance(s1: str, s2: str) -> int:
         previous_row = current_row
 
     return previous_row[-1]
-

@@ -140,6 +140,11 @@ docling = [
     "docling>=2.0.0",
 ]
 
+[dependency-groups]
+dev = [
+    "black[jupyter]>=24.8.0",
+]
+
 # Black configuration
 [tool.black]
 line-length = 88
