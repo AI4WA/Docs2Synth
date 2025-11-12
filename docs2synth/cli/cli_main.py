@@ -15,6 +15,7 @@ from docs2synth.cli.commands import (
     datasets,
     preprocess,
     qa_group,
+    retriever_group,
     verify_group,
 )
 from docs2synth.utils import get_config, load_config, setup_cli_logging
@@ -60,6 +61,7 @@ cli.add_command(datasets)
 cli.add_command(preprocess)
 cli.add_command(agent_group)
 cli.add_command(qa_group)
+cli.add_command(retriever_group)
 cli.add_command(verify_group)
 cli.add_command(annotate_command)
 
