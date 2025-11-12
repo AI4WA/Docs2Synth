@@ -134,6 +134,8 @@ def annotate_command(
     try:
         subprocess.run(
             [
+                sys.executable,
+                "-m",
                 "streamlit",
                 "run",
                 str(app_path),
@@ -145,6 +147,15 @@ def annotate_command(
             env=env,
             check=True,
         )
+    except FileNotFoundError:
+        click.echo(
+            click.style(
+                "✗ Error: Streamlit not found. Please install it with: pip install streamlit",
+                fg="red",
+            ),
+            err=True,
+        )
+        sys.exit(1)
     except subprocess.CalledProcessError as e:
         click.echo(
             click.style(f"✗ Error: Failed to launch Streamlit: {e}", fg="red"),
