@@ -55,6 +55,51 @@ def _apply_run_id_to_path(
     return scoped_path
 
 
+def _get_device_from_config(cfg: Any, device_override: Optional[str] = None) -> Any:
+    """Get device from config or use override.
+
+    Priority:
+    1. CLI override (--device flag)
+    2. Global device config
+    3. Preprocess device config (deprecated, for backward compatibility)
+    4. Auto-detect (CUDA if available, else CPU)
+
+    Args:
+        cfg: Configuration object
+        device_override: Optional device string from CLI
+
+    Returns:
+        torch.device object
+    """
+    import torch
+
+    # Priority 1: CLI override
+    if device_override:
+        device = torch.device(device_override)
+        return device, f"{device_override} (CLI override)"
+
+    # Priority 2: Global device config
+    global_device = cfg.get("device")
+    if global_device:
+        device = torch.device(global_device)
+        return device, f"{global_device} (from config)"
+
+    # Priority 3: Preprocess device config (backward compatibility)
+    preprocess_device = cfg.get("preprocess.device")
+    if preprocess_device:
+        device = torch.device(preprocess_device)
+        return device, f"{preprocess_device} (from preprocess config, deprecated)"
+
+    # Priority 4: Auto-detect
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+        gpu_name = torch.cuda.get_device_name(0)
+        return device, f"cuda:0 (auto-detected: {gpu_name})"
+    else:
+        device = torch.device("cpu")
+        return device, "cpu (auto-detected: no CUDA available)"
+
+
 def _load_model(
     resume: Optional[Path],
     model_path: Optional[Path],
@@ -178,7 +223,9 @@ def _run_training_loop(
     output_dir: Path,
     val_dataloader: Optional[Any] = None,
     eval_func: Optional[Any] = None,
-    device_str: Optional[str] = None,
+    device: Any = None,
+    cfg: Any = None,
+    device_override: Optional[str] = None,
 ) -> float:
     """Run training loop and return best ANLS score."""
     import warnings
@@ -190,20 +237,12 @@ def _run_training_loop(
         "ignore", category=FutureWarning, module="transformers.modeling_utils"
     )
 
-    # Device selection: manual override or auto-detect
-    if device_str:
-        device = torch.device(device_str)
-        click.echo(f"  Device: {device} (manual override)")
-    elif torch.cuda.is_available():
-        # Auto-detect best available device
-        num_gpus = torch.cuda.device_count()
-        if num_gpus > 1:
-            click.echo(f"  Found {num_gpus} GPUs, using GPU 0")
-        device = torch.device("cuda:0")
-        gpu_name = torch.cuda.get_device_name(0)
-        click.echo(f"  Device: {device} ({gpu_name})")
+    # Get device from config or override
+    if device is None:
+        device, device_desc = _get_device_from_config(cfg, device_override)
+        click.echo(f"  Device: {device_desc}")
     else:
-        device = torch.device("cpu")
+        # Device already provided (for backward compatibility)
         click.echo(f"  Device: {device}")
 
     model = model.to(device)
@@ -681,7 +720,9 @@ def retriever_train(  # noqa: C901
             output_dir,
             val_dataloader,
             eval_func,
-            device,
+            device=None,  # Will be determined from config
+            cfg=cfg,
+            device_override=device,
         )
 
         # Save final model
@@ -879,24 +920,81 @@ def _print_worst_predictions(analysis: Dict[str, Any]) -> None:
         click.echo(f"   Entity: {error['entity_pred']} → {error['entity_target']}")
 
 
+def _auto_discover_model_path(cfg: Any, run_id: Optional[str] = None) -> Optional[Path]:
+    """Automatically discover model path from config or checkpoints.
+
+    Args:
+        cfg: Configuration object
+        run_id: Optional run identifier
+
+    Returns:
+        Path to model file, or None if not found
+    """
+    # Try 1: Look for final model from config
+    final_model_path_str = cfg.get("retriever.model_path")
+    if final_model_path_str:
+        final_model_path = _apply_run_id_to_path(
+            final_model_path_str, run_id, default_filename="final_model.pth"
+        )
+        if final_model_path.exists():
+            click.echo(f"  Auto-discovered model: {final_model_path}")
+            return final_model_path
+
+    # Try 2: Look for default final model path
+    default_final_model = Path("./models/retriever/final_model.pth")
+    if run_id:
+        default_final_model = (
+            default_final_model.parent / run_id / default_final_model.name
+        )
+    if default_final_model.exists():
+        click.echo(f"  Auto-discovered model: {default_final_model}")
+        return default_final_model
+
+    # Try 3: Look for latest checkpoint in checkpoint directory
+    checkpoint_dir_str = cfg.get("retriever.checkpoint_dir")
+    if checkpoint_dir_str:
+        checkpoint_dir = _apply_run_id_to_path(checkpoint_dir_str, run_id)
+    else:
+        checkpoint_dir = Path("./models/retriever/checkpoints")
+        if run_id:
+            checkpoint_dir = checkpoint_dir / run_id
+
+    if checkpoint_dir.exists():
+        # Find all checkpoint files
+        checkpoints = list(checkpoint_dir.glob("checkpoint_epoch_*.pth"))
+        if checkpoints:
+            # Sort by epoch number and get the latest
+            def get_epoch_num(p: Path) -> int:
+                try:
+                    return int(p.stem.split("_")[-1])
+                except (ValueError, IndexError):
+                    return 0
+
+            latest_checkpoint = max(checkpoints, key=get_epoch_num)
+            click.echo(f"  Auto-discovered latest checkpoint: {latest_checkpoint}")
+            return latest_checkpoint
+
+    return None
+
+
 @retriever_group.command("validate")
 @click.option(
     "--model",
     type=click.Path(exists=True, path_type=Path),
-    required=True,
-    help="Path to trained model checkpoint (.pth file)",
+    default=None,
+    help="Path to trained model checkpoint (.pth file). If not provided, automatically loads from config or latest checkpoint.",
 )
 @click.option(
     "--data",
     type=click.Path(exists=True, path_type=Path),
-    required=True,
-    help="Path to validation DataLoader pickle (.pkl file)",
+    default=None,
+    help="Path to validation DataLoader pickle (.pkl file). If not provided, reads from config.",
 )
 @click.option(
     "--output",
     type=click.Path(path_type=Path),
     default=None,
-    help="Output directory for validation reports (defaults to ./validation_reports/)",
+    help="Output directory for validation reports (defaults to ./models/retriever/{run_id}/validation_reports/)",
 )
 @click.option(
     "--mode",
@@ -904,13 +1002,20 @@ def _print_worst_predictions(analysis: Dict[str, Any]) -> None:
     default="standard",
     help="Evaluation mode (default: standard)",
 )
+@click.option(
+    "--device",
+    type=str,
+    default=None,
+    help="Device to use for evaluation (cpu, cuda, cuda:0, cuda:1, etc.). If not specified, auto-detects GPU.",
+)
 @click.pass_context
-def retriever_validate(
+def retriever_validate(  # noqa: C901
     ctx: click.Context,
-    model: Path,
-    data: Path,
+    model: Optional[Path],
+    data: Optional[Path],
     output: Optional[Path],
     mode: str,
+    device: Optional[str],
 ) -> None:
     """Validate retriever training results.
 
@@ -922,146 +1027,390 @@ def retriever_validate(
     - Error analysis (worst predictions)
     - Training curve visualization
 
+    Auto-discovery (when parameters not specified):
+
+    Model path (--model):
+    1. Config retriever.model_path
+    2. Default: ./models/retriever/final_model.pth
+    3. Latest checkpoint in retriever.checkpoint_dir
+
+    Validation data (--data):
+    1. Config retriever.validation_data_path
+    2. Same directory as retriever.preprocessed_data_path (with 'val' instead of 'train')
+    3. Config preprocess.output_dir
+    4. Default: ./data/retriever/preprocessed_val.pkl
+
     Examples:
-        # Basic validation
+        # Auto-discover both model and data from config
+        docs2synth retriever validate
+
+        # Auto-discover model, specify data
+        docs2synth retriever validate --data data/val.pkl
+
+        # Specify both explicitly
         docs2synth retriever validate \\
             --model models/retriever/final_model.pth \\
             --data data/val.pkl
 
         # With custom output directory
         docs2synth retriever validate \\
-            --model models/retriever/final_model.pth \\
             --data data/val.pkl \\
-            --output validation_reports/run_001/
+            --output ./my_custom_reports/
 
         # For layout mode
-        docs2synth retriever validate \\
-            --model models/retriever/final_model.pth \\
-            --data data/val.pkl \\
-            --mode layout
+        docs2synth retriever validate --mode layout
     """
     from docs2synth.retriever.validation import TrainingValidator
 
-    # Set default output directory
-    if output is None:
-        output = Path("./validation_reports")
-    output.mkdir(parents=True, exist_ok=True)
-
-    click.echo(
-        click.style("\nValidating retriever training results...", fg="blue", bold=True)
-    )
-    click.echo(f"  Model: {model}")
-    click.echo(f"  Data:  {data}")
-    click.echo(f"  Mode:  {mode}")
-    click.echo(f"  Output: {output}\n")
-
-    # Load model
-    click.echo(click.style("Loading model...", fg="yellow"))
     try:
-        trained_model = _load_model_for_validation(model)
-    except Exception as e:
-        click.echo(click.style(f"✗ Error loading model: {e}", fg="red"), err=True)
-        logger.exception("Model loading failed")
-        sys.exit(1)
+        cfg = ctx.obj.get("config")
+        run_id = cfg.get("retriever.run_id")
 
-    # Load validation data
-    click.echo(click.style("Loading validation data...", fg="yellow"))
-    try:
-        val_dataloader = _load_validation_data(data)
-    except Exception as e:
-        click.echo(click.style(f"✗ Error loading data: {e}", fg="red"), err=True)
-        logger.exception("Data loading failed")
-        sys.exit(1)
+        # Auto-discover validation data path if not provided
+        if data is None:
+            click.echo(
+                click.style(
+                    "No data path provided, attempting auto-discovery...", fg="yellow"
+                )
+            )
 
-    # Run evaluation
-    click.echo(click.style("\nRunning evaluation...", fg="yellow"))
-    try:
-        if mode.lower() == "layout":
-            from docs2synth.retriever import evaluate_layout
+            searched_paths = []
 
-            eval_func = evaluate_layout
+            # Try 1: Explicit validation data path from config
+            val_data_str = cfg.get("retriever.validation_data_path")
+            if val_data_str:
+                candidate = _apply_run_id_to_path(
+                    val_data_str, run_id, default_filename="preprocessed_val.pkl"
+                )
+                searched_paths.append(
+                    ("Config retriever.validation_data_path", candidate)
+                )
+                if candidate.exists():
+                    data = candidate
+                    click.echo(f"  ✓ Found validation data: {data}")
+
+            # Try 2: Look in the same directory as training data (preprocessed_data_path)
+            if data is None:
+                train_data_str = cfg.get("retriever.preprocessed_data_path")
+                if train_data_str:
+                    train_data_path = _apply_run_id_to_path(
+                        train_data_str,
+                        run_id,
+                        default_filename="preprocessed_train.pkl",
+                    )
+                    # Try multiple filename patterns
+                    patterns = [
+                        train_data_path.name.replace("train", "val"),
+                        train_data_path.name.replace("train", "validation"),
+                        train_data_path.name.replace("_train", "_val"),
+                        "preprocessed_val.pkl",
+                    ]
+                    for pattern in patterns:
+                        candidate = train_data_path.parent / pattern
+                        if candidate not in [p[1] for p in searched_paths]:
+                            searched_paths.append(
+                                ("Same directory as train data", candidate)
+                            )
+                        if candidate.exists():
+                            data = candidate
+                            click.echo(f"  ✓ Found validation data: {data}")
+                            break
+
+            # Try 3: Look in preprocess output directory
+            if data is None:
+                preprocess_output_str = cfg.get("preprocess.output_dir")
+                if preprocess_output_str:
+                    preprocess_dir = Path(preprocess_output_str)
+                    for filename in [
+                        "preprocessed_val.pkl",
+                        "val.pkl",
+                        "validation.pkl",
+                    ]:
+                        candidate = preprocess_dir / filename
+                        if candidate not in [p[1] for p in searched_paths]:
+                            searched_paths.append(
+                                ("Preprocess output directory", candidate)
+                            )
+                        if candidate.exists():
+                            data = candidate
+                            click.echo(f"  ✓ Found validation data: {data}")
+                            break
+
+            # Try 4: Default paths
+            if data is None:
+                default_paths = [
+                    Path("./data/retriever")
+                    / (run_id if run_id else ".")
+                    / "preprocessed_val.pkl",
+                    Path("./data/retriever/preprocessed_val.pkl"),
+                    Path("./data/preprocessed_val.pkl"),
+                ]
+                for candidate in default_paths:
+                    candidate = candidate.resolve()
+                    if candidate not in [p[1] for p in searched_paths]:
+                        searched_paths.append(("Default location", candidate))
+                    if candidate.exists():
+                        data = candidate
+                        click.echo(f"  ✓ Found validation data: {data}")
+                        break
+
+            # Try 5: Use training data as fallback
+            if data is None:
+                train_data_str = cfg.get("retriever.preprocessed_data_path")
+                if train_data_str:
+                    train_data_path = _apply_run_id_to_path(
+                        train_data_str,
+                        run_id,
+                        default_filename="preprocessed_train.pkl",
+                    )
+                    if train_data_path.exists():
+                        click.echo(
+                            click.style(
+                                f"\n⚠ Warning: No validation data found. Using training data as fallback: {train_data_path}",
+                                fg="yellow",
+                            )
+                        )
+                        click.echo(
+                            click.style(
+                                "  (This is not recommended - validation should use separate data)",
+                                fg="yellow",
+                            )
+                        )
+                        data = train_data_path
+
+            # If still not found, show error with detailed search paths
+            if data is None:
+                click.echo(
+                    click.style(
+                        "\n✗ Error: Could not find validation data.",
+                        fg="red",
+                        bold=True,
+                    ),
+                    err=True,
+                )
+                click.echo("\nSearched in the following locations:", err=True)
+                for i, (source, path) in enumerate(searched_paths, 1):
+                    click.echo(f"  {i}. {source}:", err=True)
+                    click.echo(f"     {path}", err=True)
+
+                click.echo(
+                    click.style(
+                        "\nTo fix this issue:",
+                        fg="yellow",
+                    ),
+                    err=True,
+                )
+                click.echo(
+                    "  1. Create validation data using: docs2synth retriever preprocess",
+                    err=True,
+                )
+                click.echo(
+                    "  2. Or specify the path explicitly: --data /path/to/val.pkl",
+                    err=True,
+                )
+                click.echo(
+                    "  3. Or set retriever.validation_data_path in config.yml",
+                    err=True,
+                )
+                sys.exit(1)
         else:
-            from docs2synth.retriever import evaluate
+            data = Path(data)
 
-            eval_func = evaluate
+        # Auto-discover model path if not provided
+        if model is None:
+            click.echo(
+                click.style(
+                    "No model path provided, attempting auto-discovery...", fg="yellow"
+                )
+            )
+            model = _auto_discover_model_path(cfg, run_id)
+            if model is None:
+                click.echo(
+                    click.style(
+                        "✗ Error: Could not auto-discover model. Please specify --model explicitly.",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                click.echo(
+                    "\nSearched in:",
+                    err=True,
+                )
+                click.echo(
+                    "  1. Config retriever.model_path",
+                    err=True,
+                )
+                click.echo(
+                    "  2. Default: ./models/retriever/final_model.pth",
+                    err=True,
+                )
+                click.echo(
+                    "  3. Latest checkpoint in retriever.checkpoint_dir",
+                    err=True,
+                )
+                sys.exit(1)
+        else:
+            model = Path(model)
 
-        results = eval_func(trained_model, val_dataloader)
-        (
-            average_anls,
-            average_loss,
-            pred_texts,
-            gt_texts,
-            pred_entities,
-            target_entities,
-        ) = results
+        # Set default output directory - organize by run_id in models/retriever folder
+        if output is None:
+            # Use run_id to organize validation reports with model artifacts
+            if run_id:
+                output = Path(f"./models/retriever/{run_id}/validation_reports")
+            else:
+                output = Path("./models/retriever/validation_reports")
+            click.echo(f"  Using default output directory: {output}")
+        else:
+            output = Path(output)
+        output.mkdir(parents=True, exist_ok=True)
 
         click.echo(
             click.style(
-                f"  ✓ Evaluation complete\n    ANLS: {average_anls:.4f} | Loss: {average_loss:.4f}",
-                fg="green",
+                "\nValidating retriever training results...", fg="blue", bold=True
             )
         )
-    except Exception as e:
-        click.echo(click.style(f"✗ Error during evaluation: {e}", fg="red"), err=True)
-        logger.exception("Evaluation failed")
-        sys.exit(1)
+        click.echo(f"  Model: {model}")
+        click.echo(f"  Data:  {data}")
+        click.echo(f"  Mode:  {mode}")
+        click.echo(f"  Output: {output}\n")
 
-    # Detailed analysis
-    click.echo(click.style("\nPerforming detailed analysis...", fg="yellow"))
-    try:
-        validator = TrainingValidator(output_dir=output)
-        analysis = validator.analyze_predictions(
-            pred_texts=pred_texts,
-            gt_texts=gt_texts,
-            pred_entities=pred_entities,
-            target_entities=target_entities,
-            save_path=output / "detailed_analysis.txt",
-        )
-        click.echo(click.style("  ✓ Analysis complete\n", fg="green"))
-
-        # Print results
-        click.echo(click.style("=" * 70, fg="blue"))
-        click.echo(click.style("VALIDATION RESULTS", fg="blue", bold=True))
-        click.echo(click.style("=" * 70, fg="blue"))
-
-        _print_validation_summary(analysis, pred_texts)
-
-        checks = validator.sanity_check_batch(
-            pred_texts=pred_texts,
-            gt_texts=gt_texts,
-            pred_entities=pred_entities,
-            target_entities=target_entities,
-        )
-        _print_sanity_checks(checks, pred_texts)
-        _print_worst_predictions(analysis)
-
-        # Output files
-        click.echo("\n" + click.style("=" * 70, fg="blue"))
-        click.echo(click.style("OUTPUT FILES", fg="blue", bold=True))
-        click.echo(click.style("=" * 70, fg="blue"))
-        click.echo(f"  Detailed analysis: {output / 'detailed_analysis.txt'}")
-
-        # Try to generate plots
+        # Load model
+        click.echo(click.style("Loading model...", fg="yellow"))
         try:
-            import matplotlib  # noqa: F401
+            trained_model = _load_model_for_validation(model)
+        except Exception as e:
+            click.echo(click.style(f"✗ Error loading model: {e}", fg="red"), err=True)
+            logger.exception("Model loading failed")
+            sys.exit(1)
 
-            validator.history["train_anls"] = [average_anls]
-            validator.history["train_entity_acc"] = [analysis["entity"]["accuracy"]]
-            validator.plot_training_curves(save_path=output / "validation_metrics.png")
-            click.echo(f"  Metrics plot:      {output / 'validation_metrics.png'}")
-        except ImportError:
+        # Set up device from config or CLI override
+        device_obj, device_desc = _get_device_from_config(cfg, device)
+        click.echo(f"  Device: {device_desc}")
+
+        # Move model to device and set to eval mode
+        click.echo(f"  Moving model to {device_obj}...")
+        trained_model = trained_model.to(device_obj)
+        trained_model.eval()
+
+        # Load validation data
+        click.echo(click.style("Loading validation data...", fg="yellow"))
+        try:
+            val_dataloader = _load_validation_data(data)
+        except Exception as e:
+            click.echo(click.style(f"✗ Error loading data: {e}", fg="red"), err=True)
+            logger.exception("Data loading failed")
+            sys.exit(1)
+
+        # Run evaluation
+        click.echo(click.style("\nRunning evaluation...", fg="yellow"))
+        try:
+            # Temporarily override _get_device to use the same device as the model
+            import docs2synth.retriever.training as training_module
+
+            original_get_device = training_module._get_device
+            training_module._get_device = lambda: device_obj
+
+            try:
+                if mode.lower() == "layout":
+                    from docs2synth.retriever import evaluate_layout
+
+                    eval_func = evaluate_layout
+                else:
+                    from docs2synth.retriever import evaluate
+
+                    eval_func = evaluate
+
+                results = eval_func(trained_model, val_dataloader)
+            finally:
+                # Restore original _get_device
+                training_module._get_device = original_get_device
+            (
+                average_anls,
+                average_loss,
+                pred_texts,
+                gt_texts,
+                pred_entities,
+                target_entities,
+            ) = results
+
             click.echo(
-                click.style("  (matplotlib not installed, skipping plots)", fg="yellow")
+                click.style(
+                    f"  ✓ Evaluation complete\n    ANLS: {average_anls:.4f} | Loss: {average_loss:.4f}",
+                    fg="green",
+                )
             )
+        except Exception as e:
+            click.echo(
+                click.style(f"✗ Error during evaluation: {e}", fg="red"), err=True
+            )
+            logger.exception("Evaluation failed")
+            sys.exit(1)
 
-        # Final summary
-        click.echo("\n" + click.style("=" * 70, fg="green", bold=True))
-        click.echo(click.style("✓ VALIDATION COMPLETE", fg="green", bold=True))
-        click.echo(click.style("=" * 70, fg="green", bold=True) + "\n")
+        # Detailed analysis
+        click.echo(click.style("\nPerforming detailed analysis...", fg="yellow"))
+        try:
+            validator = TrainingValidator(output_dir=output)
+            analysis = validator.analyze_predictions(
+                pred_texts=pred_texts,
+                gt_texts=gt_texts,
+                pred_entities=pred_entities,
+                target_entities=target_entities,
+                save_path=output / "detailed_analysis.txt",
+            )
+            click.echo(click.style("  ✓ Analysis complete\n", fg="green"))
+
+            # Print results
+            click.echo(click.style("=" * 70, fg="blue"))
+            click.echo(click.style("VALIDATION RESULTS", fg="blue", bold=True))
+            click.echo(click.style("=" * 70, fg="blue"))
+
+            _print_validation_summary(analysis, pred_texts)
+
+            checks = validator.sanity_check_batch(
+                pred_texts=pred_texts,
+                gt_texts=gt_texts,
+                pred_entities=pred_entities,
+                target_entities=target_entities,
+            )
+            _print_sanity_checks(checks, pred_texts)
+            _print_worst_predictions(analysis)
+
+            # Output files
+            click.echo("\n" + click.style("=" * 70, fg="blue"))
+            click.echo(click.style("OUTPUT FILES", fg="blue", bold=True))
+            click.echo(click.style("=" * 70, fg="blue"))
+            click.echo(f"  Detailed analysis: {output / 'detailed_analysis.txt'}")
+
+            # Try to generate plots
+            try:
+                import matplotlib  # noqa: F401
+
+                validator.history["train_anls"] = [average_anls]
+                validator.history["train_entity_acc"] = [analysis["entity"]["accuracy"]]
+                validator.plot_training_curves(
+                    save_path=output / "validation_metrics.png"
+                )
+                click.echo(f"  Metrics plot:      {output / 'validation_metrics.png'}")
+            except ImportError:
+                click.echo(
+                    click.style(
+                        "  (matplotlib not installed, skipping plots)", fg="yellow"
+                    )
+                )
+
+            # Final summary
+            click.echo("\n" + click.style("=" * 70, fg="green", bold=True))
+            click.echo(click.style("✓ VALIDATION COMPLETE", fg="green", bold=True))
+            click.echo(click.style("=" * 70, fg="green", bold=True) + "\n")
+
+        except Exception as e:
+            click.echo(click.style(f"✗ Error during analysis: {e}", fg="red"), err=True)
+            logger.exception("Analysis failed")
+            sys.exit(1)
 
     except Exception as e:
-        click.echo(click.style(f"✗ Error during analysis: {e}", fg="red"), err=True)
-        logger.exception("Analysis failed")
+        logger.exception("Retriever validation failed")
+        click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
         sys.exit(1)
 
 
