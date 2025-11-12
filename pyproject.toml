@@ -41,6 +41,7 @@ dependencies = [
     "vllm>=0.11.0",
     "streamlit>=1.51.0",
     "plotly>=6.4.0",
+    "matplotlib>=3.10.7",
 ]
 authors = [{ name = "AI4WA" }]
 license = { text = "MIT" }

@@ -72,7 +72,6 @@ def _prepare_batch_tensors(data: dict, device: Any) -> dict:
         ),
         "norm_bbox": data["norm_bbox"].to(device, dtype=torch.float),
         "object_mask": data["object_mask"].to(device, dtype=torch.float),
-        "entity_targets": data["target"].to(device, dtype=torch.float),
         "start_positions": data["start_id"].to(device, dtype=torch.long),
         "end_positions": data["end_id"].to(device, dtype=torch.long),
     }
@@ -191,8 +190,8 @@ def train(
     train_dataloader: Any,
     lr: float,
     loss_function: Optional[Any] = None,
-) -> Tuple[float, float, List[str], List[str], List[int], List[int]]:
-    """Train model with entity retrieval and span-based QA tasks.
+) -> Tuple[float, float, List[str], List[str]]:
+    """Train model with span-based QA task.
 
     Args:
         model: PyTorch model to train
@@ -206,8 +205,6 @@ def train(
             - average_loss: Average total loss over all batches
             - predict_text_list: List of predicted text strings
             - target_text_list: List of ground truth text strings
-            - predict_entity_list: List of predicted entity IDs
-            - target_id_list: List of target entity IDs
     """
     import torch  # noqa: F811
     from torch.nn import CrossEntropyLoss
@@ -222,8 +219,6 @@ def train(
     predict_text_list: List[str] = []
     target_text_list: List[str] = []
     anls_scores: List[float] = []
-    predict_entity_list: List[int] = []
-    target_id_list: List[int] = []
     total_loss = 0.0
     num_batches = 0
 
@@ -231,6 +226,10 @@ def train(
     processor = get_processor()
 
     for _, data in tqdm(enumerate(train_dataloader, 0), desc="Training"):
+        # Skip None batches (all samples failed preprocessing)
+        if data is None:
+            continue
+
         tensors = _prepare_batch_tensors(data, device)
 
         optimizer.zero_grad()
@@ -250,13 +249,7 @@ def train(
             tensors["positional_encoding"],
         )
 
-        # Compute losses
-        entity_loss, pred_entities, target_entities = _compute_entity_loss(
-            outputs_dict["entity_logits"], tensors["entity_targets"], loss_function
-        )
-        predict_entity_list.extend(list(pred_entities))
-        target_id_list.extend(list(target_entities))
-
+        # Compute span-based QA loss
         token_loss = _compute_span_loss(
             outputs_dict["start_logits"],
             outputs_dict["end_logits"],
@@ -264,7 +257,7 @@ def train(
             tensors["end_positions"],
         )
 
-        batch_loss = token_loss + entity_loss
+        batch_loss = token_loss
         total_loss += batch_loss.item()
         num_batches += 1
 
@@ -294,8 +287,6 @@ def train(
         average_loss,
         predict_text_list,
         target_text_list,
-        predict_entity_list,
-        target_id_list,
     )
 
 
@@ -655,7 +646,7 @@ def evaluate(
     model: Any,
     eval_dataloader: Any,
     loss_function: Optional[Any] = None,
-) -> Tuple[float, float, List[str], List[str], List[int], List[int]]:
+) -> Tuple[float, float, List[str], List[str]]:
     """Evaluate model on validation/test data.
 
     Args:
@@ -669,8 +660,6 @@ def evaluate(
             - average_loss: Average total loss over all batches
             - predict_text_list: List of predicted text strings
             - target_text_list: List of ground truth text strings
-            - predict_entity_list: List of predicted entity IDs
-            - target_id_list: List of target entity IDs
     """
     import torch  # noqa: F811
     from torch.nn import CrossEntropyLoss
@@ -685,8 +674,6 @@ def evaluate(
     predict_text_list: List[str] = []
     target_text_list: List[str] = []
     anls_scores: List[float] = []
-    predict_entity_list: List[int] = []
-    target_id_list: List[int] = []
     total_loss = 0.0
     num_batches = 0
 
@@ -694,6 +681,10 @@ def evaluate(
 
     with torch.no_grad():
         for _, data in tqdm(enumerate(eval_dataloader, 0), desc="Evaluating"):
+            # Skip None batches (all samples failed preprocessing)
+            if data is None:
+                continue
+
             # Convert tensors to the correct types
             input_ids = data["input_ids"].to(device, dtype=torch.long).squeeze(1)
             attention_mask = data["attention_mask"].to(device, dtype=torch.float)
@@ -711,9 +702,6 @@ def evaluate(
             )
             norm_bbox = data["norm_bbox"].to(device, dtype=torch.float)
             object_mask = data["object_mask"].to(device, dtype=torch.float)
-
-            # Entity Retrieving Target
-            entity_targets = data["target"].to(device, dtype=torch.float)
 
             # Convert start and end positions to torch.long
             start_positions = data["start_id"].to(device, dtype=torch.long)
@@ -734,17 +722,6 @@ def evaluate(
                 positional_encoding,
             )
 
-            # Entity Retrieving Task
-            entity_logits = outputs_dict["entity_logits"]
-            entity_logits = entity_logits.squeeze(2)
-            entity_loss = loss_function(entity_logits, entity_targets)
-
-            _, big_idx = torch.max(entity_logits.data, dim=1)
-            predict_entity_list.extend(list(big_idx.cpu().numpy()))
-
-            _, target_idx = torch.max(entity_targets.data, dim=1)
-            target_id_list.extend(list(target_idx.cpu().numpy()))
-
             # Span-based QA Predicted Logits
             start_logits = outputs_dict["start_logits"]
             end_logits = outputs_dict["end_logits"]
@@ -758,7 +735,7 @@ def evaluate(
             end_loss = loss_fct(end_logits, end_positions)
             token_loss = (start_loss + end_loss) / 2
 
-            batch_loss = token_loss + entity_loss
+            batch_loss = token_loss
             total_loss += batch_loss.item()
             num_batches += 1
 
@@ -795,8 +772,6 @@ def evaluate(
         average_loss,
         predict_text_list,
         target_text_list,
-        predict_entity_list,
-        target_id_list,
     )
 
 

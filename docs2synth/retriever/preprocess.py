@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pickle
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import torch
 from PIL import Image
@@ -104,25 +104,30 @@ class PreprocessedQADataset(Dataset):
             self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
             self.tokenizer_name = "BERT (bert-base-uncased)"
 
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Optional[Dict[str, torch.Tensor]]:
         """Get a preprocessed example.
 
         Returns:
-            Dictionary with all required tensor fields for training
+            Dictionary with all required tensor fields for training, or None if failed
         """
         qa_pair = self.qa_pairs[idx]
 
         try:
-            return self._preprocess(qa_pair)
+            result = self._preprocess(qa_pair)
+            if result is None:
+                logger.debug(f"Skipping QA pair {idx}: preprocessing returned None")
+            return result
         except Exception as e:
             logger.error(f"Error preprocessing QA pair {idx}: {e}")
             logger.error(f"QA pair: {qa_pair.get('question', 'N/A')}")
-            raise
+            # Return None instead of raising to allow skipping bad samples
+            return None
 
     def _preprocess(self, qa: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         """Preprocess a single QA pair into training format.
 
-        Stage 1 (MVP) implementation with simplified features.
+        Uses word-level labels and processor's word_labels parameter
+        for correct answer span detection.
 
         Args:
             qa: QA pair dictionary with keys:
@@ -130,73 +135,219 @@ class PreprocessedQADataset(Dataset):
                 - bbox, json_file, etc.
 
         Returns:
-            Dictionary with all required tensor fields
+            Dictionary with all required tensor fields, or None if answer not found
         """
         # 1. Load image
         image = self._load_image(qa)
 
-        # 2. Prepare text
-        question = qa["question"]
+        # 2. Load OCR data from JSON
+        ocr_data = self._load_ocr_data(qa)
+        if ocr_data is None:
+            logger.warning(f"No OCR data found for {qa['json_file']}")
+            return None
 
-        # 3. Stage 1 MVP: Use detected tokenizer (cached at initialization)
-        text_encoding = self.tokenizer(
-            question,
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_length,
-            return_tensors="pt",
-            add_special_tokens=True,
-        )
+        # 3. Prepare words, boxes, and labels
+        question_words = qa["question"].split()  # Simple word split for question
+        doc_words = ocr_data["words"]
+        doc_boxes = ocr_data["boxes"]
 
-        # Process image separately
-        image_processor = self.processor.image_processor
-        image_encoding = image_processor(
-            images=image,
-            return_tensors="pt",
-        )
+        # Create word-level labels: 0=normal, 1=answer_start, 2=answer_end
+        labels = self._create_word_labels(doc_words, qa["answer"])
+        if labels is None:
+            # Answer not found in document words
+            logger.debug(f"Answer '{qa['answer']}' not found in document words")
+            return None
 
-        # Extract basic fields
+        # Combine question (with zero boxes) + document words and boxes
+        all_words = question_words + doc_words
+        all_boxes = [[0, 0, 0, 0]] * len(question_words) + doc_boxes
+        all_labels = [0] * len(question_words) + labels
+
+        # 4. Use processor with word_labels for correct tokenization alignment
+        try:
+            encoding = self.processor(
+                images=image,
+                text=all_words,
+                boxes=all_boxes,
+                word_labels=all_labels,
+                padding="max_length",
+                truncation=True,
+                max_length=self.max_length,
+                return_tensors="pt",
+            )
+        except Exception as e:
+            logger.warning(f"Processor failed: {e}, using fallback tokenizer")
+            # Fallback: use tokenizer without boxes
+            text = " ".join(all_words)
+            encoding = self.tokenizer(
+                text,
+                padding="max_length",
+                truncation=True,
+                max_length=self.max_length,
+                return_tensors="pt",
+            )
+            # Manually process image
+            image_encoding = self.processor.image_processor(
+                images=image, return_tensors="pt"
+            )
+            encoding["pixel_values"] = image_encoding["pixel_values"]
+            # Create dummy labels
+            encoding["labels"] = torch.zeros_like(encoding["input_ids"])
+
+        # 5. Extract start/end positions from encoded labels
+        encoded_labels = encoding.get("labels", torch.zeros_like(encoding["input_ids"]))
+        start_idx = (encoded_labels == 1).nonzero(as_tuple=True)[1].tolist()
+        end_idx = (encoded_labels == 2).nonzero(as_tuple=True)[1].tolist()
+
+        if len(start_idx) == 0 or len(end_idx) == 0:
+            logger.debug(
+                f"Answer span not found after encoding (question: {qa['question'][:50]}...)"
+            )
+            return None
+
+        # 6. Build result dictionary
         result = {
-            "input_ids": text_encoding["input_ids"].squeeze(0),
-            "attention_mask": text_encoding["attention_mask"].squeeze(0),
-            "pixel_values": image_encoding["pixel_values"].squeeze(0),
+            "input_ids": encoding["input_ids"].squeeze(0),
+            "attention_mask": encoding["attention_mask"].squeeze(0),
+            "pixel_values": encoding["pixel_values"].squeeze(0),
+            "bbox": encoding.get(
+                "bbox",
+                torch.zeros_like(encoding["input_ids"].squeeze(0))
+                .unsqueeze(-1)
+                .repeat(1, 4),
+            ).squeeze(0),
+            "start_id": torch.tensor(start_idx[0], dtype=torch.long),
+            "end_id": torch.tensor(end_idx[0], dtype=torch.long),
         }
 
         seq_len = result["input_ids"].size(0)
 
-        # Create dummy bounding boxes for tokens (Stage 1: all at [0, 0, 0, 0])
-        # Stage 2 will properly map tokens to OCR bboxes
-        result["bbox"] = torch.zeros(seq_len, 4, dtype=torch.long)
-
-        # 4. Add simplified fields (Stage 1 - MVP)
+        # 7. Add additional fields (simplified for Stage 1)
         result.update(
             {
-                # Token type IDs: 0 for question, 1 for context (simplified)
-                "token_type_ids": self._create_token_type_ids(seq_len, question),
-                # Token to object mapping (simplified: all tokens map to object 0)
+                "token_type_ids": encoding.get(
+                    "token_type_ids", torch.zeros(seq_len, dtype=torch.long)
+                ).squeeze(0),
                 "token_objt_ids": torch.zeros(seq_len, dtype=torch.long),
-                # Visual features (Stage 1: use zero vectors, Stage 2: extract from vision model)
                 "visual_feat": torch.zeros(
                     self.num_objects, DEFAULT_HIDDEN_SIZE, dtype=torch.float
                 ),
-                # BERT CLS embedding (Stage 1: zero vector, Stage 2: extract from BERT)
                 "bert_cls": torch.zeros(DEFAULT_HIDDEN_SIZE, dtype=torch.float),
-                # Positional encoding (Stage 1: simple, Stage 2: based on bbox positions)
                 "positional_encoding": torch.zeros(
                     self.num_objects, DEFAULT_POSITIONAL_ENCODING_DIM, dtype=torch.float
                 ),
-                # Normalized bounding boxes (Stage 1: zeros, Stage 2: from JSON objects)
                 "norm_bbox": torch.zeros(self.num_objects, 4, dtype=torch.float),
-                # Object mask (Stage 1: all valid, Stage 2: based on actual objects)
                 "object_mask": torch.ones(self.num_objects, dtype=torch.float),
-                # Entity target: which object contains the answer (Stage 1: object 0)
-                "target": self._create_entity_target(),
-                # Answer span positions (Stage 1: find in tokens, Stage 2: improve accuracy)
-                **self._find_answer_positions(qa, text_encoding),
             }
         )
 
         return result
+
+    def _load_ocr_data(self, qa: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Load OCR words and bounding boxes from JSON file.
+
+        Args:
+            qa: QA pair dictionary with json_file path
+
+        Returns:
+            Dictionary with 'words' and 'boxes' lists, or None if not found
+        """
+        import json
+
+        json_path = Path(qa["json_file"])
+        if not json_path.exists():
+            return None
+
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Extract words and boxes from JSON structure
+            # JSON has structure: {"objects": {"0": {"text": "...", "bbox": [...]}, ...}}
+            words = []
+            boxes = []
+
+            if "objects" in data:
+                # Sort by object ID to maintain reading order
+                object_ids = sorted(data["objects"].keys(), key=lambda x: int(x))
+                for obj_id in object_ids:
+                    obj = data["objects"][obj_id]
+                    if "text" in obj and "bbox" in obj:
+                        text = obj["text"]
+                        bbox = obj["bbox"]
+
+                        # Split text into words
+                        text_words = text.split()
+                        # Use the same bbox for all words from this object
+                        # (Simplified - Stage 2 will do word-level bbox alignment)
+                        for word in text_words:
+                            words.append(word)
+                            if len(bbox) == 4:
+                                boxes.append(bbox)
+                            else:
+                                boxes.append([0, 0, 0, 0])
+
+            if not words:
+                logger.debug(f"No words found in {json_path}")
+                return None
+
+            return {"words": words, "boxes": boxes}
+
+        except Exception as e:
+            logger.warning(f"Failed to load OCR data from {json_path}: {e}")
+            return None
+
+    def _create_word_labels(
+        self, doc_words: List[str], answer: str
+    ) -> Optional[List[int]]:
+        """Create word-level labels for answer span detection.
+
+        Args:
+            doc_words: List of document words
+            answer: Answer string to find
+
+        Returns:
+            List of labels (0=normal, 1=start, 2=end), or None if answer not found
+        """
+        if not answer or not answer.strip():
+            # Empty answer
+            return None
+
+        answer_words = answer.strip().split()
+        if not answer_words:
+            return None
+
+        # Try to find answer words in document words
+        answer_len = len(answer_words)
+
+        for i in range(len(doc_words) - answer_len + 1):
+            # Check if this is a match (case-insensitive)
+            match = True
+            for j, ans_word in enumerate(answer_words):
+                if doc_words[i + j].lower() != ans_word.lower():
+                    match = False
+                    break
+
+            if match:
+                # Found answer! Create labels
+                labels = [0] * len(doc_words)
+                labels[i] = 1  # Start token
+                labels[i + answer_len - 1] = 2  # End token
+                return labels
+
+        # Try fuzzy matching: find substring matches
+        answer_text_lower = answer.lower().replace(" ", "")
+        for i, word in enumerate(doc_words):
+            word_lower = word.lower().replace(" ", "")
+            if answer_text_lower in word_lower or word_lower in answer_text_lower:
+                # Single word match
+                labels = [0] * len(doc_words)
+                labels[i] = 1  # Start
+                labels[i] = 2  # End (same position for single word)
+                return labels
+
+        # Answer not found
+        return None
 
     def _load_image(self, qa: Dict[str, Any]) -> Image.Image:
         """Load document image from QA pair metadata.
@@ -267,77 +418,25 @@ class PreprocessedQADataset(Dataset):
 
         return token_type_ids
 
-    def _create_entity_target(self) -> torch.Tensor:
-        """Create entity target (which object contains the answer).
 
-        Stage 1: Simplified - assume object 0 contains answer
-        Stage 2: Will find actual object with answer
+def collate_fn_filter_none(batch):
+    """Collate function that filters out None samples.
 
-        Returns:
-            One-hot tensor [num_objects]
-        """
-        target = torch.zeros(self.num_objects, dtype=torch.float)
-        target[0] = 1.0  # Assume object 0 contains answer
-        return target
+    Args:
+        batch: List of samples, some may be None
 
-    def _find_answer_positions(
-        self, qa: Dict[str, Any], encoding: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
-        """Find answer start and end positions in tokenized sequence.
+    Returns:
+        Collated batch with None samples filtered out
+    """
+    # Filter out None samples
+    batch = [item for item in batch if item is not None]
 
-        Stage 1: Simple substring search
-        Stage 2: Will improve with better alignment
+    if len(batch) == 0:
+        # Return None if all samples failed
+        return None
 
-        Args:
-            qa: QA pair with answer text
-            encoding: Processor output with input_ids
-
-        Returns:
-            Dictionary with start_id and end_id tensors
-        """
-        answer = qa["answer"]
-        input_ids = encoding["input_ids"].squeeze(0)
-
-        # Tokenize the answer using cached tokenizer
-        answer_encoding = self.tokenizer(
-            answer, add_special_tokens=False, return_tensors="pt"
-        )
-        answer_ids = answer_encoding["input_ids"].squeeze(0)
-
-        # Find answer in input_ids (simple sliding window)
-        start_pos, end_pos = self._find_sublist(input_ids, answer_ids)
-
-        return {
-            "start_id": torch.tensor(start_pos, dtype=torch.long),
-            "end_id": torch.tensor(end_pos, dtype=torch.long),
-        }
-
-    def _find_sublist(
-        self, main_list: torch.Tensor, sub_list: torch.Tensor
-    ) -> tuple[int, int]:
-        """Find sublist in main list (for answer span finding).
-
-        Args:
-            main_list: Input token IDs
-            sub_list: Answer token IDs
-
-        Returns:
-            Tuple of (start_pos, end_pos)
-        """
-        if len(sub_list) == 0:
-            return 0, 0
-
-        main = main_list.tolist()
-        sub = sub_list.tolist()
-
-        # Sliding window search
-        for i in range(len(main) - len(sub) + 1):
-            if main[i : i + len(sub)] == sub:
-                return i, i + len(sub) - 1
-
-        # If not found, return middle of sequence as fallback
-        mid = len(main) // 2
-        return mid, min(mid + 5, len(main) - 1)
+    # Use default collate for valid samples
+    return torch.utils.data.dataloader.default_collate(batch)
 
 
 def create_preprocessed_dataloader(
@@ -416,7 +515,7 @@ def create_preprocessed_dataloader(
         batch_size=batch_size,
         shuffle=True,
         num_workers=0,  # Use 0 for debugging, can increase later
-        collate_fn=None,  # Use default collate
+        collate_fn=collate_fn_filter_none,  # Filter None samples
     )
     logger.info("✓ DataLoader created")
 

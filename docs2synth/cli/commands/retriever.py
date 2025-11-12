@@ -232,6 +232,8 @@ def _run_training_loop(
 
     import torch
 
+    from docs2synth.retriever.validation import TrainingValidator
+
     # Suppress transformers FutureWarning about device argument
     warnings.filterwarnings(
         "ignore", category=FutureWarning, module="transformers.modeling_utils"
@@ -246,6 +248,9 @@ def _run_training_loop(
         click.echo(f"  Device: {device}")
 
     model = model.to(device)
+
+    # Initialize validator to track training history
+    validator = TrainingValidator(output_dir=output_dir)
 
     best_anls = 0.0
     for epoch in range(start_epoch, epochs):
@@ -286,8 +291,6 @@ def _run_training_loop(
                 average_loss,
                 pred_texts,
                 gt_texts,
-                pred_entities,
-                target_entities,
             ) = train_func(model, train_dataloader, lr)
             click.echo(
                 click.style(
@@ -297,6 +300,10 @@ def _run_training_loop(
             )
             best_anls = max(best_anls, average_anls)
 
+            # Record training metrics
+            validator.history["train_loss"].append(average_loss)
+            validator.history["train_anls"].append(average_anls)
+
             # Run validation if validation data is provided
             if val_dataloader is not None and eval_func is not None:
                 (
@@ -304,8 +311,6 @@ def _run_training_loop(
                     val_loss,
                     val_pred_texts,
                     val_gt_texts,
-                    val_pred_entities,
-                    val_target_entities,
                 ) = eval_func(model, val_dataloader)
                 click.echo(
                     click.style(
@@ -315,6 +320,10 @@ def _run_training_loop(
                 )
                 # Update best_anls based on validation if available
                 best_anls = max(best_anls, val_anls)
+
+                # Record validation metrics
+                validator.history["val_loss"].append(val_loss)
+                validator.history["val_anls"].append(val_anls)
 
             # Save checkpoint
             if save_every is None or (epoch + 1) % save_every == 0:
@@ -329,6 +338,23 @@ def _run_training_loop(
                     checkpoint_path,
                 )
                 click.echo(f"  Saved checkpoint: {checkpoint_path}")
+
+    # Save training history and generate plots if we have metrics
+    if validator.history["train_loss"] and validator.history["train_anls"]:
+        # Save history to JSON file
+        history_path = output_dir / "training_history.json"
+        validator.save_history(history_path)
+
+        # Generate training curves plot
+        try:
+            import matplotlib  # noqa: F401
+
+            plot_path = output_dir / "training_curves.png"
+            validator.plot_training_curves(save_path=plot_path)
+            click.echo(f"\n  Training curves saved: {plot_path}")
+            click.echo(f"  Training history saved: {history_path}")
+        except ImportError:
+            pass  # matplotlib not installed, skip plotting
 
     return best_anls
 
@@ -447,10 +473,10 @@ def retriever_train(  # noqa: C901
     mode determines which training function to use:
 
     \b
-    - standard: Standard training with entity retrieval and span-based QA
+    - standard: Standard training with span-based QA
     - layout: Training with grid representations for layout pretraining
     - layout-gemini: Gemini variant with grid representations
-    - layout-coarse-grained: Coarse-grained training (entity loss only)
+    - layout-coarse-grained: Coarse-grained training
     - pretrain-layout: Layout pretraining using grid embeddings
 
     You can either:
@@ -835,12 +861,6 @@ def _print_validation_summary(analysis: Dict[str, Any], pred_texts: List[str]) -
     click.echo(f"  Perfect matches: {anls['perfect_matches']} ({perfect_pct:.1f}%)")
     click.echo(f"  Zero matches:    {anls['zero_matches']} ({zero_pct:.1f}%)")
 
-    # Entity Retrieval
-    click.echo("\n" + click.style("Entity Retrieval:", bold=True))
-    entity = analysis["entity"]
-    click.echo(f"  Accuracy:        {entity['accuracy']:.4f}")
-    click.echo(f"  Correct:         {entity['correct']} / {entity['total']}")
-
     # Prediction Length
     click.echo("\n" + click.style("Prediction Length:", bold=True))
     length = analysis["length"]
@@ -889,19 +909,6 @@ def _print_sanity_checks(checks: Dict[str, Any], pred_texts: List[str]) -> None:
         f"{status} Prediction diversity: {checks['unique_predictions']} unique ({diversity_ratio*100:.1f}%) - {msg}"
     )
 
-    # Check 3: Entity diversity
-    entity_diversity = checks["unique_entities"]
-    if entity_diversity > 10:
-        status = click.style("✅", fg="green")
-        msg = "Good"
-    elif entity_diversity > 5:
-        status = click.style("⚠️ ", fg="yellow")
-        msg = "Acceptable"
-    else:
-        status = click.style("❌", fg="red")
-        msg = "Model may have collapsed!"
-    click.echo(f"{status} Entity diversity: {entity_diversity} unique entities - {msg}")
-
 
 def _print_worst_predictions(analysis: Dict[str, Any]) -> None:
     """Print worst predictions.
@@ -917,7 +924,6 @@ def _print_worst_predictions(analysis: Dict[str, Any]) -> None:
         click.echo(f"\n{i}. ANLS: {error['anls']:.4f}")
         click.echo(f"   Predicted:     {error['predicted'][:80]}")
         click.echo(f"   Ground Truth:  {error['ground_truth'][:80]}")
-        click.echo(f"   Entity: {error['entity_pred']} → {error['entity_target']}")
 
 
 def _auto_discover_model_path(cfg: Any, run_id: Optional[str] = None) -> Optional[Path]:
@@ -1022,7 +1028,6 @@ def retriever_validate(  # noqa: C901
     This command performs comprehensive validation of a trained retriever model,
     including:
     - ANLS score analysis
-    - Entity retrieval accuracy
     - Prediction diversity checks
     - Error analysis (worst predictions)
     - Training curve visualization
@@ -1329,8 +1334,6 @@ def retriever_validate(  # noqa: C901
                 average_loss,
                 pred_texts,
                 gt_texts,
-                pred_entities,
-                target_entities,
             ) = results
 
             click.echo(
@@ -1353,8 +1356,6 @@ def retriever_validate(  # noqa: C901
             analysis = validator.analyze_predictions(
                 pred_texts=pred_texts,
                 gt_texts=gt_texts,
-                pred_entities=pred_entities,
-                target_entities=target_entities,
                 save_path=output / "detailed_analysis.txt",
             )
             click.echo(click.style("  ✓ Analysis complete\n", fg="green"))
@@ -1369,8 +1370,6 @@ def retriever_validate(  # noqa: C901
             checks = validator.sanity_check_batch(
                 pred_texts=pred_texts,
                 gt_texts=gt_texts,
-                pred_entities=pred_entities,
-                target_entities=target_entities,
             )
             _print_sanity_checks(checks, pred_texts)
             _print_worst_predictions(analysis)
@@ -1385,8 +1384,24 @@ def retriever_validate(  # noqa: C901
             try:
                 import matplotlib  # noqa: F401
 
-                validator.history["train_anls"] = [average_anls]
-                validator.history["train_entity_acc"] = [analysis["entity"]["accuracy"]]
+                # Try to load training history from the model directory
+                model_dir = model.parent
+                history_path = model_dir / "checkpoints" / "training_history.json"
+
+                if not validator.load_history(history_path):
+                    # If no history file found, try parent directory (in case model is in checkpoints)
+                    history_path_alt = model_dir / "training_history.json"
+                    if not validator.load_history(history_path_alt):
+                        # No history found, just use current validation result
+                        click.echo(
+                            click.style(
+                                "  (training history not found, showing current validation only)",
+                                fg="yellow",
+                            )
+                        )
+                        validator.history["train_anls"] = [average_anls]
+                        validator.history["train_loss"] = [average_loss]
+
                 validator.plot_training_curves(
                     save_path=output / "validation_metrics.png"
                 )
