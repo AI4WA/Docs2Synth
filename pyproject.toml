@@ -39,6 +39,8 @@ dependencies = [
     # See requirements-cpu.in or requirements-gpu.in for source files
     "docling>=2.61.1",
     "vllm>=0.11.0",
+    "streamlit>=1.51.0",
+    "plotly>=6.4.0",
 ]
 authors = [{ name = "AI4WA" }]
 license = { text = "MIT" }
