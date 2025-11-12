@@ -158,6 +158,10 @@ setup_venv() {
     echo_info "Installing docs2synth with dev dependencies..."
     uv pip install -e ".[dev]"
 
+    # Uninstall paddlex if it was installed
+    echo_info "Uninstalling paddlex..."
+    uv pip uninstall paddlex
+
     echo_info ""
     echo_info "=========================================="
     echo_info "Setup complete!"

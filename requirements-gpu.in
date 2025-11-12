@@ -1,11 +1,17 @@
-# GPU-enabled PyTorch installation (CUDA 11.8)
+# GPU-enabled PyTorch installation (CUDA 12.8)
 # This file defines the top-level PyTorch dependencies for GPU systems
-# Note: Install directly with --extra-index-url, don't compile to .txt
-# Reason: NVIDIA CUDA dependencies are platform-specific and managed by PyTorch
+# Use: uv pip install -r requirements-gpu.in
+# Or compile: uv pip compile requirements-gpu.in -o requirements-gpu.txt --python-version 3.11
+# Note: NVIDIA CUDA dependencies are platform-specific and managed by PyTorch
 
 # For Docker/production, use in Dockerfile:
-#   pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
+# CUDA 12.8 is compatible with:
+# - Driver 570.00 or newer
+# - RTX 40/50 series (Ada Lovelace/Blackwell), RTX 30 series (Ampere), and newer
+# - Provides better performance and supports latest GPU architectures
+
+--index-url https://download.pytorch.org/whl/cu128
 torch
 torchvision
-torchaudio

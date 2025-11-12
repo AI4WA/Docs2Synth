@@ -113,10 +113,12 @@ def render_sidebar():
                 st.warning(f"⚠️ {stats['objects_without_qa']} objects without QA")
 
             st.metric("Total Objects", stats.get("total_objects", 0))
-            st.metric("Annotated QA", f"{stats['annotated']}/{stats['total_qa']}")
+            annotated = stats.get("annotated", 0)
+            total_qa = stats.get("total_qa", 0)
+            st.metric("Annotated QA", f"{annotated}/{total_qa}")
 
-            if stats["annotated"] > 0:
-                st.metric("Approval Rate", f"{stats['yes_count']}/{stats['annotated']}")
+            if annotated > 0:
+                st.metric("Approval Rate", f"{stats.get('yes_count', 0)}/{annotated}")
 
             st.divider()
 
