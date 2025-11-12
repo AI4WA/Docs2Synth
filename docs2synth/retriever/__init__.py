@@ -27,6 +27,10 @@ from docs2synth.retriever.training import (
     train_layout_coarse_grained,
     train_layout_gemini,
 )
+from docs2synth.retriever.validation import (
+    TrainingValidator,
+    calculate_entity_accuracy,
+)
 
 __all__: list[str] = [
     # Dataset utilities
@@ -37,6 +41,7 @@ __all__: list[str] = [
     "create_model_for_qa",
     # Metrics
     "calculate_anls",
+    "calculate_entity_accuracy",
     # Training functions
     "train",
     "train_layout",
@@ -46,4 +51,6 @@ __all__: list[str] = [
     # Evaluation functions
     "evaluate",
     "evaluate_layout",
+    # Validation utilities
+    "TrainingValidator",
 ]

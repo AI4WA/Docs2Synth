@@ -730,6 +730,343 @@ def retriever_train(  # noqa: C901
         sys.exit(1)
 
 
+@retriever_group.command("validate")
+@click.option(
+    "--model",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Path to trained model checkpoint (.pth file)",
+)
+@click.option(
+    "--data",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Path to validation DataLoader pickle (.pkl file)",
+)
+@click.option(
+    "--output",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output directory for validation reports (defaults to ./validation_reports/)",
+)
+@click.option(
+    "--mode",
+    type=click.Choice(["standard", "layout"], case_sensitive=False),
+    default="standard",
+    help="Evaluation mode (default: standard)",
+)
+@click.pass_context
+def retriever_validate(
+    ctx: click.Context,
+    model: Path,
+    data: Path,
+    output: Optional[Path],
+    mode: str,
+) -> None:
+    """Validate retriever training results.
+
+    This command performs comprehensive validation of a trained retriever model,
+    including:
+    - ANLS score analysis
+    - Entity retrieval accuracy
+    - Prediction diversity checks
+    - Error analysis (worst predictions)
+    - Training curve visualization
+
+    Examples:
+        # Basic validation
+        docs2synth retriever validate \\
+            --model models/retriever/final_model.pth \\
+            --data data/val.pkl
+
+        # With custom output directory
+        docs2synth retriever validate \\
+            --model models/retriever/final_model.pth \\
+            --data data/val.pkl \\
+            --output validation_reports/run_001/
+
+        # For layout mode
+        docs2synth retriever validate \\
+            --model models/retriever/final_model.pth \\
+            --data data/val.pkl \\
+            --mode layout
+    """
+    import pickle
+
+    import torch
+
+    from docs2synth.retriever.validation import TrainingValidator
+
+    # Set default output directory
+    if output is None:
+        output = Path("./validation_reports")
+    output.mkdir(parents=True, exist_ok=True)
+
+    click.echo(
+        click.style(
+            "\nValidating retriever training results...",
+            fg="blue",
+            bold=True,
+        )
+    )
+    click.echo(f"  Model: {model}")
+    click.echo(f"  Data:  {data}")
+    click.echo(f"  Mode:  {mode}")
+    click.echo(f"  Output: {output}\n")
+
+    # Load model
+    click.echo(click.style("Loading model...", fg="yellow"))
+    try:
+        checkpoint = torch.load(model, map_location="cpu")
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            # Load model structure first
+            from docs2synth.retriever.model import create_model_for_qa
+
+            trained_model = create_model_for_qa()
+            trained_model.load_state_dict(checkpoint["model_state_dict"])
+            click.echo(
+                f"  Loaded from checkpoint (epoch: {checkpoint.get('epoch', 'N/A')})"
+            )
+        else:
+            trained_model = checkpoint
+            click.echo("  Loaded model directly")
+    except Exception as e:
+        click.echo(
+            click.style(f"✗ Error loading model: {e}", fg="red"),
+            err=True,
+        )
+        logger.exception("Model loading failed")
+        sys.exit(1)
+
+    # Load validation data
+    click.echo(click.style("Loading validation data...", fg="yellow"))
+    try:
+        with open(data, "rb") as f:
+            val_dataloader = pickle.load(f)
+        click.echo(f"  Dataset size: {len(val_dataloader.dataset)}")
+        click.echo(f"  Batch size: {val_dataloader.batch_size}")
+        click.echo(f"  Number of batches: {len(val_dataloader)}")
+    except Exception as e:
+        click.echo(
+            click.style(f"✗ Error loading data: {e}", fg="red"),
+            err=True,
+        )
+        logger.exception("Data loading failed")
+        sys.exit(1)
+
+    # Select evaluation function
+    click.echo(click.style("\nRunning evaluation...", fg="yellow"))
+    try:
+        if mode.lower() == "layout":
+            from docs2synth.retriever import evaluate_layout
+
+            eval_func = evaluate_layout
+        else:
+            from docs2synth.retriever import evaluate
+
+            eval_func = evaluate
+
+        # Run evaluation
+        results = eval_func(trained_model, val_dataloader)
+        (
+            average_anls,
+            average_loss,
+            pred_texts,
+            gt_texts,
+            pred_entities,
+            target_entities,
+        ) = results
+
+        click.echo(
+            click.style(
+                f"  ✓ Evaluation complete\n    ANLS: {average_anls:.4f} | Loss: {average_loss:.4f}",
+                fg="green",
+            )
+        )
+
+    except Exception as e:
+        click.echo(
+            click.style(f"✗ Error during evaluation: {e}", fg="red"),
+            err=True,
+        )
+        logger.exception("Evaluation failed")
+        sys.exit(1)
+
+    # Detailed analysis
+    click.echo(click.style("\nPerforming detailed analysis...", fg="yellow"))
+    try:
+        validator = TrainingValidator(output_dir=output)
+
+        # Analyze predictions
+        analysis = validator.analyze_predictions(
+            pred_texts=pred_texts,
+            gt_texts=gt_texts,
+            pred_entities=pred_entities,
+            target_entities=target_entities,
+            save_path=output / "detailed_analysis.txt",
+        )
+
+        click.echo(click.style("  ✓ Analysis complete\n", fg="green"))
+
+        # Print summary
+        click.echo(click.style("=" * 70, fg="blue"))
+        click.echo(click.style("VALIDATION RESULTS", fg="blue", bold=True))
+        click.echo(click.style("=" * 70, fg="blue"))
+
+        # ANLS Score
+        click.echo("\n" + click.style("ANLS Score:", bold=True))
+        anls = analysis["anls"]
+        click.echo(f"  Mean:            {anls['mean']:.4f}")
+        click.echo(f"  Std:             {anls['std']:.4f}")
+        click.echo(f"  Median:          {anls['median']:.4f}")
+        click.echo(f"  Range:           [{anls['min']:.4f}, {anls['max']:.4f}]")
+        perfect_pct = anls["perfect_matches"] / len(pred_texts) * 100
+        zero_pct = anls["zero_matches"] / len(pred_texts) * 100
+        click.echo(f"  Perfect matches: {anls['perfect_matches']} ({perfect_pct:.1f}%)")
+        click.echo(f"  Zero matches:    {anls['zero_matches']} ({zero_pct:.1f}%)")
+
+        # Entity Retrieval
+        click.echo("\n" + click.style("Entity Retrieval:", bold=True))
+        entity = analysis["entity"]
+        click.echo(f"  Accuracy:        {entity['accuracy']:.4f}")
+        click.echo(f"  Correct:         {entity['correct']} / {entity['total']}")
+
+        # Prediction Length
+        click.echo("\n" + click.style("Prediction Length:", bold=True))
+        length = analysis["length"]
+        click.echo(f"  Predicted mean:  {length['pred_mean']:.2f} words")
+        click.echo(f"  Ground truth:    {length['gt_mean']:.2f} words")
+
+        # Sanity checks
+        click.echo("\n" + click.style("=" * 70, fg="blue"))
+        click.echo(click.style("SANITY CHECKS", fg="blue", bold=True))
+        click.echo(click.style("=" * 70, fg="blue") + "\n")
+
+        checks = validator.sanity_check_batch(
+            pred_texts=pred_texts,
+            gt_texts=gt_texts,
+            pred_entities=pred_entities,
+            target_entities=target_entities,
+        )
+
+        # Check 1: Empty predictions
+        empty_ratio = checks["empty_predictions"] / len(pred_texts)
+        if empty_ratio < 0.05:
+            click.echo(
+                click.style(
+                    f"✅ Empty predictions: {checks['empty_predictions']} ({empty_ratio*100:.1f}%) - Good",
+                    fg="green",
+                )
+            )
+        elif empty_ratio < 0.2:
+            click.echo(
+                click.style(
+                    f"⚠️  Empty predictions: {checks['empty_predictions']} ({empty_ratio*100:.1f}%) - Acceptable",
+                    fg="yellow",
+                )
+            )
+        else:
+            click.echo(
+                click.style(
+                    f"❌ Empty predictions: {checks['empty_predictions']} ({empty_ratio*100:.1f}%) - Too many!",
+                    fg="red",
+                )
+            )
+
+        # Check 2: Prediction diversity
+        diversity_ratio = checks["unique_predictions"] / len(pred_texts)
+        if diversity_ratio > 0.5:
+            click.echo(
+                click.style(
+                    f"✅ Prediction diversity: {checks['unique_predictions']} unique ({diversity_ratio*100:.1f}%) - Good",
+                    fg="green",
+                )
+            )
+        elif diversity_ratio > 0.2:
+            click.echo(
+                click.style(
+                    f"⚠️  Prediction diversity: {checks['unique_predictions']} unique ({diversity_ratio*100:.1f}%) - Acceptable",
+                    fg="yellow",
+                )
+            )
+        else:
+            click.echo(
+                click.style(
+                    f"❌ Prediction diversity: {checks['unique_predictions']} unique ({diversity_ratio*100:.1f}%) - Too low!",
+                    fg="red",
+                )
+            )
+
+        # Check 3: Entity diversity
+        entity_diversity = checks["unique_entities"]
+        if entity_diversity > 10:
+            click.echo(
+                click.style(
+                    f"✅ Entity diversity: {entity_diversity} unique entities - Good",
+                    fg="green",
+                )
+            )
+        elif entity_diversity > 5:
+            click.echo(
+                click.style(
+                    f"⚠️  Entity diversity: {entity_diversity} unique entities - Acceptable",
+                    fg="yellow",
+                )
+            )
+        else:
+            click.echo(
+                click.style(
+                    f"❌ Entity diversity: {entity_diversity} unique entities - Model may have collapsed!",
+                    fg="red",
+                )
+            )
+
+        # Worst predictions
+        click.echo("\n" + click.style("=" * 70, fg="blue"))
+        click.echo(click.style("WORST PREDICTIONS (Top 5)", fg="blue", bold=True))
+        click.echo(click.style("=" * 70, fg="blue"))
+
+        for i, error in enumerate(analysis["worst_predictions"][:5], 1):
+            click.echo(f"\n{i}. ANLS: {error['anls']:.4f}")
+            click.echo(f"   Predicted:     {error['predicted'][:80]}")
+            click.echo(f"   Ground Truth:  {error['ground_truth'][:80]}")
+            click.echo(f"   Entity: {error['entity_pred']} → {error['entity_target']}")
+
+        # Output files
+        click.echo("\n" + click.style("=" * 70, fg="blue"))
+        click.echo(click.style("OUTPUT FILES", fg="blue", bold=True))
+        click.echo(click.style("=" * 70, fg="blue"))
+        click.echo(f"  Detailed analysis: {output / 'detailed_analysis.txt'}")
+
+        # Try to generate plots
+        try:
+            import matplotlib  # noqa: F401
+
+            # Add single epoch data for plotting
+            validator.history["train_anls"] = [average_anls]
+            validator.history["train_entity_acc"] = [entity["accuracy"]]
+
+            validator.plot_training_curves(save_path=output / "validation_metrics.png")
+            click.echo(f"  Metrics plot:      {output / 'validation_metrics.png'}")
+        except ImportError:
+            click.echo(
+                click.style("  (matplotlib not installed, skipping plots)", fg="yellow")
+            )
+
+        # Final summary
+        click.echo("\n" + click.style("=" * 70, fg="green", bold=True))
+        click.echo(click.style("✓ VALIDATION COMPLETE", fg="green", bold=True))
+        click.echo(click.style("=" * 70, fg="green", bold=True) + "\n")
+
+    except Exception as e:
+        click.echo(
+            click.style(f"✗ Error during analysis: {e}", fg="red"),
+            err=True,
+        )
+        logger.exception("Analysis failed")
+        sys.exit(1)
+
+
 @retriever_group.command("preprocess")
 @click.option(
     "--json-dir",
