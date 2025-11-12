@@ -531,7 +531,9 @@ def retriever_train(  # noqa: C901
 
             if retriever_data_str:
                 data_path = _apply_run_id_to_path(
-                    retriever_data_str, run_id, default_filename="preprocessed_train.pkl"
+                    retriever_data_str,
+                    run_id,
+                    default_filename="preprocessed_train.pkl",
                 )
                 click.echo(f"  Using data from config: {data_path}")
             elif preprocess_output_str:
