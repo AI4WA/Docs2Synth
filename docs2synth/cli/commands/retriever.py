@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 import click
 
@@ -730,6 +730,155 @@ def retriever_train(  # noqa: C901
         sys.exit(1)
 
 
+def _load_model_for_validation(model_path: Path) -> Any:
+    """Load model for validation.
+
+    Args:
+        model_path: Path to model checkpoint
+
+    Returns:
+        Loaded model
+    """
+    import torch
+
+    from docs2synth.retriever.model import create_model_for_qa
+
+    checkpoint = torch.load(model_path, map_location="cpu")
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        trained_model = create_model_for_qa()
+        trained_model.load_state_dict(checkpoint["model_state_dict"])
+        click.echo(
+            f"  Loaded from checkpoint (epoch: {checkpoint.get('epoch', 'N/A')})"
+        )
+    else:
+        trained_model = checkpoint
+        click.echo("  Loaded model directly")
+    return trained_model
+
+
+def _load_validation_data(data_path: Path) -> Any:
+    """Load validation data from pickle.
+
+    Args:
+        data_path: Path to DataLoader pickle
+
+    Returns:
+        DataLoader instance
+    """
+    import pickle
+
+    with open(data_path, "rb") as f:
+        val_dataloader = pickle.load(f)
+    click.echo(f"  Dataset size: {len(val_dataloader.dataset)}")
+    click.echo(f"  Batch size: {val_dataloader.batch_size}")
+    click.echo(f"  Number of batches: {len(val_dataloader)}")
+    return val_dataloader
+
+
+def _print_validation_summary(analysis: Dict[str, Any], pred_texts: List[str]) -> None:
+    """Print validation results summary.
+
+    Args:
+        analysis: Analysis results dictionary
+        pred_texts: List of predicted texts
+    """
+    # ANLS Score
+    click.echo("\n" + click.style("ANLS Score:", bold=True))
+    anls = analysis["anls"]
+    click.echo(f"  Mean:            {anls['mean']:.4f}")
+    click.echo(f"  Std:             {anls['std']:.4f}")
+    click.echo(f"  Median:          {anls['median']:.4f}")
+    click.echo(f"  Range:           [{anls['min']:.4f}, {anls['max']:.4f}]")
+    perfect_pct = anls["perfect_matches"] / len(pred_texts) * 100
+    zero_pct = anls["zero_matches"] / len(pred_texts) * 100
+    click.echo(f"  Perfect matches: {anls['perfect_matches']} ({perfect_pct:.1f}%)")
+    click.echo(f"  Zero matches:    {anls['zero_matches']} ({zero_pct:.1f}%)")
+
+    # Entity Retrieval
+    click.echo("\n" + click.style("Entity Retrieval:", bold=True))
+    entity = analysis["entity"]
+    click.echo(f"  Accuracy:        {entity['accuracy']:.4f}")
+    click.echo(f"  Correct:         {entity['correct']} / {entity['total']}")
+
+    # Prediction Length
+    click.echo("\n" + click.style("Prediction Length:", bold=True))
+    length = analysis["length"]
+    click.echo(f"  Predicted mean:  {length['pred_mean']:.2f} words")
+    click.echo(f"  Ground truth:    {length['gt_mean']:.2f} words")
+
+
+def _print_sanity_checks(checks: Dict[str, Any], pred_texts: List[str]) -> None:
+    """Print sanity check results.
+
+    Args:
+        checks: Sanity check results
+        pred_texts: List of predicted texts
+    """
+    click.echo("\n" + click.style("=" * 70, fg="blue"))
+    click.echo(click.style("SANITY CHECKS", fg="blue", bold=True))
+    click.echo(click.style("=" * 70, fg="blue") + "\n")
+
+    # Check 1: Empty predictions
+    empty_ratio = checks["empty_predictions"] / len(pred_texts)
+    if empty_ratio < 0.05:
+        status = click.style("✅", fg="green")
+        msg = "Good"
+    elif empty_ratio < 0.2:
+        status = click.style("⚠️ ", fg="yellow")
+        msg = "Acceptable"
+    else:
+        status = click.style("❌", fg="red")
+        msg = "Too many!"
+    click.echo(
+        f"{status} Empty predictions: {checks['empty_predictions']} ({empty_ratio*100:.1f}%) - {msg}"
+    )
+
+    # Check 2: Prediction diversity
+    diversity_ratio = checks["unique_predictions"] / len(pred_texts)
+    if diversity_ratio > 0.5:
+        status = click.style("✅", fg="green")
+        msg = "Good"
+    elif diversity_ratio > 0.2:
+        status = click.style("⚠️ ", fg="yellow")
+        msg = "Acceptable"
+    else:
+        status = click.style("❌", fg="red")
+        msg = "Too low!"
+    click.echo(
+        f"{status} Prediction diversity: {checks['unique_predictions']} unique ({diversity_ratio*100:.1f}%) - {msg}"
+    )
+
+    # Check 3: Entity diversity
+    entity_diversity = checks["unique_entities"]
+    if entity_diversity > 10:
+        status = click.style("✅", fg="green")
+        msg = "Good"
+    elif entity_diversity > 5:
+        status = click.style("⚠️ ", fg="yellow")
+        msg = "Acceptable"
+    else:
+        status = click.style("❌", fg="red")
+        msg = "Model may have collapsed!"
+    click.echo(f"{status} Entity diversity: {entity_diversity} unique entities - {msg}")
+
+
+def _print_worst_predictions(analysis: Dict[str, Any]) -> None:
+    """Print worst predictions.
+
+    Args:
+        analysis: Analysis results dictionary
+    """
+    click.echo("\n" + click.style("=" * 70, fg="blue"))
+    click.echo(click.style("WORST PREDICTIONS (Top 5)", fg="blue", bold=True))
+    click.echo(click.style("=" * 70, fg="blue"))
+
+    for i, error in enumerate(analysis["worst_predictions"][:5], 1):
+        click.echo(f"\n{i}. ANLS: {error['anls']:.4f}")
+        click.echo(f"   Predicted:     {error['predicted'][:80]}")
+        click.echo(f"   Ground Truth:  {error['ground_truth'][:80]}")
+        click.echo(f"   Entity: {error['entity_pred']} → {error['entity_target']}")
+
+
 @retriever_group.command("validate")
 @click.option(
     "--model",
@@ -791,10 +940,6 @@ def retriever_validate(
             --data data/val.pkl \\
             --mode layout
     """
-    import pickle
-
-    import torch
-
     from docs2synth.retriever.validation import TrainingValidator
 
     # Set default output directory
@@ -803,11 +948,7 @@ def retriever_validate(
     output.mkdir(parents=True, exist_ok=True)
 
     click.echo(
-        click.style(
-            "\nValidating retriever training results...",
-            fg="blue",
-            bold=True,
-        )
+        click.style("\nValidating retriever training results...", fg="blue", bold=True)
     )
     click.echo(f"  Model: {model}")
     click.echo(f"  Data:  {data}")
@@ -817,44 +958,22 @@ def retriever_validate(
     # Load model
     click.echo(click.style("Loading model...", fg="yellow"))
     try:
-        checkpoint = torch.load(model, map_location="cpu")
-        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-            # Load model structure first
-            from docs2synth.retriever.model import create_model_for_qa
-
-            trained_model = create_model_for_qa()
-            trained_model.load_state_dict(checkpoint["model_state_dict"])
-            click.echo(
-                f"  Loaded from checkpoint (epoch: {checkpoint.get('epoch', 'N/A')})"
-            )
-        else:
-            trained_model = checkpoint
-            click.echo("  Loaded model directly")
+        trained_model = _load_model_for_validation(model)
     except Exception as e:
-        click.echo(
-            click.style(f"✗ Error loading model: {e}", fg="red"),
-            err=True,
-        )
+        click.echo(click.style(f"✗ Error loading model: {e}", fg="red"), err=True)
         logger.exception("Model loading failed")
         sys.exit(1)
 
     # Load validation data
     click.echo(click.style("Loading validation data...", fg="yellow"))
     try:
-        with open(data, "rb") as f:
-            val_dataloader = pickle.load(f)
-        click.echo(f"  Dataset size: {len(val_dataloader.dataset)}")
-        click.echo(f"  Batch size: {val_dataloader.batch_size}")
-        click.echo(f"  Number of batches: {len(val_dataloader)}")
+        val_dataloader = _load_validation_data(data)
     except Exception as e:
-        click.echo(
-            click.style(f"✗ Error loading data: {e}", fg="red"),
-            err=True,
-        )
+        click.echo(click.style(f"✗ Error loading data: {e}", fg="red"), err=True)
         logger.exception("Data loading failed")
         sys.exit(1)
 
-    # Select evaluation function
+    # Run evaluation
     click.echo(click.style("\nRunning evaluation...", fg="yellow"))
     try:
         if mode.lower() == "layout":
@@ -866,7 +985,6 @@ def retriever_validate(
 
             eval_func = evaluate
 
-        # Run evaluation
         results = eval_func(trained_model, val_dataloader)
         (
             average_anls,
@@ -883,12 +1001,8 @@ def retriever_validate(
                 fg="green",
             )
         )
-
     except Exception as e:
-        click.echo(
-            click.style(f"✗ Error during evaluation: {e}", fg="red"),
-            err=True,
-        )
+        click.echo(click.style(f"✗ Error during evaluation: {e}", fg="red"), err=True)
         logger.exception("Evaluation failed")
         sys.exit(1)
 
@@ -896,8 +1010,6 @@ def retriever_validate(
     click.echo(click.style("\nPerforming detailed analysis...", fg="yellow"))
     try:
         validator = TrainingValidator(output_dir=output)
-
-        # Analyze predictions
         analysis = validator.analyze_predictions(
             pred_texts=pred_texts,
             gt_texts=gt_texts,
@@ -905,42 +1017,14 @@ def retriever_validate(
             target_entities=target_entities,
             save_path=output / "detailed_analysis.txt",
         )
-
         click.echo(click.style("  ✓ Analysis complete\n", fg="green"))
 
-        # Print summary
+        # Print results
         click.echo(click.style("=" * 70, fg="blue"))
         click.echo(click.style("VALIDATION RESULTS", fg="blue", bold=True))
         click.echo(click.style("=" * 70, fg="blue"))
 
-        # ANLS Score
-        click.echo("\n" + click.style("ANLS Score:", bold=True))
-        anls = analysis["anls"]
-        click.echo(f"  Mean:            {anls['mean']:.4f}")
-        click.echo(f"  Std:             {anls['std']:.4f}")
-        click.echo(f"  Median:          {anls['median']:.4f}")
-        click.echo(f"  Range:           [{anls['min']:.4f}, {anls['max']:.4f}]")
-        perfect_pct = anls["perfect_matches"] / len(pred_texts) * 100
-        zero_pct = anls["zero_matches"] / len(pred_texts) * 100
-        click.echo(f"  Perfect matches: {anls['perfect_matches']} ({perfect_pct:.1f}%)")
-        click.echo(f"  Zero matches:    {anls['zero_matches']} ({zero_pct:.1f}%)")
-
-        # Entity Retrieval
-        click.echo("\n" + click.style("Entity Retrieval:", bold=True))
-        entity = analysis["entity"]
-        click.echo(f"  Accuracy:        {entity['accuracy']:.4f}")
-        click.echo(f"  Correct:         {entity['correct']} / {entity['total']}")
-
-        # Prediction Length
-        click.echo("\n" + click.style("Prediction Length:", bold=True))
-        length = analysis["length"]
-        click.echo(f"  Predicted mean:  {length['pred_mean']:.2f} words")
-        click.echo(f"  Ground truth:    {length['gt_mean']:.2f} words")
-
-        # Sanity checks
-        click.echo("\n" + click.style("=" * 70, fg="blue"))
-        click.echo(click.style("SANITY CHECKS", fg="blue", bold=True))
-        click.echo(click.style("=" * 70, fg="blue") + "\n")
+        _print_validation_summary(analysis, pred_texts)
 
         checks = validator.sanity_check_batch(
             pred_texts=pred_texts,
@@ -948,89 +1032,8 @@ def retriever_validate(
             pred_entities=pred_entities,
             target_entities=target_entities,
         )
-
-        # Check 1: Empty predictions
-        empty_ratio = checks["empty_predictions"] / len(pred_texts)
-        if empty_ratio < 0.05:
-            click.echo(
-                click.style(
-                    f"✅ Empty predictions: {checks['empty_predictions']} ({empty_ratio*100:.1f}%) - Good",
-                    fg="green",
-                )
-            )
-        elif empty_ratio < 0.2:
-            click.echo(
-                click.style(
-                    f"⚠️  Empty predictions: {checks['empty_predictions']} ({empty_ratio*100:.1f}%) - Acceptable",
-                    fg="yellow",
-                )
-            )
-        else:
-            click.echo(
-                click.style(
-                    f"❌ Empty predictions: {checks['empty_predictions']} ({empty_ratio*100:.1f}%) - Too many!",
-                    fg="red",
-                )
-            )
-
-        # Check 2: Prediction diversity
-        diversity_ratio = checks["unique_predictions"] / len(pred_texts)
-        if diversity_ratio > 0.5:
-            click.echo(
-                click.style(
-                    f"✅ Prediction diversity: {checks['unique_predictions']} unique ({diversity_ratio*100:.1f}%) - Good",
-                    fg="green",
-                )
-            )
-        elif diversity_ratio > 0.2:
-            click.echo(
-                click.style(
-                    f"⚠️  Prediction diversity: {checks['unique_predictions']} unique ({diversity_ratio*100:.1f}%) - Acceptable",
-                    fg="yellow",
-                )
-            )
-        else:
-            click.echo(
-                click.style(
-                    f"❌ Prediction diversity: {checks['unique_predictions']} unique ({diversity_ratio*100:.1f}%) - Too low!",
-                    fg="red",
-                )
-            )
-
-        # Check 3: Entity diversity
-        entity_diversity = checks["unique_entities"]
-        if entity_diversity > 10:
-            click.echo(
-                click.style(
-                    f"✅ Entity diversity: {entity_diversity} unique entities - Good",
-                    fg="green",
-                )
-            )
-        elif entity_diversity > 5:
-            click.echo(
-                click.style(
-                    f"⚠️  Entity diversity: {entity_diversity} unique entities - Acceptable",
-                    fg="yellow",
-                )
-            )
-        else:
-            click.echo(
-                click.style(
-                    f"❌ Entity diversity: {entity_diversity} unique entities - Model may have collapsed!",
-                    fg="red",
-                )
-            )
-
-        # Worst predictions
-        click.echo("\n" + click.style("=" * 70, fg="blue"))
-        click.echo(click.style("WORST PREDICTIONS (Top 5)", fg="blue", bold=True))
-        click.echo(click.style("=" * 70, fg="blue"))
-
-        for i, error in enumerate(analysis["worst_predictions"][:5], 1):
-            click.echo(f"\n{i}. ANLS: {error['anls']:.4f}")
-            click.echo(f"   Predicted:     {error['predicted'][:80]}")
-            click.echo(f"   Ground Truth:  {error['ground_truth'][:80]}")
-            click.echo(f"   Entity: {error['entity_pred']} → {error['entity_target']}")
+        _print_sanity_checks(checks, pred_texts)
+        _print_worst_predictions(analysis)
 
         # Output files
         click.echo("\n" + click.style("=" * 70, fg="blue"))
@@ -1042,10 +1045,8 @@ def retriever_validate(
         try:
             import matplotlib  # noqa: F401
 
-            # Add single epoch data for plotting
             validator.history["train_anls"] = [average_anls]
-            validator.history["train_entity_acc"] = [entity["accuracy"]]
-
+            validator.history["train_entity_acc"] = [analysis["entity"]["accuracy"]]
             validator.plot_training_curves(save_path=output / "validation_metrics.png")
             click.echo(f"  Metrics plot:      {output / 'validation_metrics.png'}")
         except ImportError:
@@ -1059,10 +1060,7 @@ def retriever_validate(
         click.echo(click.style("=" * 70, fg="green", bold=True) + "\n")
 
     except Exception as e:
-        click.echo(
-            click.style(f"✗ Error during analysis: {e}", fg="red"),
-            err=True,
-        )
+        click.echo(click.style(f"✗ Error during analysis: {e}", fg="red"), err=True)
         logger.exception("Analysis failed")
         sys.exit(1)
 
