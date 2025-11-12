@@ -16,41 +16,66 @@ from docs2synth.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def is_qa_verified(qa_pair: QAPair) -> bool:
-    """Check if a QA pair has all verifiers responding 'Yes'.
+def _extract_verifier_response(verifier_result: Any) -> Optional[str]:
+    """Extract response from a verifier result dictionary.
+
+    Args:
+        verifier_result: Verifier result (dict or other)
+
+    Returns:
+        Response string ('yes', 'no', etc.) in lowercase, or None if not found
+    """
+    if not isinstance(verifier_result, dict):
+        return None
+
+    # Try both capitalized and lowercase keys
+    response = verifier_result.get("Response") or verifier_result.get("response")
+    if response:
+        return str(response).lower()
+
+    # Fallback: check if dict contains yes/no in string representation
+    response_str = str(verifier_result).lower()
+    if "yes" in response_str and "no" not in response_str:
+        return "yes"
+    elif "no" in response_str:
+        return "no"
+
+    return None
+
+
+def is_qa_verified(qa_pair: QAPair, require_all: bool = True) -> bool:
+    """Check if a QA pair meets verification requirements.
 
     Args:
         qa_pair: QA pair to check
+        require_all: If True, all verifiers must respond 'Yes'.
+                    If False, at least one verifier must respond 'Yes'.
 
     Returns:
-        True if all verifiers responded 'Yes', False otherwise
+        True if verification requirements are met, False otherwise
     """
     if not qa_pair.verification:
         return False
 
-    # Check all verifiers
+    yes_count = 0
+    total_verifiers = 0
+
     for verifier_name, verifier_result in qa_pair.verification.items():
-        if not isinstance(verifier_result, dict):
-            continue
+        total_verifiers += 1
+        response = _extract_verifier_response(verifier_result)
 
-        # Get response (case-insensitive)
-        response = verifier_result.get("Response") or verifier_result.get("response")
-        if not response:
-            # If no Response field, check if it's a simple dict with yes/no
-            response_lower = str(verifier_result).lower()
-            if "yes" in response_lower and "no" not in response_lower:
-                continue
-            elif "no" in response_lower:
-                return False
-            else:
-                # Unknown format, skip this verifier or be conservative
-                continue
-
-        # Check if response is "Yes" (case-insensitive)
-        if str(response).lower() != "yes":
+        if response == "yes":
+            yes_count += 1
+        elif response == "no" and require_all:
+            # Early exit if requiring all and found a "no"
             return False
 
-    return True
+    if require_all:
+        # All verifiers must say yes
+        return yes_count == total_verifiers
+    else:
+        # At least one verifier must say yes
+        return yes_count > 0
 
 
 def _find_json_files(
@@ -67,20 +92,6 @@ def _find_json_files(
         json_files = list(data_dir.glob("*.json"))
         logger.info(f"Found {len(json_files)} JSON files in {data_dir}")
     return json_files
-
-
-def _is_qa_pair_verified(qa_pair: Any, require_all_verifiers: bool) -> bool:
-    """Check if QA pair meets verification requirements."""
-    if require_all_verifiers:
-        return is_qa_verified(qa_pair)
-    # At least one verifier must respond 'Yes'
-    for verifier_name, verifier_result in qa_pair.verification.items():
-        if not isinstance(verifier_result, dict):
-            continue
-        response = verifier_result.get("Response") or verifier_result.get("response")
-        if response and str(response).lower() == "yes":
-            return True
-    return False
 
 
 def _create_qa_pair_dict(
@@ -149,7 +160,7 @@ def _process_json_file(
                     continue
 
                 # Check if QA pair meets verification requirements
-                if _is_qa_pair_verified(qa_pair, require_all_verifiers):
+                if is_qa_verified(qa_pair, require_all=require_all_verifiers):
                     stats["verified"] += 1
                     verified_qa_pairs.append(
                         _create_qa_pair_dict(
@@ -237,141 +248,6 @@ def load_verified_qa_pairs(
     return verified_qa_pairs
 
 
-class LayoutLMQADataset:
-    """Dataset class for LayoutLM-based QA retriever training.
-
-    This dataset preprocesses verified QA pairs into the tensor format
-    required by LayoutLM models for document understanding tasks.
-
-    IMPORTANT: This is a placeholder implementation. For actual training, you need to:
-    1. Extend this class with your preprocessing logic in __getitem__
-    2. Or use a pre-processed DataLoader pickle file with `--data-path /path/to/dataloader.pkl`
-
-    The training functions expect data batches with these fields:
-    - input_ids, attention_mask, token_type_ids, pixel_values, bbox
-    - token_objt_ids, visual_feat, bert_cls, positional_encoding
-    - norm_bbox, object_mask, target, start_id, end_id
-    - grid_emb (for layout training modes)
-    """
-
-    def __init__(
-        self,
-        qa_pairs: List[Dict[str, Any]],
-        processor: Optional[Any] = None,
-        max_length: int = 512,
-        image_dir: Optional[Path] = None,
-    ):
-        """Initialize the dataset.
-
-        Args:
-            qa_pairs: List of verified QA pair dictionaries
-            processor: LayoutLM processor (e.g., AutoProcessor)
-            max_length: Maximum sequence length for tokenization
-            image_dir: Directory containing document images
-        """
-        self.qa_pairs = qa_pairs
-        self.processor = processor
-        self.max_length = max_length
-        self.image_dir = Path(image_dir) if image_dir else None
-
-        logger.warning(
-            "\n" + "=" * 70 + "\n"
-            "⚠️  LayoutLMQADataset preprocessing is NOT implemented!\n"
-            "=" * 70 + "\n"
-            "This dataset returns raw QA pairs, not preprocessed tensors.\n"
-            "The training will fail when it tries to create batches.\n\n"
-            "To fix this, you have two options:\n"
-            "1. Implement preprocessing in LayoutLMQADataset.__getitem__()\n"
-            "   - Convert QA pairs to model input tensors\n"
-            "   - See training.py for required tensor fields\n\n"
-            "2. Use a pre-processed DataLoader pickle:\n"
-            "   - Preprocess your data offline\n"
-            "   - Save DataLoader: pickle.dump(dataloader, open('train.pkl', 'wb'))\n"
-            "   - Use: docs2synth retriever train --data-path /path/to/train.pkl\n"
-            "=" * 70 + "\n"
-        )
-
-    def __len__(self) -> int:
-        return len(self.qa_pairs)
-
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
-        """Get a single preprocessed example.
-
-        Returns:
-            Dictionary containing preprocessed tensors for model input
-
-        Raises:
-            NotImplementedError: This method needs to be implemented
-        """
-        raise NotImplementedError(
-            "LayoutLMQADataset preprocessing is not implemented!\n"
-            "You need to implement this method to convert QA pairs to model tensors.\n"
-            "Or use a pre-processed DataLoader pickle file instead:\n"
-            "  docs2synth retriever train --data-path /path/to/preprocessed_dataloader.pkl"
-        )
-
-
-def create_dataloader_from_verified_qa(
-    verified_qa_pairs: List[Dict[str, Any]],
-    batch_size: int = 8,
-    shuffle: bool = True,
-    processor: Optional[Any] = None,
-    max_length: int = 512,
-    image_dir: Optional[Path] = None,
-    dataset_class: Optional[type] = None,
-    **dataloader_kwargs: Any,
-) -> Any:
-    """Create a PyTorch DataLoader from verified QA pairs.
-
-    Args:
-        verified_qa_pairs: List of verified QA pair dictionaries
-        batch_size: Batch size for DataLoader
-        shuffle: Whether to shuffle the data
-        processor: LayoutLM processor (e.g., AutoProcessor from transformers)
-        max_length: Maximum sequence length for tokenization
-        image_dir: Directory containing document images
-        dataset_class: Custom Dataset class to use (defaults to LayoutLMQADataset)
-        **dataloader_kwargs: Additional arguments for DataLoader
-
-    Returns:
-        PyTorch DataLoader instance
-
-    Example:
-        >>> from transformers import AutoProcessor
-        >>> from docs2synth.retriever.dataset import load_verified_qa_pairs, create_dataloader_from_verified_qa
-        >>>
-        >>> # Load data
-        >>> qa_pairs = load_verified_qa_pairs(Path("./data/processed"))
-        >>>
-        >>> # Create processor
-        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
-        >>>
-        >>> # Create dataloader
-        >>> dataloader = create_dataloader_from_verified_qa(
-        ...     qa_pairs,
-        ...     batch_size=16,
-        ...     processor=processor,
-        ...     image_dir=Path("./data/images")
-        ... )
-    """
-    try:
-        from torch.utils.data import DataLoader
-    except ImportError:
-        raise ImportError(
-            "PyTorch is required for creating DataLoaders. Install with: pip install torch"
-        )
-
-    # Use custom dataset class if provided, otherwise use default
-    if dataset_class is None:
-        dataset_class = LayoutLMQADataset
-
-    dataset = dataset_class(
-        qa_pairs=verified_qa_pairs,
-        processor=processor,
-        max_length=max_length,
-        image_dir=image_dir,
-    )
-
-    return DataLoader(
-        dataset, batch_size=batch_size, shuffle=shuffle, **dataloader_kwargs
-    )
+# Note: LayoutLMQADataset and create_dataloader_from_verified_qa have been removed.
+# Use PreprocessedQADataset from preprocess.py and create preprocessed pickle files:
+#   docs2synth retriever preprocess --json-dir <dir> --image-dir <dir> --output <file.pkl>

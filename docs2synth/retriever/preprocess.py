@@ -21,6 +21,12 @@ from docs2synth.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Default preprocessing constants
+DEFAULT_MAX_LENGTH = 512
+DEFAULT_NUM_OBJECTS = 50
+DEFAULT_HIDDEN_SIZE = 768
+DEFAULT_POSITIONAL_ENCODING_DIM = 128
+
 
 class PreprocessedQADataset(Dataset):
     """Dataset that preprocesses QA pairs into training tensor format.
@@ -37,8 +43,8 @@ class PreprocessedQADataset(Dataset):
         qa_pairs: List[Dict[str, Any]],
         processor: Any,
         image_dir: Path,
-        max_length: int = 512,
-        num_objects: int = 50,
+        max_length: int = DEFAULT_MAX_LENGTH,
+        num_objects: int = DEFAULT_NUM_OBJECTS,
     ):
         """Initialize the dataset.
 
@@ -46,8 +52,8 @@ class PreprocessedQADataset(Dataset):
             qa_pairs: List of verified QA pair dictionaries from load_verified_qa_pairs()
             processor: LayoutLMv3 AutoProcessor from transformers
             image_dir: Directory containing document images
-            max_length: Maximum sequence length for tokenization
-            num_objects: Maximum number of objects per document
+            max_length: Maximum sequence length for tokenization (default: 512)
+            num_objects: Maximum number of objects per document (default: 50)
         """
         self.qa_pairs = qa_pairs
         self.processor = processor
@@ -131,7 +137,6 @@ class PreprocessedQADataset(Dataset):
 
         # 2. Prepare text
         question = qa["question"]
-        # context = qa.get("context", qa.get("object_text", ""))  # Reserved for Stage 2
 
         # 3. Stage 1 MVP: Use detected tokenizer (cached at initialization)
         text_encoding = self.tokenizer(
@@ -171,12 +176,14 @@ class PreprocessedQADataset(Dataset):
                 # Token to object mapping (simplified: all tokens map to object 0)
                 "token_objt_ids": torch.zeros(seq_len, dtype=torch.long),
                 # Visual features (Stage 1: use zero vectors, Stage 2: extract from vision model)
-                "visual_feat": torch.zeros(self.num_objects, 768, dtype=torch.float),
+                "visual_feat": torch.zeros(
+                    self.num_objects, DEFAULT_HIDDEN_SIZE, dtype=torch.float
+                ),
                 # BERT CLS embedding (Stage 1: zero vector, Stage 2: extract from BERT)
-                "bert_cls": torch.zeros(768, dtype=torch.float),
+                "bert_cls": torch.zeros(DEFAULT_HIDDEN_SIZE, dtype=torch.float),
                 # Positional encoding (Stage 1: simple, Stage 2: based on bbox positions)
                 "positional_encoding": torch.zeros(
-                    self.num_objects, 128, dtype=torch.float
+                    self.num_objects, DEFAULT_POSITIONAL_ENCODING_DIM, dtype=torch.float
                 ),
                 # Normalized bounding boxes (Stage 1: zeros, Stage 2: from JSON objects)
                 "norm_bbox": torch.zeros(self.num_objects, 4, dtype=torch.float),
@@ -339,8 +346,8 @@ def create_preprocessed_dataloader(
     output_path: Path,
     processor_name: str = "docling",
     batch_size: int = 8,
-    max_length: int = 512,
-    num_objects: int = 50,
+    max_length: int = DEFAULT_MAX_LENGTH,
+    num_objects: int = DEFAULT_NUM_OBJECTS,
     require_all_verifiers: bool = True,
 ) -> DataLoader:
     """Create and save a preprocessed DataLoader from JSON QA pairs.

@@ -46,6 +46,146 @@ def get_processor() -> Any:
     return _processor
 
 
+def _prepare_batch_tensors(data: dict, device: Any) -> dict:
+    """Convert data batch to proper tensor types and move to device.
+
+    Args:
+        data: Batch dictionary from dataloader
+        device: Target device (CPU/GPU)
+
+    Returns:
+        Dictionary with properly typed and placed tensors
+    """
+    import torch  # noqa: F811
+
+    tensors = {
+        "input_ids": data["input_ids"].to(device, dtype=torch.long).squeeze(1),
+        "attention_mask": data["attention_mask"].to(device, dtype=torch.float),
+        "pixel_values": data["pixel_values"].to(device, dtype=torch.float),
+        "bbox": data["bbox"].to(device, dtype=torch.long),
+        "token_type_ids": data["token_type_ids"].to(device, dtype=torch.long),
+        "encoded_token_objt_ids": data["token_objt_ids"].to(device, dtype=torch.long),
+        "visual_feat": data["visual_feat"].to(device, dtype=torch.float),
+        "bert_cls": data["bert_cls"].to(device, dtype=torch.float),
+        "positional_encoding": data["positional_encoding"].to(
+            device, dtype=torch.float
+        ),
+        "norm_bbox": data["norm_bbox"].to(device, dtype=torch.float),
+        "object_mask": data["object_mask"].to(device, dtype=torch.float),
+        "entity_targets": data["target"].to(device, dtype=torch.float),
+        "start_positions": data["start_id"].to(device, dtype=torch.long),
+        "end_positions": data["end_id"].to(device, dtype=torch.long),
+    }
+
+    # Reshape token_type_ids
+    tensors["token_type_ids"] = tensors["token_type_ids"].view(
+        -1, tensors["token_type_ids"].size(-1)
+    )
+
+    # Add grid_emb if present (for layout training)
+    if "grid_emb" in data:
+        tensors["grid_emb"] = data["grid_emb"].to(device, dtype=torch.float)
+
+    return tensors
+
+
+def _compute_entity_loss(
+    entity_logits: Any, entity_targets: Any, loss_function: Any
+) -> tuple:
+    """Compute entity retrieval loss and predictions.
+
+    Args:
+        entity_logits: Raw entity logits from model
+        entity_targets: Target entity labels
+        loss_function: Loss function to use
+
+    Returns:
+        Tuple of (loss, predicted_entities, target_entities)
+    """
+    import torch  # noqa: F811
+
+    entity_logits = entity_logits.squeeze(2)
+    entity_loss = loss_function(entity_logits, entity_targets)
+
+    _, predicted_idx = torch.max(entity_logits.data, dim=1)
+    _, target_idx = torch.max(entity_targets.data, dim=1)
+
+    return entity_loss, predicted_idx.cpu().numpy(), target_idx.cpu().numpy()
+
+
+def _compute_span_loss(
+    start_logits: Any, end_logits: Any, start_positions: Any, end_positions: Any
+) -> Any:
+    """Compute span-based QA loss.
+
+    Args:
+        start_logits: Start position logits
+        end_logits: End position logits
+        start_positions: Target start positions
+        end_positions: Target end positions
+
+    Returns:
+        Combined span loss
+    """
+    from torch.nn import CrossEntropyLoss
+
+    ignored_index = start_logits.size(1)
+    start_positions = start_positions.clamp(0, ignored_index)
+    end_positions = end_positions.clamp(0, ignored_index)
+
+    loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+    start_loss = loss_fct(start_logits, start_positions)
+    end_loss = loss_fct(end_logits, end_positions)
+
+    return (start_loss + end_loss) / 2
+
+
+def _decode_predictions(
+    input_ids: Any,
+    start_logits: Any,
+    end_logits: Any,
+    start_positions: Any,
+    end_positions: Any,
+    processor: Any,
+) -> tuple:
+    """Decode token predictions to text and calculate ANLS scores.
+
+    Args:
+        input_ids: Input token IDs
+        start_logits: Start position logits
+        end_logits: End position logits
+        start_positions: Target start positions
+        end_positions: Target end positions
+        processor: Tokenizer processor
+
+    Returns:
+        Tuple of (predicted_texts, target_texts, anls_scores)
+    """
+    import torch  # noqa: F811
+
+    pred_start_positions = torch.argmax(start_logits, dim=1)
+    pred_end_positions = torch.argmax(end_logits, dim=1)
+
+    predicted_texts = []
+    target_texts = []
+    anls_scores = []
+
+    for i in range(input_ids.size(0)):
+        pred_tokens = input_ids[i][pred_start_positions[i] : pred_end_positions[i] + 1]
+        gt_tokens = input_ids[i][start_positions[i] : end_positions[i] + 1]
+
+        pred_text = processor.tokenizer.decode(pred_tokens, skip_special_tokens=True)
+        gt_text = processor.tokenizer.decode(gt_tokens, skip_special_tokens=True)
+
+        anls_score = calculate_anls(pred_text, gt_text)
+
+        predicted_texts.append(pred_text)
+        target_texts.append(gt_text)
+        anls_scores.append(anls_score)
+
+    return predicted_texts, target_texts, anls_scores
+
+
 def train(
     model: Any,
     train_dataloader: Any,
@@ -91,71 +231,38 @@ def train(
     processor = get_processor()
 
     for _, data in tqdm(enumerate(train_dataloader, 0), desc="Training"):
-        # Convert tensors to the correct types
-        input_ids = data["input_ids"].to(device, dtype=torch.long).squeeze(1)
-        attention_mask = data["attention_mask"].to(device, dtype=torch.float)
-        pixel_values = data["pixel_values"].to(device, dtype=torch.float)
-        bbox = data["bbox"].to(device, dtype=torch.long)
-        token_type_ids = data["token_type_ids"].to(device, dtype=torch.long)
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1))
-
-        encoded_token_objt_ids = data["token_objt_ids"].to(
-            device, dtype=torch.long
-        )  # For token aggregate into entities
-
-        visual_feat = data["visual_feat"].to(device, dtype=torch.float)
-        bert_cls = data["bert_cls"].to(device, dtype=torch.float)
-        positional_encoding = data["positional_encoding"].to(device, dtype=torch.float)
-        norm_bbox = data["norm_bbox"].to(device, dtype=torch.float)
-        object_mask = data["object_mask"].to(device, dtype=torch.float)
-
-        # Entity Retrieving Target
-        entity_targets = data["target"].to(device, dtype=torch.float)
-
-        # Convert start and end positions to torch.long
-        start_positions = data["start_id"].to(device, dtype=torch.long)
-        end_positions = data["end_id"].to(device, dtype=torch.long)
+        tensors = _prepare_batch_tensors(data, device)
 
         optimizer.zero_grad()
 
-        # Forward pass through the model
+        # Forward pass
         outputs_dict = model(
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            pixel_values,
-            bbox,
-            encoded_token_objt_ids,
-            bert_cls,
-            visual_feat,
-            norm_bbox,
-            object_mask,
-            positional_encoding,
+            tensors["input_ids"],
+            tensors["attention_mask"],
+            tensors["token_type_ids"],
+            tensors["pixel_values"],
+            tensors["bbox"],
+            tensors["encoded_token_objt_ids"],
+            tensors["bert_cls"],
+            tensors["visual_feat"],
+            tensors["norm_bbox"],
+            tensors["object_mask"],
+            tensors["positional_encoding"],
         )
 
-        # Entity Retrieving Task
-        entity_logits = outputs_dict["entity_logits"]
-        entity_logits = entity_logits.squeeze(2)
-        entity_loss = loss_function(entity_logits, entity_targets)
+        # Compute losses
+        entity_loss, pred_entities, target_entities = _compute_entity_loss(
+            outputs_dict["entity_logits"], tensors["entity_targets"], loss_function
+        )
+        predict_entity_list.extend(list(pred_entities))
+        target_id_list.extend(list(target_entities))
 
-        _, big_idx = torch.max(entity_logits.data, dim=1)
-        predict_entity_list.extend(list(big_idx.cpu().numpy()))
-
-        _, target_idx = torch.max(entity_targets.data, dim=1)
-        target_id_list.extend(list(target_idx.cpu().numpy()))
-
-        # Span-based QA Predicted Logits
-        start_logits = outputs_dict["start_logits"]
-        end_logits = outputs_dict["end_logits"]
-        ignored_index = start_logits.size(1)
-        start_positions = start_positions.clamp(0, ignored_index)
-        end_positions = end_positions.clamp(0, ignored_index)
-
-        # Compute loss with CrossEntropyLoss
-        loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-        start_loss = loss_fct(start_logits, start_positions)
-        end_loss = loss_fct(end_logits, end_positions)
-        token_loss = (start_loss + end_loss) / 2
+        token_loss = _compute_span_loss(
+            outputs_dict["start_logits"],
+            outputs_dict["end_logits"],
+            tensors["start_positions"],
+            tensors["end_positions"],
+        )
 
         batch_loss = token_loss + entity_loss
         total_loss += batch_loss.item()
@@ -165,27 +272,18 @@ def train(
         batch_loss.backward()
         optimizer.step()
 
-        pred_start_positions = torch.argmax(start_logits, dim=1)
-        pred_end_positions = torch.argmax(end_logits, dim=1)
-
-        for i in range(input_ids.size(0)):  # Loop through each example in the batch
-            pred_tokens = input_ids[i][
-                pred_start_positions[i] : pred_end_positions[i] + 1
-            ]
-            gt_tokens = input_ids[i][start_positions[i] : end_positions[i] + 1]
-
-            # Decode tokens to text using processor
-            pred_text = processor.tokenizer.decode(
-                pred_tokens, skip_special_tokens=True
-            )
-            gt_text = processor.tokenizer.decode(gt_tokens, skip_special_tokens=True)
-
-            # Calculate ANLS
-            anls_score = calculate_anls(pred_text, gt_text)
-            anls_scores.append(anls_score)
-
-            predict_text_list.append(pred_text)
-            target_text_list.append(gt_text)
+        # Decode predictions
+        pred_texts, gt_texts, batch_anls = _decode_predictions(
+            tensors["input_ids"],
+            outputs_dict["start_logits"],
+            outputs_dict["end_logits"],
+            tensors["start_positions"],
+            tensors["end_positions"],
+            processor,
+        )
+        predict_text_list.extend(pred_texts)
+        target_text_list.extend(gt_texts)
+        anls_scores.extend(batch_anls)
 
     # Calculate averages
     average_anls = sum(anls_scores) / len(anls_scores) if anls_scores else 0.0
@@ -208,8 +306,6 @@ def train_layout(
     loss_function: Optional[Any] = None,
 ) -> Tuple[float, float, List[str], List[str], List[int], List[int]]:
     """Train model with grid representations for layout pretraining.
-
-    Updated training function with grid representations for layout pretraining.
 
     Args:
         model: PyTorch model to train
@@ -248,73 +344,39 @@ def train_layout(
     processor = get_processor()
 
     for _, data in tqdm(enumerate(train_dataloader, 0), desc="Training (Layout)"):
-        # Convert tensors to the correct types
-        input_ids = data["input_ids"].to(device, dtype=torch.long).squeeze(1)
-        attention_mask = data["attention_mask"].to(device, dtype=torch.float)
-        pixel_values = data["pixel_values"].to(device, dtype=torch.float)
-        bbox = data["bbox"].to(device, dtype=torch.long)
-        token_type_ids = data["token_type_ids"].to(device, dtype=torch.long)
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1))
-
-        encoded_token_objt_ids = data["token_objt_ids"].to(
-            device, dtype=torch.long
-        )  # For token aggregate into entities
-
-        visual_feat = data["visual_feat"].to(device, dtype=torch.float)
-        bert_cls = data["bert_cls"].to(device, dtype=torch.float)
-        positional_encoding = data["positional_encoding"].to(device, dtype=torch.float)
-        norm_bbox = data["norm_bbox"].to(device, dtype=torch.float)
-        object_mask = data["object_mask"].to(device, dtype=torch.float)
-
-        # Entity Retrieving Target
-        entity_targets = data["target"].to(device, dtype=torch.float)
-        grid_emb = data["grid_emb"].to(device, dtype=torch.float)
-
-        # Convert start and end positions to torch.long
-        start_positions = data["start_id"].to(device, dtype=torch.long)
-        end_positions = data["end_id"].to(device, dtype=torch.long)
+        tensors = _prepare_batch_tensors(data, device)
 
         optimizer.zero_grad()
 
-        # Forward pass through the model
+        # Forward pass with grid embeddings
         outputs_dict = model(
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            pixel_values,
-            bbox,
-            encoded_token_objt_ids,
-            bert_cls,
-            visual_feat,
-            norm_bbox,
-            object_mask,
-            positional_encoding,
-            grid_emb,
+            tensors["input_ids"],
+            tensors["attention_mask"],
+            tensors["token_type_ids"],
+            tensors["pixel_values"],
+            tensors["bbox"],
+            tensors["encoded_token_objt_ids"],
+            tensors["bert_cls"],
+            tensors["visual_feat"],
+            tensors["norm_bbox"],
+            tensors["object_mask"],
+            tensors["positional_encoding"],
+            tensors["grid_emb"],
         )
 
-        # Entity Retrieving Task
-        entity_logits = outputs_dict["entity_logits"]
-        entity_logits = entity_logits.squeeze(2)
-        entity_loss = loss_function(entity_logits, entity_targets)
+        # Compute losses
+        entity_loss, pred_entities, target_entities = _compute_entity_loss(
+            outputs_dict["entity_logits"], tensors["entity_targets"], loss_function
+        )
+        predict_entity_list.extend(list(pred_entities))
+        target_id_list.extend(list(target_entities))
 
-        _, big_idx = torch.max(entity_logits.data, dim=1)
-        predict_entity_list.extend(list(big_idx.cpu().numpy()))
-
-        _, target_idx = torch.max(entity_targets.data, dim=1)
-        target_id_list.extend(list(target_idx.cpu().numpy()))
-
-        # Span-based QA Predicted Logits
-        start_logits = outputs_dict["start_logits"]
-        end_logits = outputs_dict["end_logits"]
-        ignored_index = start_logits.size(1)
-        start_positions = start_positions.clamp(0, ignored_index)
-        end_positions = end_positions.clamp(0, ignored_index)
-
-        # Compute loss with CrossEntropyLoss
-        loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-        start_loss = loss_fct(start_logits, start_positions)
-        end_loss = loss_fct(end_logits, end_positions)
-        token_loss = (start_loss + end_loss) / 2
+        token_loss = _compute_span_loss(
+            outputs_dict["start_logits"],
+            outputs_dict["end_logits"],
+            tensors["start_positions"],
+            tensors["end_positions"],
+        )
 
         batch_loss = token_loss + entity_loss
         total_loss += batch_loss.item()
@@ -324,27 +386,18 @@ def train_layout(
         batch_loss.backward()
         optimizer.step()
 
-        pred_start_positions = torch.argmax(start_logits, dim=1)
-        pred_end_positions = torch.argmax(end_logits, dim=1)
-
-        for i in range(input_ids.size(0)):  # Loop through each example in the batch
-            pred_tokens = input_ids[i][
-                pred_start_positions[i] : pred_end_positions[i] + 1
-            ]
-            gt_tokens = input_ids[i][start_positions[i] : end_positions[i] + 1]
-
-            # Decode tokens to text using processor
-            pred_text = processor.tokenizer.decode(
-                pred_tokens, skip_special_tokens=True
-            )
-            gt_text = processor.tokenizer.decode(gt_tokens, skip_special_tokens=True)
-
-            # Calculate ANLS
-            anls_score = calculate_anls(pred_text, gt_text)
-            anls_scores.append(anls_score)
-
-            predict_text_list.append(pred_text)
-            target_text_list.append(gt_text)
+        # Decode predictions
+        pred_texts, gt_texts, batch_anls = _decode_predictions(
+            tensors["input_ids"],
+            outputs_dict["start_logits"],
+            outputs_dict["end_logits"],
+            tensors["start_positions"],
+            tensors["end_positions"],
+            processor,
+        )
+        predict_text_list.extend(pred_texts)
+        target_text_list.extend(gt_texts)
+        anls_scores.extend(batch_anls)
 
     # Calculate averages
     average_anls = sum(anls_scores) / len(anls_scores) if anls_scores else 0.0
@@ -368,7 +421,7 @@ def train_layout_gemini(
 ) -> Tuple[float, float, List[str], List[str], List[int], List[int]]:
     """Train model with grid representations (Gemini variant).
 
-    Similar to train_layout but with Gemini-specific configuration.
+    Note: Currently identical to train_layout. Kept for API compatibility.
 
     Args:
         model: PyTorch model to train
@@ -385,140 +438,8 @@ def train_layout_gemini(
             - predict_entity_list: List of predicted entity IDs
             - target_id_list: List of target entity IDs
     """
-    import torch  # noqa: F811
-    from torch.nn import CrossEntropyLoss
-    from tqdm import tqdm
-
-    if loss_function is None:
-        loss_function = CrossEntropyLoss()
-
-    device = _get_device()
-    model.train()
-
-    predict_text_list: List[str] = []
-    target_text_list: List[str] = []
-    anls_scores: List[float] = []
-    predict_entity_list: List[int] = []
-    target_id_list: List[int] = []
-    total_loss = 0.0
-    num_batches = 0
-
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
-    processor = get_processor()
-
-    for _, data in tqdm(
-        enumerate(train_dataloader, 0), desc="Training (Layout Gemini)"
-    ):
-        # Convert tensors to the correct types
-        input_ids = data["input_ids"].to(device, dtype=torch.long).squeeze(1)
-        attention_mask = data["attention_mask"].to(device, dtype=torch.float)
-        pixel_values = data["pixel_values"].to(device, dtype=torch.float)
-        bbox = data["bbox"].to(device, dtype=torch.long)
-        token_type_ids = data["token_type_ids"].to(device, dtype=torch.long)
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1))
-
-        encoded_token_objt_ids = data["token_objt_ids"].to(
-            device, dtype=torch.long
-        )  # For token aggregate into entities
-
-        visual_feat = data["visual_feat"].to(device, dtype=torch.float)
-        bert_cls = data["bert_cls"].to(device, dtype=torch.float)
-        positional_encoding = data["positional_encoding"].to(device, dtype=torch.float)
-        norm_bbox = data["norm_bbox"].to(device, dtype=torch.float)
-        object_mask = data["object_mask"].to(device, dtype=torch.float)
-
-        # Entity Retrieving Target
-        entity_targets = data["target"].to(device, dtype=torch.float)
-        grid_emb = data["grid_emb"].to(device, dtype=torch.float)
-
-        # Convert start and end positions to torch.long
-        start_positions = data["start_id"].to(device, dtype=torch.long)
-        end_positions = data["end_id"].to(device, dtype=torch.long)
-
-        optimizer.zero_grad()
-
-        # Forward pass through the model
-        outputs_dict = model(
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            pixel_values,
-            bbox,
-            encoded_token_objt_ids,
-            bert_cls,
-            visual_feat,
-            norm_bbox,
-            object_mask,
-            positional_encoding,
-            grid_emb,
-        )
-
-        # Entity Retrieving Task
-        entity_logits = outputs_dict["entity_logits"]
-        entity_logits = entity_logits.squeeze(2)
-        entity_loss = loss_function(entity_logits, entity_targets)
-
-        _, big_idx = torch.max(entity_logits.data, dim=1)
-        predict_entity_list.extend(list(big_idx.cpu().numpy()))
-
-        _, target_idx = torch.max(entity_targets.data, dim=1)
-        target_id_list.extend(list(target_idx.cpu().numpy()))
-
-        # Span-based QA Predicted Logits
-        start_logits = outputs_dict["start_logits"]
-        end_logits = outputs_dict["end_logits"]
-        ignored_index = start_logits.size(1)
-        start_positions = start_positions.clamp(0, ignored_index)
-        end_positions = end_positions.clamp(0, ignored_index)
-
-        # Compute loss with CrossEntropyLoss
-        loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-        start_loss = loss_fct(start_logits, start_positions)
-        end_loss = loss_fct(end_logits, end_positions)
-        token_loss = (start_loss + end_loss) / 2
-
-        batch_loss = token_loss + entity_loss
-        total_loss += batch_loss.item()
-        num_batches += 1
-
-        # Backpropagation
-        batch_loss.backward()
-        optimizer.step()
-
-        pred_start_positions = torch.argmax(start_logits, dim=1)
-        pred_end_positions = torch.argmax(end_logits, dim=1)
-
-        for i in range(input_ids.size(0)):  # Loop through each example in the batch
-            pred_tokens = input_ids[i][
-                pred_start_positions[i] : pred_end_positions[i] + 1
-            ]
-            gt_tokens = input_ids[i][start_positions[i] : end_positions[i] + 1]
-
-            # Decode tokens to text using processor
-            pred_text = processor.tokenizer.decode(
-                pred_tokens, skip_special_tokens=True
-            )
-            gt_text = processor.tokenizer.decode(gt_tokens, skip_special_tokens=True)
-
-            # Calculate ANLS
-            anls_score = calculate_anls(pred_text, gt_text)
-            anls_scores.append(anls_score)
-
-            predict_text_list.append(pred_text)
-            target_text_list.append(gt_text)
-
-    # Calculate averages
-    average_anls = sum(anls_scores) / len(anls_scores) if anls_scores else 0.0
-    average_loss = total_loss / num_batches if num_batches > 0 else 0.0
-
-    return (
-        average_anls,
-        average_loss,
-        predict_text_list,
-        target_text_list,
-        predict_entity_list,
-        target_id_list,
-    )
+    # Gemini variant currently has same implementation as train_layout
+    return train_layout(model, train_dataloader, lr, loss_function)
 
 
 def train_layout_coarse_grained(
@@ -529,7 +450,7 @@ def train_layout_coarse_grained(
 ) -> Tuple[float, float, List[str], List[str], List[int], List[int]]:
     """Train model with coarse-grained entity loss only.
 
-    This variant only uses entity loss, skipping token-level QA loss.
+    This variant only uses entity loss, skipping token-level QA loss in backprop.
 
     Args:
         model: PyTorch model to train
@@ -570,70 +491,34 @@ def train_layout_coarse_grained(
     for _, data in tqdm(
         enumerate(train_dataloader, 0), desc="Training (Coarse-grained)"
     ):
-        # Convert tensors to the correct types
-        input_ids = data["input_ids"].to(device, dtype=torch.long).squeeze(1)
-        attention_mask = data["attention_mask"].to(device, dtype=torch.float)
-        pixel_values = data["pixel_values"].to(device, dtype=torch.float)
-        bbox = data["bbox"].to(device, dtype=torch.long)
-        token_type_ids = data["token_type_ids"].to(device, dtype=torch.long)
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1))
-
-        encoded_token_objt_ids = data["token_objt_ids"].to(
-            device, dtype=torch.long
-        )  # For token aggregate into entities
-
-        visual_feat = data["visual_feat"].to(device, dtype=torch.float)
-        bert_cls = data["bert_cls"].to(device, dtype=torch.float)
-        positional_encoding = data["positional_encoding"].to(device, dtype=torch.float)
-        norm_bbox = data["norm_bbox"].to(device, dtype=torch.float)
-        object_mask = data["object_mask"].to(device, dtype=torch.float)
-
-        # Entity Retrieving Target
-        entity_targets = data["target"].to(device, dtype=torch.float)
-        grid_emb = data["grid_emb"].to(device, dtype=torch.float)
-
-        # Convert start and end positions to torch.long
-        start_positions = data["start_id"].to(device, dtype=torch.long)
-        end_positions = data["end_id"].to(device, dtype=torch.long)
+        tensors = _prepare_batch_tensors(data, device)
 
         optimizer.zero_grad()
 
-        # Forward pass through the model
+        # Forward pass with grid embeddings
         outputs_dict = model(
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            pixel_values,
-            bbox,
-            encoded_token_objt_ids,
-            bert_cls,
-            visual_feat,
-            norm_bbox,
-            object_mask,
-            positional_encoding,
-            grid_emb,
+            tensors["input_ids"],
+            tensors["attention_mask"],
+            tensors["token_type_ids"],
+            tensors["pixel_values"],
+            tensors["bbox"],
+            tensors["encoded_token_objt_ids"],
+            tensors["bert_cls"],
+            tensors["visual_feat"],
+            tensors["norm_bbox"],
+            tensors["object_mask"],
+            tensors["positional_encoding"],
+            tensors["grid_emb"],
         )
 
-        # Entity Retrieving Task
-        entity_logits = outputs_dict["entity_logits"]
-        entity_logits = entity_logits.squeeze(2)
-        entity_loss = loss_function(entity_logits, entity_targets)
+        # Compute entity loss only (coarse-grained)
+        entity_loss, pred_entities, target_entities = _compute_entity_loss(
+            outputs_dict["entity_logits"], tensors["entity_targets"], loss_function
+        )
+        predict_entity_list.extend(list(pred_entities))
+        target_id_list.extend(list(target_entities))
 
-        _, big_idx = torch.max(entity_logits.data, dim=1)
-        predict_entity_list.extend(list(big_idx.cpu().numpy()))
-
-        _, target_idx = torch.max(entity_targets.data, dim=1)
-        target_id_list.extend(list(target_idx.cpu().numpy()))
-
-        # Span-based QA Predicted Logits (for evaluation only, not used in loss)
-        start_logits = outputs_dict["start_logits"]
-        end_logits = outputs_dict["end_logits"]
-        ignored_index = start_logits.size(1)
-        start_positions = start_positions.clamp(0, ignored_index)
-        end_positions = end_positions.clamp(0, ignored_index)
-
-        # Only use entity loss (coarse-grained training)
-        batch_loss = entity_loss
+        batch_loss = entity_loss  # Only entity loss, no token loss
         total_loss += batch_loss.item()
         num_batches += 1
 
@@ -641,27 +526,18 @@ def train_layout_coarse_grained(
         batch_loss.backward()
         optimizer.step()
 
-        pred_start_positions = torch.argmax(start_logits, dim=1)
-        pred_end_positions = torch.argmax(end_logits, dim=1)
-
-        for i in range(input_ids.size(0)):  # Loop through each example in the batch
-            pred_tokens = input_ids[i][
-                pred_start_positions[i] : pred_end_positions[i] + 1
-            ]
-            gt_tokens = input_ids[i][start_positions[i] : end_positions[i] + 1]
-
-            # Decode tokens to text using processor
-            pred_text = processor.tokenizer.decode(
-                pred_tokens, skip_special_tokens=True
-            )
-            gt_text = processor.tokenizer.decode(gt_tokens, skip_special_tokens=True)
-
-            # Calculate ANLS
-            anls_score = calculate_anls(pred_text, gt_text)
-            anls_scores.append(anls_score)
-
-            predict_text_list.append(pred_text)
-            target_text_list.append(gt_text)
+        # Decode predictions for evaluation (not used in loss)
+        pred_texts, gt_texts, batch_anls = _decode_predictions(
+            tensors["input_ids"],
+            outputs_dict["start_logits"],
+            outputs_dict["end_logits"],
+            tensors["start_positions"],
+            tensors["end_positions"],
+            processor,
+        )
+        predict_text_list.extend(pred_texts)
+        target_text_list.extend(gt_texts)
+        anls_scores.extend(batch_anls)
 
     # Calculate averages
     average_anls = sum(anls_scores) / len(anls_scores) if anls_scores else 0.0

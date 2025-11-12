@@ -13,6 +13,11 @@ import torch
 import torch.nn as nn
 from transformers import LayoutLMv3Model
 
+# Default model dimensions
+DEFAULT_HIDDEN_SIZE = 768
+DEFAULT_NUM_OBJECTS = 50
+DEFAULT_DROPOUT_RATE = 0.1
+
 
 class LayoutLMForDocumentQA(nn.Module):
     """Multi-task LayoutLM model for document QA.
@@ -29,8 +34,9 @@ class LayoutLMForDocumentQA(nn.Module):
     def __init__(
         self,
         layoutlm_model: LayoutLMv3Model,
-        hidden_size: int = 768,
-        num_objects: int = 50,
+        hidden_size: int = DEFAULT_HIDDEN_SIZE,
+        num_objects: int = DEFAULT_NUM_OBJECTS,
+        dropout_rate: float = DEFAULT_DROPOUT_RATE,
     ):
         """Initialize the model.
 
@@ -38,6 +44,7 @@ class LayoutLMForDocumentQA(nn.Module):
             layoutlm_model: Pre-trained LayoutLMv3 model
             hidden_size: Hidden dimension size (default: 768)
             num_objects: Maximum number of objects per document (default: 50)
+            dropout_rate: Dropout rate for regularization (default: 0.1)
         """
         super().__init__()
         self.layoutlm = layoutlm_model
@@ -49,7 +56,7 @@ class LayoutLMForDocumentQA(nn.Module):
         self.entity_head = nn.Sequential(
             nn.Linear(hidden_size * 2, hidden_size),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_size, 1),
         )
 
@@ -134,13 +141,15 @@ class LayoutLMForDocumentQA(nn.Module):
 
 def create_model_for_qa(
     base_model_name: str = "microsoft/layoutlmv3-base",
-    num_objects: int = 50,
+    num_objects: int = DEFAULT_NUM_OBJECTS,
+    dropout_rate: float = DEFAULT_DROPOUT_RATE,
 ) -> LayoutLMForDocumentQA:
     """Create a LayoutLM model for document QA.
 
     Args:
         base_model_name: HuggingFace model name or path
-        num_objects: Maximum number of objects per document
+        num_objects: Maximum number of objects per document (default: 50)
+        dropout_rate: Dropout rate for regularization (default: 0.1)
 
     Returns:
         Initialized LayoutLMForDocumentQA model
@@ -156,6 +165,7 @@ def create_model_for_qa(
         layoutlm_model=layoutlm_base,
         hidden_size=hidden_size,
         num_objects=num_objects,
+        dropout_rate=dropout_rate,
     )
 
     return model

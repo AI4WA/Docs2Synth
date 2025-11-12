@@ -98,77 +98,39 @@ def _load_model(
     return model
 
 
-def _load_training_data(
-    data_path: Path,
-    cfg: dict,
-    batch_size: Optional[int],
-    processor_name: Optional[str] = None,
-) -> Any:
-    """Load training data as DataLoader from pickle file or directory."""
+def _load_training_data(data_path: Path) -> Any:
+    """Load training data as DataLoader from pickle file.
+
+    Args:
+        data_path: Path to preprocessed DataLoader pickle file
+
+    Returns:
+        DataLoader instance
+
+    Raises:
+        ValueError: If data_path is not a valid pickle file
+    """
     import pickle
 
-    if data_path.is_file() and (
-        data_path.suffix == ".pkl" or data_path.suffix == ".pickle"
-    ):
-        # Load pickled DataLoader
-        click.echo(f"  Loading pickled DataLoader from: {data_path}")
-        with open(data_path, "rb") as f:
-            train_dataloader = pickle.load(f)
-    elif data_path.is_dir():
-        # Load verified QA pairs from JSON files in directory
-        from docs2synth.retriever.dataset import (
-            create_dataloader_from_verified_qa,
-            load_verified_qa_pairs,
-        )
-
-        # Use processor_name parameter or get from config
-        if processor_name is None:
-            processor_name = cfg.get("preprocess.processor")
-
-        # Handle 'all' special value
-        if processor_name and processor_name.lower() == "all":
-            processor_name = None
-
-        if processor_name:
-            click.echo(
-                f"  Loading verified QA pairs from directory: {data_path} "
-                f"(processor: {processor_name})"
-            )
-        else:
-            click.echo(
-                f"  Loading verified QA pairs from directory: {data_path} "
-                "(all processors)"
-            )
-
-        verified_qa_pairs = load_verified_qa_pairs(
-            data_path,
-            processor_name=processor_name,
-            require_all_verifiers=True,
-        )
-
-        if not verified_qa_pairs:
-            raise ValueError(
-                "No verified QA pairs found. "
-                "Please ensure JSON files contain QA pairs with verification results."
-            )
-
-        click.echo(
-            f"  Found {len(verified_qa_pairs)} verified QA pairs, creating DataLoader..."
-        )
-
-        # Create DataLoader
-        effective_batch_size = batch_size or 8
-        train_dataloader = create_dataloader_from_verified_qa(
-            verified_qa_pairs,
-            batch_size=effective_batch_size,
-            shuffle=True,
-        )
-        click.echo(f"  Created DataLoader with batch_size={effective_batch_size}")
-    else:
+    if not data_path.is_file():
         raise ValueError(
-            f"Unsupported data format: {data_path.suffix}. "
-            "Expected directory or .pkl/.pickle file"
+            f"Data path must be a pickle file (.pkl/.pickle), got: {data_path}\n"
+            "Please preprocess your data first:\n"
+            "  docs2synth retriever preprocess --json-dir <dir> --image-dir <dir> --output <file.pkl>"
         )
+
+    if data_path.suffix not in [".pkl", ".pickle"]:
+        raise ValueError(
+            f"Data path must be a pickle file (.pkl/.pickle), got: {data_path.suffix}\n"
+            "Please preprocess your data first:\n"
+            "  docs2synth retriever preprocess --json-dir <dir> --image-dir <dir> --output <file.pkl>"
+        )
+
+    # Load pickled DataLoader
+    click.echo(f"  Loading preprocessed DataLoader from: {data_path}")
+    with open(data_path, "rb") as f:
+        train_dataloader = pickle.load(f)
+
     return train_dataloader
 
 
@@ -357,22 +319,15 @@ def retriever_group(ctx: click.Context) -> None:
     "--data-path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Path to training data (directory or DataLoader pickle). "
-    "If not provided, reads from config.yml (retriever.train_data_path, preprocess.output_dir, or data.processed_dir)",
+    help="Path to preprocessed training data (.pkl/.pickle file). "
+    "If not provided, reads from config.yml (retriever.preprocessed_data_path). "
+    "Run 'docs2synth retriever preprocess' first to create this file.",
 )
 @click.option(
     "--val-data-path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Path to validation data (directory or DataLoader pickle). Optional.",
-)
-@click.option(
-    "--processor",
-    type=str,
-    default=None,
-    help="Filter JSON files by processor name (e.g., 'docling', 'paddleocr'). "
-    "If not provided, reads from config.yml (preprocess.processor). "
-    "Use 'all' to load all JSON files regardless of processor.",
+    help="Path to validation data (preprocessed DataLoader pickle). Optional.",
 )
 @click.option(
     "--output-dir",
@@ -438,7 +393,6 @@ def retriever_train(  # noqa: C901
     base_model: str,
     data_path: Optional[Path],
     val_data_path: Optional[Path],
-    processor: Optional[str],
     output_dir: Optional[Path],
     mode: str,
     lr: Optional[float],
@@ -594,17 +548,6 @@ def retriever_train(  # noqa: C901
             output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Determine processor name for filtering
-        # Priority: CLI flag > config setting
-        if processor is None:
-            processor_name = cfg.get("preprocess.processor")
-        else:
-            processor_name = processor
-
-        # Handle 'all' special value
-        if processor_name and processor_name.lower() == "all":
-            processor_name = None
-
         click.echo(
             click.style(
                 f"Training retriever model in '{mode}' mode...",
@@ -617,12 +560,6 @@ def retriever_train(  # noqa: C901
         else:
             click.echo(f"  Base model: {base_model}")
         click.echo(f"  Data: {data_path}")
-        if processor_name:
-            click.echo(
-                f"  Processor filter: {processor_name} (will load *_{processor_name}.json files)"
-            )
-        else:
-            click.echo("  Processor filter: None (will load all *.json files)")
         click.echo(f"  Output: {output_dir}")
         click.echo(f"  Learning rate: {lr}")
         click.echo(f"  Epochs: {epochs}")
@@ -642,12 +579,10 @@ def retriever_train(  # noqa: C901
             logger.exception("Model loading failed")
             sys.exit(1)
 
-        # Load or create DataLoader
+        # Load preprocessed DataLoader
         click.echo(click.style("Loading training data...", fg="yellow"))
         try:
-            train_dataloader = _load_training_data(
-                data_path, cfg, batch_size, processor_name
-            )
+            train_dataloader = _load_training_data(data_path)
         except Exception as e:
             click.echo(
                 click.style(
@@ -659,8 +594,7 @@ def retriever_train(  # noqa: C901
             logger.exception("Data loading failed")
             sys.exit(1)
 
-        # Note: Cannot override batch_size for pickled DataLoaders
-        # Batch size is already set when the DataLoader was created
+        # Note: Batch size is fixed at preprocessing time
         if batch_size is not None and hasattr(train_dataloader, "batch_size"):
             if train_dataloader.batch_size != batch_size:
                 click.echo(
@@ -676,9 +610,7 @@ def retriever_train(  # noqa: C901
         if val_data_path is not None:
             click.echo(click.style("Loading validation data...", fg="yellow"))
             try:
-                val_dataloader = _load_training_data(
-                    val_data_path, cfg, batch_size, processor_name
-                )
+                val_dataloader = _load_training_data(val_data_path)
                 # Note: Same warning applies for validation data
                 if batch_size is not None and hasattr(val_dataloader, "batch_size"):
                     if val_dataloader.batch_size != batch_size:

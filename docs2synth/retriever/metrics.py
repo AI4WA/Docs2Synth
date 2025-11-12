@@ -6,8 +6,13 @@ including ANLS (Average Normalized Levenshtein Similarity) for QA evaluation.
 
 from __future__ import annotations
 
+# ANLS threshold: normalized distance must be <= this to get non-zero score
+ANLS_THRESHOLD = 0.5
 
-def calculate_anls(pred_text: str, gt_text: str) -> float:
+
+def calculate_anls(
+    pred_text: str, gt_text: str, threshold: float = ANLS_THRESHOLD
+) -> float:
     """Calculate Average Normalized Levenshtein Similarity (ANLS) score.
 
     ANLS is a metric commonly used in document understanding tasks that measures
@@ -17,6 +22,7 @@ def calculate_anls(pred_text: str, gt_text: str) -> float:
     Args:
         pred_text: Predicted text string
         gt_text: Ground truth text string
+        threshold: Maximum normalized distance for non-zero score (default: 0.5)
 
     Returns:
         ANLS score between 0.0 and 1.0, where 1.0 indicates perfect match
@@ -27,9 +33,9 @@ def calculate_anls(pred_text: str, gt_text: str) -> float:
         >>> calculate_anls("hello", "world")
         0.0
     """
+    # Handle empty strings
     if not gt_text:
         return 1.0 if not pred_text else 0.0
-
     if not pred_text:
         return 0.0
 
@@ -51,9 +57,8 @@ def calculate_anls(pred_text: str, gt_text: str) -> float:
     normalized_distance = distance / max_len
     anls_score = 1.0 - normalized_distance
 
-    # ANLS is typically thresholded at 0.5
-    # If normalized distance > 0.5, score is 0
-    return max(0.0, anls_score) if normalized_distance <= 0.5 else 0.0
+    # Apply threshold: if normalized distance > threshold, score is 0
+    return max(0.0, anls_score) if normalized_distance <= threshold else 0.0
 
 
 def _levenshtein_distance(s1: str, s2: str) -> int:
