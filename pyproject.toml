@@ -38,6 +38,7 @@ dependencies = [
     # For GPU (CUDA 12.8): uv pip install -r requirements-gpu.txt
     # See requirements-cpu.in or requirements-gpu.in for source files
     "docling>=2.61.1",
+    "vllm>=0.11.0",
 ]
 authors = [{ name = "AI4WA" }]
 license = { text = "MIT" }

@@ -106,6 +106,10 @@ REM Install the package in editable mode with dev dependencies
 echo [INFO] Installing docs2synth with dev dependencies...
 uv pip install -e ".[dev]"
 
+REM Uninstall paddlex if it was installed
+echo [INFO] Uninstalling paddlex...
+uv pip uninstall paddlex
+
 echo.
 echo ==========================================
 echo Setup complete!
