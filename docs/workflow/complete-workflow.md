@@ -10,7 +10,46 @@ End-to-end workflow: Documents → Preprocess → QA Generation → Verification
 
 ---
 
-## Stage 1: Data Setup
+## 🚀 Quick Start: Automated Pipeline
+
+For a fully automated end-to-end pipeline, simply run:
+
+```bash
+docs2synth run
+```
+
+This single command automatically executes all stages:
+
+1. **Preprocess** documents from `config.yml` input directory
+2. **Generate QA pairs** using configured strategies
+3. **Verify** QA pairs for quality and correctness
+4. **Preprocess** retriever training data
+5. **Train** retriever model
+6. **Validate** trained model performance
+7. **Reset** RAG vector store
+8. **Ingest** documents into RAG system
+
+**When to use automated pipeline:**
+
+- Quick prototyping and testing
+- Automated CI/CD workflows
+- When you don't need manual annotation
+- Processing datasets with high-quality auto-generated QA pairs
+
+**When to use manual workflow:**
+
+- Need fine-grained control over each stage
+- Want to manually review and annotate QA pairs
+- Experimenting with different configurations
+- Processing complex documents requiring human oversight
+
+---
+
+## Manual Workflow
+
+For more control over each stage, follow the manual step-by-step workflow below.
+
+### Stage 1: Data Setup
 
 ```bash
 mkdir -p data/raw/my_documents
@@ -48,7 +87,7 @@ agent:
 
 ---
 
-## Stage 2: Preprocess
+### Stage 2: Preprocess
 
 ```bash
 docs2synth preprocess data/raw/my_documents/
@@ -58,7 +97,7 @@ Output: `data/processed/*.json` with text, bboxes, reading order
 
 ---
 
-## Stage 3: QA Generation
+### Stage 3: QA Generation
 
 ```bash
 # Batch generate QA pairs
@@ -72,7 +111,7 @@ Output: JSON updated with `qa` field containing questions and answers
 
 ---
 
-## Stage 4: Verification
+### Stage 4: Verification
 
 ```bash
 # Verify all documents
@@ -86,7 +125,7 @@ Output: JSON updated with `verification` results (meaningful, correctness)
 
 ---
 
-## Stage 5: Human Annotation
+### Stage 5: Human Annotation
 
 ```bash
 docs2synth annotate
@@ -100,9 +139,9 @@ Opens Streamlit UI at `http://localhost:8501`:
 
 ---
 
-## Stage 6: Retriever Training
+### Stage 6: Retriever Training
 
-### Preprocess Data
+#### Preprocess Data
 
 ```bash
 docs2synth retriever preprocess \
@@ -114,7 +153,7 @@ docs2synth retriever preprocess \
 
 Output: `train.pkl` DataLoader ready for training
 
-### Train Model
+#### Train Model
 
 ```bash
 docs2synth retriever train \
@@ -135,7 +174,7 @@ Output:
 - Final model: `models/retriever/final_model.pth`
 - Training curves: `models/retriever/checkpoints/training_curves.png`
 
-### Validate Model
+#### Validate Model
 
 ```bash
 docs2synth retriever validate \
@@ -147,9 +186,9 @@ Output: ANLS scores, metrics plots, detailed analysis
 
 ---
 
-## Stage 7: RAG Deployment
+### Stage 7: RAG Deployment
 
-### Ingest Documents
+#### Ingest Documents
 
 ```bash
 docs2synth rag ingest \
@@ -157,7 +196,7 @@ docs2synth rag ingest \
   --processor docling
 ```
 
-### Query
+#### Query
 
 ```bash
 # CLI query
@@ -167,7 +206,7 @@ docs2synth rag run -q "What is the invoice total?" -s iterative
 docs2synth rag run -q "Your question" --show-iterations
 ```
 
-### Launch Demo
+#### Launch Demo
 
 ```bash
 docs2synth rag app

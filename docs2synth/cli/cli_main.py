@@ -19,6 +19,7 @@ from docs2synth.cli.commands import (
     qa_group,
     rag_group,
     retriever_group,
+    run_command,
     verify_group,
 )
 from docs2synth.utils import get_config, load_config, setup_cli_logging
@@ -73,6 +74,7 @@ cli.add_command(rag_group)
 cli.add_command(retriever_group)
 cli.add_command(verify_group)
 cli.add_command(annotate_command)
+cli.add_command(run_command)
 
 
 def main(argv: list[str] | None = None) -> None:  # pragma: no cover

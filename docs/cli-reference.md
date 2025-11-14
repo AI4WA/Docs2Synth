@@ -12,6 +12,44 @@ docs2synth --config PATH [COMMAND]   # Use custom config
 
 ---
 
+## Automated Pipeline
+
+### Run Complete Pipeline
+
+```bash
+# Run the full end-to-end pipeline
+docs2synth run
+```
+
+Executes the complete workflow automatically:
+
+1. **Preprocess** documents from configured input directory
+2. **Generate QA pairs** using configured strategies
+3. **Verify** QA pairs (meaningful & correctness)
+4. **Preprocess** retriever training data
+5. **Train** retriever model
+6. **Validate** trained model
+7. **Reset** RAG vector store
+8. **Ingest** documents into RAG
+
+**Key features:**
+
+- Skips manual annotation phase (uses auto-verified QA pairs)
+- Uses configuration from `config.yml`
+- Ideal for CI/CD pipelines and automated workflows
+- Provides progress indicators for each stage
+
+**When to use:**
+
+- Quick prototyping and testing
+- Automated workflows
+- High-quality datasets that don't require manual review
+- Rapid iteration during development
+
+**Configuration:** All parameters are read from `config.yml`. Ensure your config file is properly set up before running.
+
+---
+
 ## Dataset Management
 
 ```bash
