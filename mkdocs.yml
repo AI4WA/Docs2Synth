@@ -165,5 +165,6 @@ nav:
   - Development:
       - Dependency Management: development/dependency-management.md
       - Docker Builds: development/docker-builds.md
+      - PyPI Publishing: development/pypi-publishing.md
   - MCP Integration: mcp-integration.md
   - API Reference: api-reference.md

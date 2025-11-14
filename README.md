@@ -55,13 +55,33 @@ docs2synth rag app
 
 ## Installation
 
-### Quick Install
+### PyPI Installation (Recommended)
 
+**CPU Version (works on all systems):**
 ```bash
-pip install git+https://github.com/AI4WA/Docs2Synth.git
+pip install docs2synth[cpu]
 ```
 
-### Development Setup (Recommended)
+**GPU Version (for NVIDIA GPUs with CUDA 12.8):**
+```bash
+# First install PyTorch with CUDA support
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+# Then install Docs2Synth with GPU extras
+pip install docs2synth[gpu]
+```
+
+**Minimal Install (CLI only, no ML features):**
+```bash
+pip install docs2synth
+```
+
+**With MCP Server Support:**
+```bash
+pip install docs2synth[cpu,mcp]  # or [gpu,mcp] for GPU
+```
+
+### Development Setup
 
 **Use the setup script (installs uv + dependencies automatically):**
 
@@ -81,18 +101,21 @@ The script:
 - Installs dependencies (CPU or GPU)
 - Sets up config
 
-**Manual setup (if needed):**
+**Manual development setup:**
 
 ```bash
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh  # Unix/macOS
 # powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
 
-# Setup
+# Clone and setup
+git clone https://github.com/AI4WA/Docs2Synth.git
+cd Docs2Synth
 uv venv
-source .venv/bin/activate  # Unix: .venv\Scripts\activate on Windows
-uv pip install -r requirements-cpu.txt
-uv pip install -e ".[dev]"
+source .venv/bin/activate  # .venv\Scripts\activate on Windows
+
+# Install for development
+uv pip install -e ".[cpu,dev]"  # or [gpu,dev] for GPU
 
 # Setup config
 cp config.example.yml config.yml
