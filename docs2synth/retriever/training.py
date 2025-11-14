@@ -190,14 +190,16 @@ def train(
     train_dataloader: Any,
     lr: float,
     loss_function: Optional[Any] = None,
+    optimizer: Optional[Any] = None,
 ) -> Tuple[float, float, List[str], List[str]]:
-    """Train model with span-based QA task.
+    """Train model with span-based QA task for one epoch.
 
     Args:
         model: PyTorch model to train
         train_dataloader: DataLoader for training data
-        lr: Learning rate for optimizer
+        lr: Learning rate for optimizer (only used if optimizer is None)
         loss_function: Loss function to use (defaults to CrossEntropyLoss)
+        optimizer: Pre-initialized optimizer (if None, creates Adam optimizer with given lr)
 
     Returns:
         Tuple containing:
@@ -222,7 +224,9 @@ def train(
     total_loss = 0.0
     num_batches = 0
 
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
+    # Create optimizer only if not provided
+    if optimizer is None:
+        optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
     processor = get_processor()
 
     for _, data in tqdm(enumerate(train_dataloader, 0), desc="Training"):
@@ -295,14 +299,16 @@ def train_layout(
     train_dataloader: Any,
     lr: float,
     loss_function: Optional[Any] = None,
+    optimizer: Optional[Any] = None,
 ) -> Tuple[float, float, List[str], List[str], List[int], List[int]]:
-    """Train model with grid representations for layout pretraining.
+    """Train model with grid representations for layout pretraining (one epoch).
 
     Args:
         model: PyTorch model to train
         train_dataloader: DataLoader for training data
-        lr: Learning rate for optimizer
+        lr: Learning rate for optimizer (only used if optimizer is None)
         loss_function: Loss function to use (defaults to CrossEntropyLoss)
+        optimizer: Pre-initialized optimizer (if None, creates Adam optimizer with given lr)
 
     Returns:
         Tuple containing:
@@ -331,7 +337,9 @@ def train_layout(
     total_loss = 0.0
     num_batches = 0
 
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
+    # Create optimizer only if not provided
+    if optimizer is None:
+        optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
     processor = get_processor()
 
     for _, data in tqdm(enumerate(train_dataloader, 0), desc="Training (Layout)"):
@@ -438,16 +446,18 @@ def train_layout_coarse_grained(
     train_dataloader: Any,
     lr: float,
     loss_function: Optional[Any] = None,
+    optimizer: Optional[Any] = None,
 ) -> Tuple[float, float, List[str], List[str], List[int], List[int]]:
-    """Train model with coarse-grained entity loss only.
+    """Train model with coarse-grained entity loss only (one epoch).
 
     This variant only uses entity loss, skipping token-level QA loss in backprop.
 
     Args:
         model: PyTorch model to train
         train_dataloader: DataLoader for training data
-        lr: Learning rate for optimizer
+        lr: Learning rate for optimizer (only used if optimizer is None)
         loss_function: Loss function to use (defaults to CrossEntropyLoss)
+        optimizer: Pre-initialized optimizer (if None, creates Adam optimizer with given lr)
 
     Returns:
         Tuple containing:
@@ -476,7 +486,9 @@ def train_layout_coarse_grained(
     total_loss = 0.0
     num_batches = 0
 
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
+    # Create optimizer only if not provided
+    if optimizer is None:
+        optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
     processor = get_processor()
 
     for _, data in tqdm(
@@ -549,16 +561,18 @@ def pretrain_layout(
     train_dataloader: Any,
     lr: float,
     loss_function: Optional[Any] = None,
+    optimizer: Optional[Any] = None,
 ) -> Tuple[List[int], List[int], float]:
-    """Pretrain model with grid-based layout representation.
+    """Pretrain model with grid-based layout representation (one epoch).
 
     This function performs layout pretraining using grid embeddings and grid IDs.
 
     Args:
         model: PyTorch model to pretrain
         train_dataloader: DataLoader for training data
-        lr: Learning rate for optimizer
+        lr: Learning rate for optimizer (only used if optimizer is None)
         loss_function: Loss function to use (defaults to CrossEntropyLoss)
+        optimizer: Pre-initialized optimizer (if None, creates Adam optimizer with given lr)
 
     Returns:
         Tuple containing:
@@ -579,7 +593,9 @@ def pretrain_layout(
     predict_entity_list: List[int] = []
     target_id_list: List[int] = []
 
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
+    # Create optimizer only if not provided
+    if optimizer is None:
+        optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
     total_loss = 0.0
 
     for _, data in tqdm(enumerate(train_dataloader, 0), desc="Pretraining (Layout)"):

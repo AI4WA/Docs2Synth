@@ -144,18 +144,20 @@ def _load_model(
 
 
 def _load_training_data(data_path: Path) -> Any:
-    """Load training data as DataLoader from pickle file.
+    """Load training data and create a fresh DataLoader from pickle file.
 
     Args:
-        data_path: Path to preprocessed DataLoader pickle file
+        data_path: Path to preprocessed dataset configuration pickle file
 
     Returns:
-        DataLoader instance
+        Fresh DataLoader instance with proper shuffling
 
     Raises:
         ValueError: If data_path is not a valid pickle file
     """
     import pickle
+
+    from torch.utils.data import DataLoader
 
     if not data_path.is_file():
         raise ValueError(
@@ -171,12 +173,34 @@ def _load_training_data(data_path: Path) -> Any:
             "  docs2synth retriever preprocess --json-dir <dir> --image-dir <dir> --output <file.pkl>"
         )
 
-    # Load pickled DataLoader
-    click.echo(f"  Loading preprocessed DataLoader from: {data_path}")
+    # Load pickled configuration
+    click.echo(f"  Loading preprocessed dataset configuration from: {data_path}")
     with open(data_path, "rb") as f:
-        train_dataloader = pickle.load(f)
+        config = pickle.load(f)
 
-    return train_dataloader
+    # Handle both old format (DataLoader) and new format (config dict)
+    if isinstance(config, DataLoader):
+        # Old format - return as is (with warning)
+        click.echo(
+            click.style(
+                "  ⚠ Warning: Using old DataLoader format. Consider regenerating with latest version.",
+                fg="yellow",
+            )
+        )
+        return config
+    elif isinstance(config, dict):
+        # New format - create fresh DataLoader
+        click.echo("  Creating fresh DataLoader for this training session...")
+        train_dataloader = DataLoader(**config)
+        click.echo(
+            f"  ✓ DataLoader created (batch_size={train_dataloader.batch_size}, "
+            f"dataset_size={len(train_dataloader.dataset)}, batches={len(train_dataloader)})"
+        )
+        return train_dataloader
+    else:
+        raise ValueError(
+            f"Invalid pickle format: expected DataLoader or config dict, got {type(config)}"
+        )
 
 
 def _get_training_function(mode: str) -> Any:
@@ -226,6 +250,7 @@ def _run_training_loop(
     device: Any = None,
     cfg: Any = None,
     device_override: Optional[str] = None,
+    checkpoint_optimizer_state: Optional[Dict] = None,
 ) -> float:
     """Run training loop and return best ANLS score."""
     import warnings
@@ -252,6 +277,23 @@ def _run_training_loop(
     # Initialize validator to track training history
     validator = TrainingValidator(output_dir=output_dir)
 
+    # Create optimizer once for all epochs
+    click.echo(f"  Creating optimizer (Adam, lr={lr})...")
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
+
+    # Restore optimizer state from checkpoint if provided
+    if checkpoint_optimizer_state is not None:
+        try:
+            optimizer.load_state_dict(checkpoint_optimizer_state)
+            click.echo("  ✓ Restored optimizer state from checkpoint")
+        except Exception as e:
+            click.echo(
+                click.style(
+                    f"  ⚠ Warning: Could not restore optimizer state: {e}",
+                    fg="yellow",
+                )
+            )
+
     best_anls = 0.0
     for epoch in range(start_epoch, epochs):
         click.echo(
@@ -265,7 +307,7 @@ def _run_training_loop(
         # Train
         if mode_lower == "pretrain-layout":
             predict_entities, target_entities, total_loss = train_func(
-                model, train_dataloader, lr
+                model, train_dataloader, lr, optimizer=optimizer
             )
             click.echo(
                 click.style(
@@ -280,6 +322,7 @@ def _run_training_loop(
                     {
                         "epoch": epoch + 1,
                         "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
                         "loss": total_loss,
                     },
                     checkpoint_path,
@@ -291,7 +334,7 @@ def _run_training_loop(
                 average_loss,
                 pred_texts,
                 gt_texts,
-            ) = train_func(model, train_dataloader, lr)
+            ) = train_func(model, train_dataloader, lr, optimizer=optimizer)
             click.echo(
                 click.style(
                     f"  Train ANLS: {average_anls:.4f} | Train Loss: {average_loss:.4f}",
@@ -332,6 +375,7 @@ def _run_training_loop(
                     {
                         "epoch": epoch + 1,
                         "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
                         "average_anls": average_anls,
                         "average_loss": average_loss,
                     },
@@ -696,15 +740,17 @@ def retriever_train(  # noqa: C901
                 logger.exception("Validation data loading failed")
                 sys.exit(1)
 
-        # Get start epoch from checkpoint if resuming
+        # Get start epoch and optimizer state from checkpoint if resuming
         start_epoch = 0
+        checkpoint_optimizer_state = None
         if resume:
             try:
                 checkpoint = torch.load(resume, map_location="cpu")
                 start_epoch = checkpoint.get("epoch", 0)
                 if "optimizer_state_dict" in checkpoint:
+                    checkpoint_optimizer_state = checkpoint["optimizer_state_dict"]
                     logger.info(
-                        "Note: Optimizer state found but not restored (new optimizer created)"
+                        "Note: Optimizer state found in checkpoint and will be restored"
                     )
             except Exception as e:
                 logger.warning(f"Could not extract epoch from checkpoint: {e}")
@@ -749,6 +795,7 @@ def retriever_train(  # noqa: C901
             device=None,  # Will be determined from config
             cfg=cfg,
             device_override=device,
+            checkpoint_optimizer_state=checkpoint_optimizer_state,
         )
 
         # Save final model
@@ -824,18 +871,31 @@ def _load_model_for_validation(model_path: Path) -> Any:
 
 
 def _load_validation_data(data_path: Path) -> Any:
-    """Load validation data from pickle.
+    """Load validation data and create fresh DataLoader from pickle.
 
     Args:
-        data_path: Path to DataLoader pickle
+        data_path: Path to dataset configuration pickle
 
     Returns:
-        DataLoader instance
+        Fresh DataLoader instance
     """
     import pickle
 
+    from torch.utils.data import DataLoader
+
     with open(data_path, "rb") as f:
-        val_dataloader = pickle.load(f)
+        config = pickle.load(f)
+
+    # Handle both old format (DataLoader) and new format (config dict)
+    if isinstance(config, DataLoader):
+        val_dataloader = config
+    elif isinstance(config, dict):
+        val_dataloader = DataLoader(**config)
+    else:
+        raise ValueError(
+            f"Invalid pickle format: expected DataLoader or config dict, got {type(config)}"
+        )
+
     click.echo(f"  Dataset size: {len(val_dataloader.dataset)}")
     click.echo(f"  Batch size: {val_dataloader.batch_size}")
     click.echo(f"  Number of batches: {len(val_dataloader)}")
@@ -1617,8 +1677,14 @@ def retriever_preprocess(
         click.echo(f"  JSON directory: {json_dir}")
         click.echo(f"  Image directory: {image_dir}")
         click.echo(f"  Output: {output}")
+        # Ensure batch_size has a valid value (default from config or CLI default)
+        if batch_size is None:
+            batch_size = cfg.get("retriever.batch_size", 8)
+            click.echo(f"  Using batch_size from config: {batch_size}")
+        else:
+            click.echo(f"  Batch size: {batch_size}")
+
         click.echo(f"  Processor: {processor}")
-        click.echo(f"  Batch size: {batch_size}")
         click.echo(f"  Max sequence length: {max_length}")
         click.echo(f"  Max objects: {num_objects}")
         click.echo(f"  Require all verifiers: {require_all_verifiers}")

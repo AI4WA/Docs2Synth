@@ -91,13 +91,13 @@ cpu = [
 gpu = [
     # GPU-specific packages (PyTorch GPU should be pre-installed)
     "vllm>=0.11.0",  # High-performance LLM inference (GPU only)
-    "faiss-gpu>=1.8.0",
+    "faiss-cpu>=1.8.0",  # Using CPU version (faiss-gpu lacks Python 3.11+ support)
     # ML/Transformers
     "transformers>=4.30.0",
     "sentence-transformers>=0.6",
     "numpy>=1.22,<2.0",
     # OCR and Document Processing
-    "paddlepaddle-gpu>=3.2.0,<3.3.0",
+    "paddlepaddle>=3.2.0,<3.3.0",  # Using CPU version (paddlepaddle-gpu lacks 3.x support)
     "paddleocr>=3.2.0,<3.4.0",
     "shapely>=1.8",
     "scikit-image>=0.21",
