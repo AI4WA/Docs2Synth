@@ -53,11 +53,12 @@ jobs:
     name: Publish to PyPI
     needs: [build]
     runs-on: ubuntu-latest
-    # Run if: manual dispatch with pypi/both OR tag push AND testpypi succeeded
+    # Run if: build succeeded AND (manual dispatch with pypi/both OR tag push)
     if: |
-      (github.event_name == 'workflow_dispatch' &&
-       (github.event.inputs.publish_to == 'pypi' || github.event.inputs.publish_to == 'both')) ||
-      (github.event_name == 'push' && needs.publish-testpypi.result == 'success')
+      needs.build.result == 'success' &&
+      ((github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.publish_to == 'pypi' || github.event.inputs.publish_to == 'both')) ||
+       (github.event_name == 'push'))
     environment:
       name: pypi
       url: https://pypi.org/p/docs2synth
