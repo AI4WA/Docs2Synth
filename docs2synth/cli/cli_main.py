@@ -6,6 +6,8 @@ all subcommands from the commands package.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 # Import all command modules
@@ -15,6 +17,7 @@ from docs2synth.cli.commands import (
     datasets,
     preprocess,
     qa_group,
+    rag_group,
     retriever_group,
     verify_group,
 )
@@ -49,8 +52,13 @@ def cli(ctx: click.Context, verbose: int, config: str | None) -> None:
     if config:
         cfg = load_config(config)
         ctx.obj["config"] = cfg
+        ctx.obj["config_path"] = Path(config).resolve()
     else:
         ctx.obj["config"] = get_config()
+        default_config_path = Path("config.yml")
+        ctx.obj["config_path"] = (
+            default_config_path.resolve() if default_config_path.exists() else None
+        )
 
     # Initialize logging as early as possible so later logs use our handlers
     setup_cli_logging(verbose=verbose, config=ctx.obj["config"])
@@ -61,6 +69,7 @@ cli.add_command(datasets)
 cli.add_command(preprocess)
 cli.add_command(agent_group)
 cli.add_command(qa_group)
+cli.add_command(rag_group)
 cli.add_command(retriever_group)
 cli.add_command(verify_group)
 cli.add_command(annotate_command)
