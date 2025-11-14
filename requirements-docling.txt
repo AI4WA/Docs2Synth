@@ -1,9 +1,0 @@
-# Docling processor dependencies
-# Install with: pip install -r requirements-docling.txt
-
-# Docling - IBM's document understanding library
-docling>=2.0.0
-
-# Core dependencies (if not already installed)
-pillow>=9.0.0
-numpy>=1.21.0

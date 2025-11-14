@@ -10,14 +10,11 @@ on:
   workflow_dispatch:
     inputs:
       publish_to:
-        description: 'Publish to (testpypi/pypi/both)'
+        description: 'Publish to (pypi)'
         required: true
-        default: 'testpypi'
         type: choice
         options:
-          - testpypi
           - pypi
-          - both
 
 jobs:
   build:
@@ -49,45 +46,16 @@ jobs:
         name: dist
         path: dist/
 
-  publish-testpypi:
-    name: Publish to TestPyPI
-    needs: build
-    runs-on: ubuntu-latest
-    # Run if: manual dispatch with testpypi/both OR tag push (always test first)
-    if: |
-      (github.event_name == 'workflow_dispatch' &&
-       (github.event.inputs.publish_to == 'testpypi' || github.event.inputs.publish_to == 'both')) ||
-      github.event_name == 'push'
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/docs2synth
-
-    permissions:
-      id-token: write  # For trusted publishing
-
-    steps:
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: dist
-        path: dist/
-
-    - name: Publish to TestPyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        repository-url: https://test.pypi.org/legacy/
-        # If using API token instead of trusted publishing:
-        # password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-
   publish-pypi:
     name: Publish to PyPI
-    needs: [build, publish-testpypi]
+    needs: [build]
     runs-on: ubuntu-latest
-    # Run if: manual dispatch with pypi/both OR tag push AND testpypi succeeded
+    # Run if: build succeeded AND (manual dispatch with pypi/both OR tag push)
     if: |
-      (github.event_name == 'workflow_dispatch' &&
-       (github.event.inputs.publish_to == 'pypi' || github.event.inputs.publish_to == 'both')) ||
-      (github.event_name == 'push' && needs.publish-testpypi.result == 'success')
+      needs.build.result == 'success' &&
+      ((github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.publish_to == 'pypi' || github.event.inputs.publish_to == 'both')) ||
+       (github.event_name == 'push'))
     environment:
       name: pypi
       url: https://pypi.org/p/docs2synth

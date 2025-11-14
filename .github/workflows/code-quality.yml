@@ -34,8 +34,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system -r requirements-cpu.txt
-          uv pip install --system -e ".[dev]"
+          uv pip install --system -e ".[cpu,dev]"
 
       - name: Check code formatting with black
         run: |
