@@ -185,6 +185,7 @@ agent:
     # base_url: http://remote-server:8000/v1
     # api_key: your-api-key-if-needed
 
+
 # QA Generation configuration
 # Configure multiple QA generation strategies with different providers, models, and prompts
 
@@ -457,3 +458,81 @@ retriever:
   batch_size: 8
   epochs: 10
   save_every: 2  # Save checkpoint every N epochs
+
+# Retrieval-Augmented Generation configuration
+rag:
+  embedding:
+    # Embedding model selection:
+    # 1. If rag.embedding.retriever_model_path is set, use OurRetrieverEmbeddingModel (LayoutLMv3-based)
+    # 2. If retriever.model_path is configured, automatically use OurRetrieverEmbeddingModel (LayoutLMv3-based)
+    # 
+    # Note: Retriever model is required. If retriever.model_path exists in config, it will be auto-resolved and used by default.
+    # The retriever model uses microsoft/layoutlmv3-base as the base model.
+    # You only need to set retriever_model_path here if you want to override the retriever.model_path.
+    # retriever_model_path: ./models/retriever/default/final_model.pth  # Optional: override retriever.model_path
+    device: null  # null -> auto-select CPU/GPU
+    normalize: true
+
+  vector_store:
+    type: faiss
+    persist_path: ./data/rag/index.faiss
+    normalize: true
+
+  llm:
+    # Override the agent provider/model for RAG if desired (falls back to agent.* when null)
+    provider: null
+    model: null
+    temperature: null
+
+  strategies:
+    naive:
+      type: naive
+      top_k: 5
+      prompt:
+        system: >
+          You are a helpful assistant that answers user questions using only the supplied
+          context passages.
+        user: |
+          Question:
+          {query}
+
+          Context:
+          {context}
+
+          Provide a concise answer grounded in the context.
+
+    enhanced:
+      type: enhanced
+      top_k: 5
+      max_iterations: 3
+      similarity_threshold: 0.9
+      prompt:
+        system: >
+          You are an analytical assistant. Compare each iteration's findings and converge
+          on a stable answer that remains faithful to the retrieved evidence.
+        user: |
+          Original Question:
+          {query}
+
+          Retrieved Context:
+          {context}
+
+          Produce a thorough answer and highlight any updates from prior iterations.
+
+    our_retriever:
+      type: our_retriever
+      top_k: 5
+      max_iterations: 3
+      similarity_threshold: 0.9
+      prompt:
+        system: >
+          You are an analytical assistant using a custom-trained retriever model.
+          Compare each iteration's findings and converge on a stable answer.
+        user: |
+          Original Question:
+          {query}
+
+          Retrieved Context:
+          {context}
+
+          Produce a thorough answer and highlight any updates from prior iterations.
