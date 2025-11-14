@@ -53,6 +53,99 @@ def _render_result(label: str, result: RAGResult) -> None:
             st.divider()
 
 
+def _render_sidebar(pipeline: RAGPipeline) -> None:
+    """Render the sidebar with corpus status and reset button."""
+    st.header("Corpus")
+    if len(pipeline.vector_store) == 0:
+        st.warning(
+            "The vector store is empty. Use `docs2synth rag ingest` to index documents."
+        )
+    else:
+        st.success("Documents already indexed via CLI ingest.")
+
+    if st.button("Reset Pipeline"):
+        st.session_state["rag_pipeline"] = _initialize_pipeline()
+        st.session_state["rag_documents"] = []
+        st.info("Pipeline reset. Re-run CLI ingest to rebuild the index.")
+
+
+def _select_strategies(strategies: List[str]) -> tuple[List[str], List[str]]:
+    """Select and order strategies for display.
+
+    Returns:
+        Tuple of (selected_strategies, selected_labels)
+    """
+    strategy_map = {
+        "naive": "Naive RAG",
+        "enhanced": "Enhanced RAG",
+        "our_retriever": "Our Retriever RAG",
+    }
+
+    # Prefer these three strategies in order
+    preferred_strategies = ["naive", "enhanced", "our_retriever"]
+    selected_strategies = []
+    selected_labels = []
+
+    for strategy in preferred_strategies:
+        if strategy in strategies:
+            selected_strategies.append(strategy)
+            selected_labels.append(strategy_map.get(strategy, strategy.title()))
+
+    # If we don't have all three, add any remaining strategies
+    for strategy in strategies:
+        if strategy not in selected_strategies:
+            selected_strategies.append(strategy)
+            selected_labels.append(strategy_map.get(strategy, strategy.title()))
+
+    return selected_strategies, selected_labels
+
+
+def _run_strategies(
+    pipeline: RAGPipeline, query: str, selected_strategies: List[str]
+) -> dict[str, RAGResult | None]:
+    """Run all selected strategies and return results.
+
+    Returns:
+        Dictionary mapping strategy names to results (or None if failed)
+    """
+    states = {strategy: RAGState() for strategy in selected_strategies}
+    results = {}
+
+    with st.spinner("Generating answers..."):
+        for strategy in selected_strategies:
+            try:
+                results[strategy] = pipeline.run(
+                    query, strategy, state=states[strategy]
+                )
+            except Exception as e:
+                st.error(f"Error running {strategy}: {e}")
+                results[strategy] = None
+
+    return results
+
+
+def _display_results(
+    selected_strategies: List[str],
+    selected_labels: List[str],
+    results: dict[str, RAGResult | None],
+) -> None:
+    """Display results in columns."""
+    num_cols = len(selected_strategies)
+    if num_cols == 1:
+        cols = [st.container()]
+    elif num_cols == 2:
+        cols = st.columns(2)
+    else:
+        cols = st.columns(3)
+
+    for i, (strategy, label) in enumerate(zip(selected_strategies, selected_labels)):
+        with cols[i]:
+            if results.get(strategy) is not None:
+                _render_result(label, results[strategy])
+            else:
+                st.error(f"Failed to generate result for {label}")
+
+
 def main() -> None:
     st.set_page_config(page_title="Docs2Synth RAG Playground", layout="wide")
     st.title("RAG Strategy Playground")
@@ -64,46 +157,12 @@ def main() -> None:
     pipeline: RAGPipeline = st.session_state["rag_pipeline"]
 
     with st.sidebar:
-        st.header("Corpus")
-        if len(pipeline.vector_store) == 0:
-            st.warning(
-                "The vector store is empty. Use `docs2synth rag ingest` to index documents."
-            )
-        else:
-            st.success("Documents already indexed via CLI ingest.")
-
-        if st.button("Reset Pipeline"):
-            st.session_state["rag_pipeline"] = _initialize_pipeline()
-            st.session_state["rag_documents"] = []
-            st.info("Pipeline reset. Re-run CLI ingest to rebuild the index.")
+        _render_sidebar(pipeline)
 
     query = st.text_input("Ask a question", "")
-
     strategies = list(pipeline.strategies)
-    
-    # Determine which strategies to use
-    strategy_map = {
-        "naive": "Naive RAG",
-        "enhanced": "Enhanced RAG",
-        "our_retriever": "Our Retriever RAG",
-    }
-    
-    # Prefer these three strategies in order
-    preferred_strategies = ["naive", "enhanced", "our_retriever"]
-    selected_strategies = []
-    selected_labels = []
-    
-    for strategy in preferred_strategies:
-        if strategy in strategies:
-            selected_strategies.append(strategy)
-            selected_labels.append(strategy_map.get(strategy, strategy.title()))
-    
-    # If we don't have all three, add any remaining strategies
-    for strategy in strategies:
-        if strategy not in selected_strategies:
-            selected_strategies.append(strategy)
-            selected_labels.append(strategy_map.get(strategy, strategy.title()))
-    
+    selected_strategies, selected_labels = _select_strategies(strategies)
+
     if len(selected_strategies) == 0:
         st.warning("No strategies configured. Update config to proceed.")
         return
@@ -118,33 +177,8 @@ def main() -> None:
             st.warning("Index documents first before querying the pipeline.")
             return
 
-        # Create states for each strategy
-        states = {strategy: RAGState() for strategy in selected_strategies}
-
-        with st.spinner("Generating answers..."):
-            results = {}
-            for strategy in selected_strategies:
-                try:
-                    results[strategy] = pipeline.run(query, strategy, state=states[strategy])
-                except Exception as e:
-                    st.error(f"Error running {strategy}: {e}")
-                    results[strategy] = None
-
-        # Display results in columns
-        num_cols = len(selected_strategies)
-        if num_cols == 1:
-            cols = [st.container()]
-        elif num_cols == 2:
-            cols = st.columns(2)
-        else:
-            cols = st.columns(3)
-        
-        for i, (strategy, label) in enumerate(zip(selected_strategies, selected_labels)):
-            with cols[i]:
-                if results.get(strategy) is not None:
-                    _render_result(label, results[strategy])
-                else:
-                    st.error(f"Failed to generate result for {label}")
+        results = _run_strategies(pipeline, query, selected_strategies)
+        _display_results(selected_strategies, selected_labels, results)
 
 
 if __name__ == "__main__":

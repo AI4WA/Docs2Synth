@@ -122,3 +122,213 @@ def test_enhanced_strategy_converges_when_answers_stabilize() -> None:
     # Should require three iterations: first draft, second refinement, third matches second
     assert len(result.iterations) == 3
     assert result.iterations[-1].similarity == 1.0
+
+
+def test_enhanced_strategy_max_iterations() -> None:
+    """Test that enhanced strategy respects max_iterations limit."""
+    embedder = DummyEmbedder()
+    store = _setup_store(embedder, ["Document 1", "Document 2"])
+    # Different answers each time to prevent convergence
+    outputs = ["Answer 1", "Answer 2", "Answer 3", "Answer 4", "Answer 5"]
+    llm = SequencedLLMProvider(outputs)
+    prompt = PromptConfig(
+        system="System",
+        user="Q: {query}\nContext: {context}\nA:",
+    )
+
+    strategy = EnhancedIterativeRAGStrategy(
+        name="enhanced",
+        vector_store=store,
+        embedder=embedder,
+        llm=llm,
+        prompt=prompt,
+        top_k=2,
+        max_iterations=3,
+        similarity_threshold=0.99,  # High threshold so it won't converge
+    )
+
+    result = strategy.generate("Test query")
+    # Should stop at max_iterations even without convergence
+    assert len(result.iterations) == 3
+
+
+def test_enhanced_strategy_augments_query() -> None:
+    """Test that enhanced strategy augments query with previous context."""
+    embedder = DummyEmbedder()
+    store = _setup_store(embedder, ["Doc 1", "Doc 2"])
+    outputs = ["First answer", "Second answer"]
+    llm = SequencedLLMProvider(outputs)
+    prompt = PromptConfig(
+        system="System",
+        user="Q: {query}\nContext: {context}\nA:",
+    )
+
+    strategy = EnhancedIterativeRAGStrategy(
+        name="enhanced",
+        vector_store=store,
+        embedder=embedder,
+        llm=llm,
+        prompt=prompt,
+        top_k=1,
+        max_iterations=2,
+    )
+
+    result = strategy.generate("What is AI?")
+    # Second iteration should have augmented query
+    assert len(result.iterations) == 2
+    assert "What is AI?" in result.iterations[0].query
+    # Second query should include previous context
+    assert "What is AI?" in result.iterations[1].query
+
+
+def test_enhanced_strategy_compare_answers() -> None:
+    """Test the _compare_answers method."""
+    from docs2synth.rag.strategies import EnhancedIterativeRAGStrategy
+
+    # Identical strings
+    assert EnhancedIterativeRAGStrategy._compare_answers("hello", "hello") == 1.0
+
+    # Completely different strings
+    similarity = EnhancedIterativeRAGStrategy._compare_answers("apple", "orange banana")
+    assert 0.0 <= similarity < 0.5
+
+    # Similar strings
+    similarity = EnhancedIterativeRAGStrategy._compare_answers(
+        "The quick brown fox", "The quick brown dog"
+    )
+    assert 0.5 < similarity < 1.0
+
+    # Empty strings
+    assert EnhancedIterativeRAGStrategy._compare_answers("", "") == 0.0
+    assert EnhancedIterativeRAGStrategy._compare_answers("hello", "") == 0.0
+
+
+def test_our_retriever_strategy_retrieve_bypasses_vector_store() -> None:
+    """Test OurRetrieverRAGStrategy retrieves by computing direct similarities."""
+    from docs2synth.rag.strategies import OurRetrieverRAGStrategy
+
+    embedder = DummyEmbedder()
+    store = _setup_store(embedder, ["Apple pie recipe", "Banana bread", "Carrot soup"])
+    llm = SequencedLLMProvider(["Using custom retriever for answer"])
+    prompt = PromptConfig(
+        system="System",
+        user="Q: {query}\nContext: {context}\nA:",
+    )
+
+    strategy = OurRetrieverRAGStrategy(
+        name="our_retriever",
+        vector_store=store,
+        embedder=embedder,
+        llm=llm,
+        prompt=prompt,
+        top_k=2,
+        max_iterations=1,
+    )
+
+    result = strategy.generate("apple")
+    # Should still return results
+    assert result.final_answer == "Using custom retriever for answer"
+    assert len(result.iterations) == 1
+    assert len(result.iterations[0].retrieved) <= 2
+
+
+def test_our_retriever_strategy_computes_similarity_directly() -> None:
+    """Test OurRetrieverRAGStrategy computes similarities with embedder."""
+    from docs2synth.rag.strategies import OurRetrieverRAGStrategy
+
+    embedder = DummyEmbedder()
+    store = _setup_store(embedder, ["Document 1", "Document 2", "Document 3"])
+    llm = SequencedLLMProvider(["Answer"])
+    prompt = PromptConfig(system="System", user="Q: {query}\nA:")
+
+    strategy = OurRetrieverRAGStrategy(
+        name="our_retriever",
+        vector_store=store,
+        embedder=embedder,
+        llm=llm,
+        prompt=prompt,
+        top_k=3,
+    )
+
+    result = strategy.generate("test query")
+    # Should retrieve all 3 documents
+    assert len(result.iterations[0].retrieved) == 3
+    # All documents should have scores
+    for doc in result.iterations[0].retrieved:
+        assert hasattr(doc, "score")
+        assert isinstance(doc.score, float)
+
+
+def test_our_retriever_strategy_empty_store() -> None:
+    """Test OurRetrieverRAGStrategy with empty vector store."""
+    from docs2synth.rag.strategies import OurRetrieverRAGStrategy
+
+    embedder = DummyEmbedder()
+    store = FaissVectorStore(dimension=embedder.dimension, normalize=False)
+    llm = SequencedLLMProvider(["No documents available"])
+    prompt = PromptConfig(system="System", user="Q: {query}\nA:")
+
+    strategy = OurRetrieverRAGStrategy(
+        name="our_retriever",
+        vector_store=store,
+        embedder=embedder,
+        llm=llm,
+        prompt=prompt,
+        top_k=5,
+    )
+
+    result = strategy.generate("test query")
+    # Should return empty retrieval
+    assert len(result.iterations[0].retrieved) == 0
+
+
+def test_our_retriever_strategy_respects_top_k() -> None:
+    """Test OurRetrieverRAGStrategy respects top_k parameter."""
+    from docs2synth.rag.strategies import OurRetrieverRAGStrategy
+
+    embedder = DummyEmbedder()
+    # Add many documents
+    documents = [f"Document {i}" for i in range(10)]
+    store = _setup_store(embedder, documents)
+    llm = SequencedLLMProvider(["Answer"])
+    prompt = PromptConfig(system="System", user="Q: {query}\nA:")
+
+    strategy = OurRetrieverRAGStrategy(
+        name="our_retriever",
+        vector_store=store,
+        embedder=embedder,
+        llm=llm,
+        prompt=prompt,
+        top_k=3,
+    )
+
+    result = strategy.generate("test")
+    # Should only retrieve top_k=3 documents
+    assert len(result.iterations[0].retrieved) == 3
+
+
+def test_our_retriever_strategy_iterative_behavior() -> None:
+    """Test OurRetrieverRAGStrategy performs iterative refinement."""
+    from docs2synth.rag.strategies import OurRetrieverRAGStrategy
+
+    embedder = DummyEmbedder()
+    store = _setup_store(embedder, ["Doc 1", "Doc 2"])
+    outputs = ["First answer", "Refined answer", "Refined answer"]  # Converges on 3rd
+    llm = SequencedLLMProvider(outputs)
+    prompt = PromptConfig(system="System", user="Q: {query}\nA:")
+
+    strategy = OurRetrieverRAGStrategy(
+        name="our_retriever",
+        vector_store=store,
+        embedder=embedder,
+        llm=llm,
+        prompt=prompt,
+        top_k=2,
+        max_iterations=5,
+        similarity_threshold=0.95,
+    )
+
+    result = strategy.generate("test")
+    # Should perform multiple iterations until convergence
+    assert len(result.iterations) >= 2
+    assert result.final_answer == "Refined answer"
