@@ -10,13 +10,12 @@ edit_uri: edit/main/docs/
 theme:
   name: material
   language: en
-  # logo: assets/logo.png  # Add your logo later
-  # favicon: assets/favicon.png  # Add favicon later
+  logo: assets/favicon/android-chrome-192x192.png
+  favicon: assets/favicon/favicon.ico
   icon:
     repo: fontawesome/brands/github
     edit: material/pencil
     view: material/eye
-    logo: material/book-open-variant
   palette:
     # Light mode
     - media: "(prefers-color-scheme: light)"

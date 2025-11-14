@@ -1,249 +1,190 @@
 # QA Generation
 
-Generate high-quality question-answer pairs from processed documents using agent-based approaches with built-in verification.
+Generate question-answer pairs from documents using LLMs.
 
-## Overview
+## Strategies
 
-The QA generation workflow uses LLM-based agents to automatically create question-answer pairs from document content, with a two-step verification process to ensure quality.
+### Semantic
 
-## Architecture
-
-```
-Document Content
-      ↓
-QA Pair Generation (LLM)
-      ↓
-Meaningful Verifier (Agent 1)
-      ↓
-Correctness Checker (Agent 2)
-      ↓
-Human Judgement (Optional)
-      ↓
-Final QA Dataset
-```
-
-## Basic Usage
-
-### CLI Command
-
-The simplest way to generate a QA pair from text is using the CLI:
+Generate questions from document context and target answer.
 
 ```bash
-# Basic usage
-docs2synth agent qa "Python is a high-level programming language..."
-
-# With custom provider
-docs2synth agent qa "Your text here" --provider anthropic
-
-# With custom model and temperature
-docs2synth agent qa "Your text here" --provider openai --model gpt-4 --temperature 0.5
+docs2synth qa semantic "Form contains name field" "John Doe"
+docs2synth qa semantic "Context" "Target" --provider anthropic
 ```
 
-**Options:**
-- `--provider`: Provider name (openai, anthropic, gemini, doubao, ollama, huggingface, vllm) [default: openai]
-- `--model`: Model name (optional, uses provider default)
-- `--config-path`: Path to config.yml (optional)
-- `--temperature`: Sampling temperature (0.0-2.0)
-- `--max-tokens`: Maximum tokens to generate
+### Layout-Aware
 
-### Python API
+Transform questions to be spatially aware (position-based).
 
-=== "Simple QA Generation (explicit provider)"
-    ```python
-    from docs2synth.agent import QAGenerator
+```bash
+docs2synth qa layout "What is the address?" --image document.png
+```
 
-    # Explicit provider/model
-    generator = QAGenerator(provider="openai", model="gpt-3.5-turbo")
+Example output:
+```
+Original: What is the address?
+Layout-aware: What text is in the upper right section?
+```
 
-    content = "Python is a high-level programming language..."
-    qa_pair = generator.generate_qa_pair(content)
+### Logical-Aware
 
-    print(f"Question: {qa_pair['question']}")
-    print(f"Answer: {qa_pair['answer']}")
-    ```
+Transform questions to be structure-aware (section-based).
 
-=== "Batch Generation"
-    ```python
-    from docs2synth.agent import QAGenerator
+```bash
+docs2synth qa logical "What is the name?" --image document.png
+```
 
-    generator = QAGenerator(provider="openai", model="gpt-3.5-turbo")
+Example output:
+```
+Original: What is the name?
+Logical-aware: What value is in the 'Personal Information' section for the 'Name' field?
+```
 
-    # Generate multiple QA pairs
-    contents = ["Content 1...", "Content 2...", "Content 3..."]
-    qa_pairs = generator.generate_qa_pairs(contents)
+---
 
-    for qa in qa_pairs:
-        print(f"Q: {qa['question']}")
-        print(f"A: {qa['answer']}")
-    ```
+## Batch Processing
 
-=== "With Verification"
-    ```python
-    from docs2synth.agent import QAGenerator
+### Single Document
 
-    generator = QAGenerator(provider="openai", model="gpt-3.5-turbo")
+```bash
+docs2synth qa run data/processed/document.json
+docs2synth qa run data/images/document.png
+docs2synth qa run data/processed/document.json --strategy semantic
+```
 
-    # Generate with two-step verification
-    qa_pair = generator.generate_with_verification(
-        content,
-        meaningful_check=True,
-        correctness_check=True
-    )
+### Batch Generation
 
-    if qa_pair:
-        print("✓ QA pair passed verification")
-    ```
+```bash
+# Uses config.preprocess.input_dir
+docs2synth qa batch
 
-=== "Switch Providers"
-    ```python
-    from docs2synth.agent import AgentWrapper, QAGenerator
+# Explicit paths
+docs2synth qa batch data/raw/my_documents/
+docs2synth qa batch data/images/ --output-dir data/processed/ --processor docling
+```
 
-    # Use OpenAI
-    generator = QAGenerator(provider="openai", model="gpt-4")
-
-    # Switch to Ollama (local)
-    generator = QAGenerator(provider="ollama", model="llama2")
-
-    # Switch to Anthropic Claude
-    generator = QAGenerator(provider="anthropic", model="claude-3-5-sonnet-20241022")
-    ```
-
-## Supported Providers
-
-The agent wrapper supports multiple LLM providers:
-
-### Cloud APIs
-- **OpenAI** (`openai`): GPT-4, GPT-3.5-turbo, etc.
-- **Anthropic** (`anthropic` or `claude`): Claude 3.5 Sonnet, Claude 3 Opus, etc.
-- **Google Gemini** (`gemini` or `google`): gemini-pro, gemini-pro-vision
-- **豆包/Doubao** (`doubao`): doubao-pro-32k, doubao-lite-4k
-
-### Local Models
-- **Ollama** (`ollama`): llama2, mistral, codellama, etc. (requires local Ollama server)
-- **Hugging Face** (`huggingface` or `hf`): Any Hugging Face model (requires local GPU/CPU)
-- **vLLM** (`vllm`): High-performance local LLM inference via OpenAI-compatible API server
+---
 
 ## Configuration
 
-Provider-driven configuration in `config.yml` (recommended):
-
+**`config.yml`:**
 ```yaml
-agent:
-  # Choose active provider here: openai | anthropic | gemini | doubao | ollama | huggingface | vllm
-  provider: openai
+qa:
+  strategies:
+    - strategy: semantic
+      provider: openai
+      model: gpt-4o-mini
+      temperature: 0.7
+      max_tokens: 150
 
-  # Centralized API keys (used to backfill per-provider configs)
-  keys:
-    openai_api_key: "sk-proj-..."
-    anthropic_api_key: "sk-ant-..."
-    google_api_key: "..."
-    doubao_api_key: "..."
-    huggingface_token: "hf_..."  # for gated models
+    - strategy: layout_aware
+      provider: anthropic
+      model: claude-3-5-sonnet-20241022
+      temperature: 0.5
+      max_tokens: 150
 
-  # Provider-specific blocks. Switch by changing agent.provider.
-  openai:
-    model: gpt-4o-mini
-    temperature: 0.7
-    max_tokens: 1000
+    - strategy: logical_aware
+      provider: gemini
+      model: gemini-1.5-flash
+      temperature: 0.7
+      max_tokens: 150
 
-  anthropic:
-    model: claude-3-5-sonnet-20241022
-    temperature: 0.7
-    max_tokens: 1000
+  verifiers:
+    - strategy: meaningful
+      provider: openai
+      model: gpt-4o-mini
+      temperature: 0.0
 
-  gemini:
-    model: gemini-1.5-pro
-    temperature: 0.7
-    max_output_tokens: 1000
-
-  doubao:
-    model: doubao-pro-32k
-    base_url: https://ark.cn-beijing.volces.com/api/v3
-    temperature: 0.7
-    max_tokens: 1000
-
-  ollama:
-    model: llama3
-    host: http://localhost:11434
-    temperature: 0.7
-
-  huggingface:
-    model: meta-llama/Llama-2-7b-chat-hf
-    device: auto
-    max_new_tokens: 512
-    temperature: 0.7
-
-  vllm:
-    # Server mode: requires vLLM server running (docs2synth agent vllm-server)
-    model: meta-llama/Llama-2-7b-chat-hf
-    base_url: http://localhost:8000/v1
-    temperature: 0.7
-    max_tokens: 1000
+    - strategy: correctness
+      provider: openai
+      model: gpt-4o-mini
+      temperature: 0.0
 ```
 
-Loading behavior:
-- By default, code does NOT auto-read `config.yml`.
-- To load config automatically, either set `DOCS2SYNTH_CONFIG=/path/to/config.yml` or pass `config_path` when constructing the agent.
+---
 
-Examples:
+## Verification
 
-```python
-# Auto-read via environment variable
-import os
-os.environ["DOCS2SYNTH_CONFIG"] = "./config.yml"
-from docs2synth.agent import AgentWrapper
-agent = AgentWrapper()
+Automatically verify QA quality with built-in verifiers.
 
-# Or pass config_path explicitly
-from docs2synth.agent import AgentWrapper
-agent = AgentWrapper(config_path="./config.yml")
+### Meaningful Verifier
+
+Checks if question is clear and answerable.
+
+```bash
+docs2synth verify run data/processed/document.json --verifier-type meaningful
 ```
 
-## Advanced Usage
+### Correctness Checker
 
-### Direct Agent Usage
+Validates answer matches document content.
 
-```python
-from docs2synth.agent import AgentWrapper
-
-# Initialize agent
-agent = AgentWrapper(provider="openai", model="gpt-4")
-
-# Generate text
-response = agent.generate(
-    prompt="Explain machine learning",
-    system_prompt="You are a helpful AI assistant.",
-    temperature=0.7,
-    max_tokens=500
-)
-
-print(response.content)
-print(f"Token usage: {response.usage}")
-
-# Chat interface
-messages = [
-    {"role": "user", "content": "Hello!"},
-    {"role": "assistant", "content": "Hi there!"},
-    {"role": "user", "content": "What's the weather?"}
-]
-response = agent.chat(messages)
-print(response.content)
+```bash
+docs2synth verify run data/processed/document.json --verifier-type correctness
 ```
 
-### Custom Prompts
+### Batch Verification
 
-```python
-from docs2synth.agent import QAGenerator
-
-custom_prompt = """Generate a question-answer pair from this content:
-
-{content}
-
-Format as JSON with 'question' and 'answer' keys."""
-
-generator = QAGenerator(
-    provider="openai",
-    model="gpt-4",
-    prompt_template=custom_prompt
-)
+```bash
+docs2synth verify batch
+docs2synth verify batch data/processed/dev
+docs2synth verify batch --image-dir data/images
 ```
+
+---
+
+## Output Format
+
+JSON updated with `qa` field:
+
+```json
+{
+  "objects": {
+    "obj_0": {
+      "text": "Invoice Number: INV-2024-001",
+      "bbox": [100, 200, 300, 220],
+      "qa": [
+        {
+          "strategy": "semantic",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "question": "What is the invoice number?",
+          "answer": "INV-2024-001",
+          "verification": {
+            "meaningful": {
+              "response": "Yes",
+              "explanation": "Question is clear and answerable"
+            },
+            "correctness": {
+              "response": "Yes",
+              "explanation": "Answer matches text"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+## Supported Providers
+
+- **OpenAI**: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`
+- **Anthropic**: `claude-3-5-sonnet-20241022`, `claude-3-opus`, `claude-3-sonnet`
+- **Google**: `gemini-1.5-pro`, `gemini-1.5-flash`
+- **Doubao**: ByteDance models
+- **Ollama**: Local models (llama3, mistral, etc.)
+- **vLLM**: High-performance local inference
+
+---
+
+## Next Steps
+
+- [Verification](complete-workflow.md#stage-4-verification) - Verify QA quality
+- [Human Annotation](complete-workflow.md#stage-5-human-annotation) - Manual review
+- [Retriever Training](retriever-training.md) - Train models on QA pairs
+
+For complete workflow: [Complete Workflow Guide](complete-workflow.md)

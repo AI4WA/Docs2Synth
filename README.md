@@ -4,427 +4,215 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-**Docs2Synth** is a Python package aimed at helping you convert, synthesise and train a retriever for your document datasets.
+**Docs2Synth** converts, synthesizes, and trains retrievers for document datasets.
 
-## Quick Start Workflow
-
-The typical Docs2Synth workflow consists of these stages:
+## Workflow
 
 ```
 Documents → Preprocess → QA Generation → Verification →
 Human Annotation → Retriever Training → RAG Deployment
 ```
 
-### Complete Workflow Steps
+### Quick Example
 
-1. **Setup Data Folder**
-   - Organize documents in a dedicated directory
-   - Configure `config.yml` with paths and API keys
+```bash
+# 1. Preprocess documents
+docs2synth preprocess data/raw/my_documents/
 
-2. **Preprocess Documents**
-   ```bash
-   # Single document or batch processing
-   docs2synth preprocess data/raw/my_documents/
-   ```
-   Extracts structured text and layout information using OCR (Docling, PaddleOCR, etc.)
+# 2. Generate QA pairs
+docs2synth qa batch
 
-3. **Generate QA Pairs**
-   ```bash
-   # Batch generate using configured strategies
-   docs2synth qa batch
-   ```
-   Uses LLMs to generate question-answer pairs for each text object
+# 3. Verify quality
+docs2synth verify batch
 
-4. **Verify QA Quality**
-   ```bash
-   # Automatic verification with meaningful and correctness checkers
-   docs2synth verify batch
-   ```
-   Validates generated QA pairs using configured verifiers
+# 4. Annotate (opens UI)
+docs2synth annotate
 
-5. **Human Annotation**
-   ```bash
-   # Launch interactive annotation interface
-   docs2synth annotate
-   ```
-   Manual review and approval of QA pairs via Streamlit UI
+# 5. Train retriever
+docs2synth retriever preprocess
+docs2synth retriever train --mode standard --lr 1e-5 --epochs 10
 
-6. **Train Retriever Model**
-   ```bash
-   # Preprocess annotated data
-   docs2synth retriever preprocess
+# 6. Deploy RAG
+docs2synth rag ingest
+docs2synth rag app
+```
 
-   # Train the model
-   docs2synth retriever train --mode standard --lr 1e-5 --epochs 10
+### Skip Annotation Quickly
 
-   # Validate results
-   docs2synth retriever validate
-   ```
-   Train custom LayoutLMv3-based retriever on annotated QA pairs
+Run the automated pipeline to chain preprocessing, QA, verification, retriever preprocessing, training, and validation while skipping the manual annotation UI:
 
-7. **Deploy RAG System**
-   ```bash
-   # Ingest documents into vector store
-   docs2synth rag ingest
+```bash
+docs2synth run
+```
 
-   # Query via CLI
-   docs2synth rag run -q "Your question here"
+Add `--skip-validation` if you only need training artifacts.
 
-   # Launch interactive demo
-   docs2synth rag app
-   ```
-   Deploy retrieval-augmented generation system with trained retriever
+[Complete Workflow Guide →](https://ai4wa.github.io/Docs2Synth/workflow/complete-workflow/)
 
-For detailed instructions, see the [Complete Workflow Guide](https://ai4wa.github.io/Docs2Synth/workflow/complete-workflow/).
+---
 
 ## Installation
+
+### Quick Install
 
 ```bash
 pip install git+https://github.com/AI4WA/Docs2Synth.git
 ```
 
-or, once released on PyPI [To be released]:
+### Development Setup (Recommended)
+
+**Use the setup script (installs uv + dependencies automatically):**
 
 ```bash
-pip install docs2synth
-```
-
-## Development Setup
-
-We provide two approaches for setting up your development environment:
-
-1. **Local Setup** (Recommended for most users) - Using `uv` for fast, reliable Python package management
-2. **Docker Setup** (Alternative) - Containerized environment for difficult setups or production deployment
-
-### Option 1: Local Setup (Recommended)
-
-We recommend using [uv](https://github.com/astral-sh/uv) for managing your development environment. `uv` is an extremely fast Python package installer and resolver.
-
-#### Prerequisites
-
-First, install `uv`:
-
-**macOS and Linux:**
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-**Windows:**
-```powershell
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-#### Setup with uv
-
-```bash
-# Clone repository
+# Clone
 git clone https://github.com/AI4WA/Docs2Synth.git
 cd Docs2Synth
 
-# Create virtual environment with uv
+# Run setup script
+./setup.sh         # Unix/macOS/WSL
+# setup.bat        # Windows
+```
+
+The script:
+- Installs [uv](https://github.com/astral-sh/uv) (fast package manager)
+- Creates virtual environment
+- Installs dependencies (CPU or GPU)
+- Sets up config
+
+**Manual setup (if needed):**
+
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh  # Unix/macOS
+# powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
+
+# Setup
 uv venv
-
-# Activate the virtual environment
-# On Unix-based systems (macOS, Linux, WSL):
-source .venv/bin/activate
-# On Windows:
-# .venv\Scripts\activate
-
-# Install dependencies with uv
-# For CPU-only PyTorch:
+source .venv/bin/activate  # Unix: .venv\Scripts\activate on Windows
 uv pip install -r requirements-cpu.txt
 uv pip install -e ".[dev]"
 
-# For GPU-enabled PyTorch (CUDA 11.8):
-# uv pip install -r requirements-gpu.txt
-# uv pip install -e ".[dev]"
+# Setup config
+cp config.example.yml config.yml
+# Edit config.yml and add your API keys
 ```
 
-**Why use uv?**
-- **Fast**: 10-100x faster than pip for package installation
-- **Reliable**: Better dependency resolution with lockfile support
-- **Modern**: Built with Rust for performance and reliability
-- **Compatible**: Drop-in replacement for pip commands
+---
 
-#### Dependency Management with uv
+## Features
 
-This project uses a modern dependency management approach:
+- **Document Processing**: Extract text/layout with Docling, PaddleOCR, PDFPlumber
+- **QA Generation**: Automatic question-answer pair generation with LLMs
+- **Verification**: Built-in meaningful and correctness verifiers
+- **Human Annotation**: Streamlit UI for manual review
+- **Retriever Training**: Train LayoutLMv3-based retrievers
+- **RAG Deployment**: Deploy with naive or iterative strategies
+- **MCP Integration**: Expose as Model Context Protocol server
 
-**File Structure:**
-- `pyproject.toml` - Core dependencies and project metadata (PEP 621)
-- `requirements-cpu.in` - PyTorch CPU version specification
-- `requirements-gpu.in` - PyTorch GPU version specification
-- `requirements-dev.in` - Development tools specification
-- `requirements-*.txt` - Locked dependency files (generated by `uv pip compile`)
+---
 
-**Updating Dependencies:**
+## Configuration
 
-When you need to update or regenerate the locked dependency files:
-
-```bash
-# Regenerate CPU requirements
-uv pip compile requirements-cpu.in -o requirements-cpu.txt
-
-# Regenerate dev requirements
-uv pip compile requirements-dev.in -o requirements-dev.txt
-
-# Upgrade all dependencies to latest compatible versions
-uv pip compile requirements-cpu.in -o requirements-cpu.txt --upgrade
-uv pip compile requirements-dev.in -o requirements-dev.txt --upgrade
-```
-
-**Note about GPU dependencies:**
-GPU PyTorch is installed directly via `pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118` rather than from a lockfile, as NVIDIA CUDA dependencies are platform-specific and managed by PyTorch.
-
-### MCP Provider (Experimental)
-
-Docs2Synth ships an MCP provider for agents. Install extras and launch either transport:
-
-```bash
-uv pip install -e ".[dev,mcp]"
-docs2synth-mcp stdio        # local stdio transport
-docs2synth-mcp sse --port 8009  # SSE transport (recommended for ChatGPT)
-```
-
-#### Cursor MCP Integration 
-
-We can setup the MCP provider in Cursor by adding the following configuration to your `mcp.json`:
-
-```json
-{
-  "mcpServers":{
-    "docs2synth": {
-      "url": "http://127.0.0.1:8000/docs2synth"
-    },
-    "docs2synth-stdio": {
-      "command": "/your/path/to/it/venv/bin/docs2synth-mcp",
-      "args": ["stdio"]
-    }
-  }
-}
-
-```
-
-And then we can test it by calling it from the cursor chat window.
-Or we can use `npx @modelcontextprotocol/inspector`
-
-**Configuration Notes:**
-- Replace `/path/to/your/venv/bin/docs2synth-mcp` with the actual path to your virtual environment's `docs2synth-mcp` executable
-- The `stdio` transport is for local MCP providers and does not require HTTP mode.
-- For HTTP transport, use `docs2synth-mcp http --host 0.0.0.0 --port 8000` and configure accordingly
-
-### Option 2: Docker Setup (Alternative)
-
-**When to use Docker:**
-- Difficult to set up the local development environment (dependency conflicts, OS limitations)
-- Preparing for production deployment
-- Want isolated environment without affecting system Python
-
-We provide a unified Dockerfile that supports multiple build configurations through build arguments.
-
-#### Available Docker Images
-
-| Image Type | Use Case                       | Size    | Build Command                         |
-| ---------- | ------------------------------ | ------- | ------------------------------------- |
-| `cpu`      | Development and CPU deployment | ~2.5 GB | `docker compose up -d docs2synth-cpu` |
-| `gpu`      | Training and GPU inference     | ~11 GB  | `docker compose up -d docs2synth-gpu` |
-
-#### Quick Start with Docker
-
-**Using docker-compose (Recommended):**
-
-```bash
-# For CPU workloads (development and testing)
-docker compose up -d docs2synth-cpu
-docker exec -it docs2synth-cpu /bin/bash
-
-# For GPU workloads (requires NVIDIA GPU + nvidia-docker)
-docker compose up -d docs2synth-gpu
-docker exec -it docs2synth-gpu /bin/bash
-
-# Inside the container, test the installation
-docs2synth --help
-docs2synth datasets list
-```
-
-**Direct Docker build:**
-
-```bash
-# CPU build
-docker build --build-arg BUILD_TYPE=cpu -t docs2synth:cpu .
-
-# GPU build (requires linux/amd64 on Apple Silicon)
-docker build --build-arg BUILD_TYPE=gpu -t docs2synth:gpu .
-
-# Run the built image
-docker run -it \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  docs2synth:cpu
-```
-
-#### GPU Support in Docker
-
-**Requirements:**
-- Linux host with NVIDIA GPU
-- NVIDIA drivers installed
-- NVIDIA Container Toolkit ([installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html))
-
-**Enable GPU in docker-compose.yml:**
-
-Uncomment the `deploy` section under `docs2synth-gpu`:
+Create `config.yml` from `config.example.yml`:
 
 ```yaml
-deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          count: all
-          capabilities: [gpu]
+# API keys (config.yml is in .gitignore)
+agent:
+  keys:
+    openai_api_key: "sk-..."
+    anthropic_api_key: "sk-ant-..."
+
+# Document processing
+preprocess:
+  processor: docling
+  input_dir: ./data/raw/
+  output_dir: ./data/processed/
+
+# QA generation
+qa:
+  strategies:
+    - strategy: semantic
+      provider: openai
+      model: gpt-4o-mini
+
+# Retriever training
+retriever:
+  learning_rate: 1e-5
+  epochs: 10
+
+# RAG
+rag:
+  embedding:
+    model: sentence-transformers/all-MiniLM-L6-v2
 ```
 
-**Run with GPU:**
+---
+
+## Docker
 
 ```bash
-# Using docker-compose
-docker compose up -d docs2synth-gpu
-docker exec -it docs2synth-gpu python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
-
-# Using docker run
-docker run --gpus all -it \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  docs2synth:gpu
-```
-
-#### Building Docker Images
-
-We provide a convenient script to build and test Docker images:
-
-```bash
-# Build and test CPU image
+# CPU
 ./scripts/build-docker.sh cpu
 
-# Build and test GPU image (requires significant disk space)
+# GPU
 ./scripts/build-docker.sh gpu
-
-# Build and test both images
-./scripts/build-docker.sh all
 ```
 
-The script will:
-- Build the Docker image
-- Verify Python and package installation
-- Run tests inside the container
-- Display image size and usage instructions
+See [Docker Builds](https://ai4wa.github.io/Docs2Synth/development/docker-builds/)
 
-#### Production Deployment with Docker
-
-Docker images are ideal for production deployment:
-
-```bash
-# Build images manually
-docker build --build-arg BUILD_TYPE=cpu -t your-registry/docs2synth:cpu .
-docker build --build-arg BUILD_TYPE=gpu -t your-registry/docs2synth:gpu .
-
-# Push to registry
-docker push your-registry/docs2synth:cpu
-docker push your-registry/docs2synth:gpu
-
-# Deploy on production servers
-docker pull your-registry/docs2synth:cpu
-docker run -d \
-  --name docs2synth-prod \
-  -v /data:/app/data \
-  -v /logs:/app/logs \
-  your-registry/docs2synth:cpu \
-  python -m docs2synth.cli process --config /app/config.yml
-```
-
-**Platform Notes:**
-- **macOS (Apple Silicon/Intel)**: Can build and run CPU images natively. GPU images require `--platform linux/amd64` flag (uses emulation, no GPU acceleration available).
-- **Linux (x86_64)**: Full support for both CPU and GPU images with native performance.
-- **Windows (WSL2)**: Full support for both CPU and GPU with proper NVIDIA Container Toolkit setup.
-
-**Known Issues:**
-- PaddlePaddle 3.2.0 may have stability issues on ARM64 architecture. If you encounter segmentation faults on Apple Silicon, consider using the GPU build with platform emulation or running on x86_64 Linux.
-
-### Manual Setup (Alternative)
-
-If you prefer not to use `uv`, you can still use traditional pip:
-
-```bash
-# Create virtual environment (Python ≥3.11)
-python -m venv .venv && source .venv/bin/activate
-
-# Upgrade pip
-pip install --upgrade pip
-
-# Install PyTorch (choose CPU or GPU version)
-# For CPU:
-pip install -r requirements-cpu.txt
-# For GPU (CUDA 11.8):
-# pip install -r requirements-gpu.txt
-
-# Install project dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# Install package in editable mode
-pip install -e .
-```
-
-### Dependency Management
-
-The project uses a modern, layered dependency management approach:
-
-**Source Files (edit these):**
-- **pyproject.toml**: Core project dependencies and metadata
-- **requirements-cpu.in**: PyTorch CPU specifications
-- **requirements-gpu.in**: PyTorch GPU specifications (CUDA 11.8)
-- **requirements-dev.in**: Development tools specifications
-
-**Generated Lockfiles (do not edit manually):**
-- **requirements-cpu.txt**: Locked CPU PyTorch dependencies
-- **requirements-gpu.txt**: Locked GPU PyTorch dependencies
-- **requirements-dev.txt**: Locked development dependencies
-
-All `.txt` files are generated using `uv pip compile` and should not be edited manually. To add or update dependencies, modify the corresponding `.in` file or `pyproject.toml`, then regenerate the lockfiles.
-
-### Code Quality Checks
-
-Before pushing, run all checks:
-
-```bash
-
-./scripts/check.sh
-```
-
-This will run:
-- **isort** - Sort imports
-- **black** - Format code
-- **flake8** - Lint code
-- **pytest** - Run tests
-
+---
 
 ## Documentation
 
-Full documentation is available at: **https://ai4wa.github.io/Docs2Synth/**
+Full documentation: **https://ai4wa.github.io/Docs2Synth/**
 
-Topics covered:
-- [Quick Start Guide](https://ai4wa.github.io/Docs2Synth/)
+- [Complete Workflow Guide](https://ai4wa.github.io/Docs2Synth/workflow/complete-workflow/)
 - [CLI Reference](https://ai4wa.github.io/Docs2Synth/cli-reference/)
 - [Document Processing](https://ai4wa.github.io/Docs2Synth/workflow/document-processing/)
 - [QA Generation](https://ai4wa.github.io/Docs2Synth/workflow/qa-generation/)
 - [Retriever Training](https://ai4wa.github.io/Docs2Synth/workflow/retriever-training/)
-- [RAG Path](https://ai4wa.github.io/Docs2Synth/workflow/rag-path/)
-- [API Reference](https://ai4wa.github.io/Docs2Synth/api-reference/)
+- [RAG Deployment](https://ai4wa.github.io/Docs2Synth/workflow/rag-path/)
+
+---
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+We welcome contributions! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `pytest tests/ -v`
+5. Run code quality checks: `./scripts/check.sh`
+6. Submit a pull request
+
+See [Dependency Management](https://ai4wa.github.io/Docs2Synth/development/dependency-management/) for dev setup details.
+
+---
 
 ## License
 
-[MIT](LICENSE)
+MIT License - see [LICENSE](LICENSE) file for details.
+
+---
+
+## Citation
+
+If you use Docs2Synth in your research, please cite:
+
+```bibtex
+@software{docs2synth2024,
+  title = {Docs2Synth: Document Processing and Retriever Training},
+  author = {AI4WA Team},
+  year = {2024},
+  url = {https://github.com/AI4WA/Docs2Synth}
+}
+```
+
+---
+
+## Support
+
+- **Documentation**: https://ai4wa.github.io/Docs2Synth/
+- **Issues**: https://github.com/AI4WA/Docs2Synth/issues
+- **Discussions**: https://github.com/AI4WA/Docs2Synth/discussions

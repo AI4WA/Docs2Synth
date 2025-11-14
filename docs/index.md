@@ -19,7 +19,7 @@
 
 ### :page_facing_up: Document Processing
 
-Convert raw documents using **MinerU** or other OCR methods. Supports PDFs, images, and complex layouts.
+Extract structured text and layout from PDFs and images using **Docling**, **PaddleOCR**, or **PDFPlumber**. Support for complex layouts and 80+ languages.
 
 [Learn more →](workflow/document-processing.md){ .md-button .md-button--primary }
 
@@ -29,7 +29,7 @@ Convert raw documents using **MinerU** or other OCR methods. Supports PDFs, imag
 
 ### :robot: Agent-Based QA Generation
 
-Automatically generate high-quality **question-answer pairs** with two-step verification (meaningfulness + correctness).
+Automatically generate high-quality **question-answer pairs** using LLMs. Built-in verification with meaningfulness and correctness checkers.
 
 [Learn more →](workflow/qa-generation.md){ .md-button .md-button--primary }
 
@@ -39,7 +39,7 @@ Automatically generate high-quality **question-answer pairs** with two-step veri
 
 ### :brain: Retriever Training
 
-Train custom retrievers using **LayoutLMv3**, BERT, or sentence transformers on your domain-specific data.
+Train custom document retrievers using **LayoutLMv3** or **BERT** on your annotated data. Support for layout-aware and semantic retrieval.
 
 [Learn more →](workflow/retriever-training.md){ .md-button .md-button--primary }
 
@@ -47,9 +47,9 @@ Train custom retrievers using **LayoutLMv3**, BERT, or sentence transformers on 
 
 <div class="feature-card" markdown>
 
-### :rocket: RAG Path
+### :rocket: RAG Deployment
 
-Deploy immediately with **out-of-box strategies** (BM25, dense, hybrid) - no training required.
+Deploy RAG systems instantly with **naive**, **iterative**, or custom strategies. Vector store integration with semantic search.
 
 [Learn more →](workflow/rag-path.md){ .md-button .md-button--primary }
 
@@ -59,9 +59,9 @@ Deploy immediately with **out-of-box strategies** (BM25, dense, hybrid) - no tra
 
 ### :chart_with_upwards_trend: Benchmarking
 
-Track retrieval performance with **Hit@K**, MRR, NDCG metrics and monitor end-to-end latency.
+Comprehensive evaluation with **ANLS**, **Hit@K**, **MRR**, and **NDCG** metrics. Track training progress and model performance.
 
-[Learn more →](workflow/retriever-training.md#evaluation){ .md-button .md-button--primary }
+[Learn more →](workflow/retriever-training.md){ .md-button .md-button--primary }
 
 </div>
 
@@ -69,23 +69,25 @@ Track retrieval performance with **Hit@K**, MRR, NDCG metrics and monitor end-to
 
 ### :gear: Extensible Pipeline
 
-Combine all steps into a **unified pipeline** with flexible control flow based on your requirements.
+Modular architecture with pluggable components. Easy customization of QA strategies, verifiers, and retrieval methods.
 
 [Get Started →](#quick-start){ .md-button .md-button--primary }
 
 </div>
 
-<div class="feature-card" markdown>
-
-### :electric_plug: MCP Integration
-
-Expose functionality as **Model Context Protocol (MCP)** server for AI agents like Claude, ChatGPT, and Cursor.
-
-[Learn more →](mcp-integration.md){ .md-button .md-button--primary }
-
 </div>
 
-</div>
+---
+
+!!! tip "🔌 MCP Integration"
+    Run Docs2Synth as a **remote MCP server** (SSE transport) for AI agents like Claude Desktop, ChatGPT, and Cursor. Access document processing capabilities from your AI tools.
+
+    ```bash
+    # Start remote MCP server
+    docs2synth-mcp sse --host 0.0.0.0 --port 8009
+    ```
+
+    [Learn more about MCP Integration →](mcp-integration.md){ .md-button }
 
 ## Installation
 
@@ -103,93 +105,28 @@ pip install docs2synth
 
 ## Quick Start
 
-### Development Setup
-
-#### Recommended: Using uv (Fast & Modern)
-
+**Automated setup (recommended):**
 ```bash
-# Clone repository
 git clone https://github.com/AI4WA/Docs2Synth.git
 cd Docs2Synth
-
-# Install uv (if not already installed)
-# macOS/Linux:
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# Windows:
-# powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Create virtual environment
-uv venv
-
-# Activate environment
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-uv pip install -r requirements-cpu.txt  # or requirements-gpu.txt for GPU
-uv pip install -e ".[dev]"
+./setup.sh         # Unix/macOS/WSL
+# setup.bat        # Windows
 ```
 
-#### Alternative: Automated Setup Script
+The script installs [uv](https://github.com/astral-sh/uv) and sets up everything automatically.
 
+**Manual setup:**
 ```bash
-# Run setup script (auto-installs uv and dependencies)
-./setup.sh  # On Unix/macOS/WSL
-# setup.bat  # On Windows
-```
-
-#### Alternative: Traditional pip
-
-```bash
-# Create virtual environment (Python ≥3.11)
-python -m venv .venv && source .venv/bin/activate
-
-# Upgrade pip
-pip install --upgrade pip
-
-# Install PyTorch (CPU or GPU)
-pip install -r requirements-cpu.txt  # or requirements-gpu.txt for GPU
-
-# Install package in editable mode with dev dependencies
+git clone https://github.com/AI4WA/Docs2Synth.git
+cd Docs2Synth
 pip install -e ".[dev]"
+cp config.example.yml config.yml
+# Edit config.yml and add your API keys
 ```
 
-### Verify Installation
+See the [README](https://github.com/AI4WA/Docs2Synth#readme) for details.
 
-```bash
-# Activate environment
-source .venv/bin/activate
-
-# Run tests
-pytest
-```
-
-## Quick CLI Examples
-
-```bash
-# Download datasets
-docs2synth datasets list
-docs2synth datasets download funsd
-
-# Process documents
-docs2synth preprocess document.png --processor paddleocr
-
-# Generate text with LLM agents
-docs2synth agent generate "Explain quantum computing" --provider openai
-
-# Chat with history
-docs2synth agent chat "Hello" --history-file chat.json
-
-# Generate QA pairs
-docs2synth qa semantic "Form contains name field" "John Doe"
-docs2synth qa layout "What is the address?" --image doc.png
-docs2synth qa generate "Context" "Target" --image doc.png
-```
-
-[View Full CLI Reference →](cli-reference.md){ .md-button .md-button--primary }
-
-## Complete End-to-End Workflow
-
-The typical Docs2Synth workflow consists of these stages:
+## Workflow
 
 ```mermaid
 graph LR
@@ -201,46 +138,29 @@ graph LR
     F --> G[RAG Deployment]
 ```
 
-### Step-by-Step Guide
+```bash
+# 1. Preprocess documents
+docs2synth preprocess data/raw/my_documents/
 
-1. **Setup Data Folder** - Organize documents and configure `config.yml`
-2. **[Document Processing](workflow/document-processing.md)** - Extract text and layout with OCR
-   ```bash
-   docs2synth preprocess data/raw/my_documents/
-   ```
+# 2. Generate QA pairs
+docs2synth qa batch
 
-3. **[QA Generation](workflow/qa-generation.md)** - Generate question-answer pairs with LLMs
-   ```bash
-   docs2synth qa batch
-   ```
+# 3. Verify quality
+docs2synth verify batch
 
-4. **Verification** - Automatically verify QA quality
-   ```bash
-   docs2synth verify batch
-   ```
+# 4. Annotate (opens UI)
+docs2synth annotate
 
-5. **Human Annotation** - Manual review via Streamlit interface
-   ```bash
-   docs2synth annotate
-   ```
+# 5. Train retriever
+docs2synth retriever preprocess
+docs2synth retriever train --mode standard --lr 1e-5 --epochs 10
 
-6. **[Retriever Training](workflow/retriever-training.md)** - Train custom retrieval models
-   ```bash
-   docs2synth retriever preprocess
-   docs2synth retriever train --mode standard --lr 1e-5 --epochs 10
-   docs2synth retriever validate
-   ```
+# 6. Deploy RAG
+docs2synth rag ingest
+docs2synth rag app
+```
 
-7. **[RAG Deployment](workflow/rag-path.md)** - Deploy RAG system
-   ```bash
-   docs2synth rag ingest
-   docs2synth rag run -q "Your question"
-   docs2synth rag app
-   ```
-
-[**View Complete Workflow Guide →**](workflow/complete-workflow.md){ .md-button .md-button--primary }
-
-This comprehensive guide covers all steps from data preparation to RAG deployment with detailed examples, configuration options, and troubleshooting tips.
+[**Complete Workflow Guide →**](workflow/complete-workflow.md){ .md-button .md-button--primary }
 
 ## Architecture
 
