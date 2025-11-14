@@ -152,18 +152,16 @@ setup_venv() {
     echo_info "Activating virtual environment..."
     source .venv/bin/activate
 
-    # Sync dependencies with uv (excluding torch which will be installed separately)
-    echo_info "Syncing dependencies with uv (all extras)..."
-    uv sync --all-extras
-
-    # Install PyTorch based on GPU detection
-    echo_info "Installing PyTorch..."
+    # Install package with appropriate extras
     if [ "$INSTALL_GPU" = "true" ]; then
-        echo_info "Installing GPU-enabled PyTorch from requirements-gpu.in..."
-        uv pip install -r requirements-gpu.in
+        echo_info "Installing GPU-enabled PyTorch (CUDA 12.8)..."
+        uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+        echo_info "Installing Docs2Synth with GPU extras and dev tools..."
+        uv pip install -e ".[gpu,dev]"
     else
-        echo_info "Installing CPU-only PyTorch from requirements-cpu.in..."
-        uv pip install -r requirements-cpu.in
+        echo_info "Installing Docs2Synth with CPU extras and dev tools..."
+        uv pip install -e ".[cpu,dev]"
     fi
 
     # Uninstall paddlex if it was installed

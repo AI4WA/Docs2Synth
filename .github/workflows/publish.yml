@@ -10,14 +10,11 @@ on:
   workflow_dispatch:
     inputs:
       publish_to:
-        description: 'Publish to (testpypi/pypi/both)'
+        description: 'Publish to (pypi)'
         required: true
-        default: 'testpypi'
         type: choice
         options:
-          - testpypi
           - pypi
-          - both
 
 jobs:
   build:
