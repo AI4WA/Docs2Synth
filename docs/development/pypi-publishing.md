@@ -113,11 +113,16 @@ For the very first publish to PyPI (when the project doesn't exist yet):
 After publishing to TestPyPI, test installation:
 
 ```bash
-# CPU version
+# CPU version (includes MCP server)
 pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple docs2synth[cpu]
+
+# GPU version (includes MCP server)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple docs2synth[gpu]
 
 # Check it works
 docs2synth --version
+docs2synth-mcp --version
 ```
 
 ## Version Management

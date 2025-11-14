@@ -57,12 +57,12 @@ docs2synth rag app
 
 ### PyPI Installation (Recommended)
 
-**CPU Version (works on all systems):**
+**CPU Version (includes all features + MCP server):**
 ```bash
 pip install docs2synth[cpu]
 ```
 
-**GPU Version (for NVIDIA GPUs with CUDA 12.8):**
+**GPU Version (includes all features + MCP server):**
 ```bash
 # First install PyTorch with CUDA support
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
@@ -71,14 +71,9 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 pip install docs2synth[gpu]
 ```
 
-**Minimal Install (CLI only, no ML features):**
+**Minimal Install (CLI only, no ML/MCP features):**
 ```bash
 pip install docs2synth
-```
-
-**With MCP Server Support:**
-```bash
-pip install docs2synth[cpu,mcp]  # or [gpu,mcp] for GPU
 ```
 
 ### Development Setup
