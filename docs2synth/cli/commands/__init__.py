@@ -3,6 +3,7 @@
 from docs2synth.cli.commands.agent import agent_group
 from docs2synth.cli.commands.annotation import annotate_command
 from docs2synth.cli.commands.datasets import datasets
+from docs2synth.cli.commands.integration import run_command
 from docs2synth.cli.commands.preprocess import preprocess
 from docs2synth.cli.commands.qa import qa_group
 from docs2synth.cli.commands.rag import rag_group
@@ -14,6 +15,7 @@ __all__ = [
     "annotate_command",
     "datasets",
     "preprocess",
+    "run_command",
     "qa_group",
     "rag_group",
     "retriever_group",

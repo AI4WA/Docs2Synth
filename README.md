@@ -13,7 +13,19 @@ Documents → Preprocess → QA Generation → Verification →
 Human Annotation → Retriever Training → RAG Deployment
 ```
 
-### Quick Example
+### 🚀 Quick Start: Automated Pipeline
+
+Run the complete end-to-end pipeline with a single command:
+
+```bash
+docs2synth run
+```
+
+This automatically chains: preprocessing → QA generation → verification → retriever training → validation → RAG deployment, skipping the manual annotation UI.
+
+### Manual Step-by-Step Workflow
+
+For more control, run each step individually:
 
 ```bash
 # 1. Preprocess documents
@@ -36,16 +48,6 @@ docs2synth retriever train --mode standard --lr 1e-5 --epochs 10
 docs2synth rag ingest
 docs2synth rag app
 ```
-
-### Skip Annotation Quickly
-
-Run the automated pipeline to chain preprocessing, QA, verification, retriever preprocessing, training, and validation while skipping the manual annotation UI:
-
-```bash
-docs2synth run
-```
-
-Add `--skip-validation` if you only need training artifacts.
 
 [Complete Workflow Guide →](https://ai4wa.github.io/Docs2Synth/workflow/complete-workflow/)
 
