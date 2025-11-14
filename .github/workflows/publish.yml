@@ -51,7 +51,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    needs: [build, publish-testpypi]
+    needs: [build]
     runs-on: ubuntu-latest
     # Run if: manual dispatch with pypi/both OR tag push AND testpypi succeeded
     if: |
