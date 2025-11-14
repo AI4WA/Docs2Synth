@@ -1677,8 +1677,14 @@ def retriever_preprocess(
         click.echo(f"  JSON directory: {json_dir}")
         click.echo(f"  Image directory: {image_dir}")
         click.echo(f"  Output: {output}")
+        # Ensure batch_size has a valid value (default from config or CLI default)
+        if batch_size is None:
+            batch_size = cfg.get("retriever.batch_size", 8)
+            click.echo(f"  Using batch_size from config: {batch_size}")
+        else:
+            click.echo(f"  Batch size: {batch_size}")
+
         click.echo(f"  Processor: {processor}")
-        click.echo(f"  Batch size: {batch_size}")
         click.echo(f"  Max sequence length: {max_length}")
         click.echo(f"  Max objects: {num_objects}")
         click.echo(f"  Require all verifiers: {require_all_verifiers}")

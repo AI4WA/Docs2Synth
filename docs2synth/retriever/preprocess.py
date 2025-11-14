@@ -311,7 +311,8 @@ class PreprocessedQADataset(Dataset):
                                 ]
                                 # Clamp to valid range
                                 normalized_bbox = [
-                                    max(0, min(1000, coord)) for coord in normalized_bbox
+                                    max(0, min(1000, coord))
+                                    for coord in normalized_bbox
                                 ]
                                 boxes.append(normalized_bbox)
                             else:
@@ -500,6 +501,13 @@ def create_preprocessed_dataloader(
 
     from docs2synth.retriever.dataset import load_verified_qa_pairs
 
+    # Validate and set default batch_size if None
+    if batch_size is None:
+        batch_size = 8
+        logger.warning(f"batch_size was None, using default: {batch_size}")
+    elif batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got: {batch_size}")
+
     logger.info("=" * 70)
     logger.info("Starting preprocessing: JSON → DataLoader")
     logger.info("=" * 70)
@@ -564,7 +572,15 @@ def create_preprocessed_dataloader(
     logger.info(f"Output: {output_path}")
     logger.info(f"QA pairs: {len(qa_pairs)}")
     logger.info(f"Batch size: {batch_size}")
-    logger.info(f"Estimated batches per epoch: {(len(qa_pairs) + batch_size - 1) // batch_size}")
+    # Only calculate estimated batches if batch_size is valid
+    if batch_size is not None and batch_size > 0:
+        logger.info(
+            f"Estimated batches per epoch: {(len(qa_pairs) + batch_size - 1) // batch_size}"
+        )
+    else:
+        logger.warning(
+            "Batch size is None or invalid, cannot estimate batches per epoch"
+        )
     logger.info("\nUse with:")
     logger.info(f"  docs2synth retriever train --data-path {output_path}")
     logger.info("=" * 70)
