@@ -26,9 +26,9 @@ RUN apt-get update && \
 COPY pyproject.toml README.md ./
 COPY docs2synth/ ./docs2synth/
 
-# Install Python package with MCP extras
+# Install Python package with CPU extras (includes MCP)
 RUN pip install --upgrade pip && \
-    pip install -e .[dev,mcp]
+    pip install -e .[cpu]
 
 # Create necessary directories
 RUN mkdir -p /app/data /app/logs && \
