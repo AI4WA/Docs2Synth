@@ -47,12 +47,30 @@ code {
   border-radius: 0.5rem;
   box-shadow: var(--card-shadow);
   margin: 1.5em 0;
-  padding: 0.8rem 1.2rem;
+  padding: 1.2rem 1.5rem;
+  border-left: 4px solid var(--md-primary-fg-color);
 }
 
 .admonition-title {
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.8rem;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admonition.tip {
+  background: linear-gradient(135deg, rgba(103, 58, 183, 0.05) 0%, rgba(103, 58, 183, 0.02) 100%);
+  border-left-color: var(--md-primary-fg-color);
+}
+
+.admonition.tip .admonition-title {
+  color: var(--md-primary-fg-color);
+}
+
+.admonition .md-button {
+  margin-top: 0.5rem;
 }
 
 /* Card-like styling for content sections */
@@ -111,7 +129,7 @@ code {
 /* Feature cards on homepage */
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.5rem;
   margin: 2rem 0;
   padding: 0;
@@ -126,6 +144,11 @@ code {
   border: 2px solid transparent;
   position: relative;
   overflow: hidden;
+
+  /* Flexbox for button alignment */
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
 }
 
 .feature-card::before {
@@ -162,15 +185,19 @@ code {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .feature-card p {
   line-height: 1.7;
   margin-bottom: 1.5rem;
+  flex-grow: 1;
 }
 
 .feature-card .md-button {
   margin-top: auto;
+  align-self: flex-start;
+  flex-shrink: 0;
 }
 
 /* Navigation improvements */
@@ -282,6 +309,12 @@ html {
 }
 
 /* Better mobile responsiveness */
+@media screen and (max-width: 1200px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media screen and (max-width: 768px) {
   .feature-grid {
     grid-template-columns: 1fr;
@@ -290,6 +323,11 @@ html {
 
   .feature-card {
     padding: 1.5rem;
+    min-height: 240px;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-4px) scale(1.01);
   }
 
   .md-typeset h1 {
@@ -302,8 +340,17 @@ html {
 }
 
 @media screen and (max-width: 480px) {
+  .feature-card {
+    min-height: auto;
+    padding: 1.25rem;
+  }
+
   .feature-card h3 {
     font-size: 1.1rem;
+  }
+
+  .feature-card p {
+    font-size: 0.95rem;
   }
 }
 

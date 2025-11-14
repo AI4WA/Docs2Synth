@@ -1,4 +1,11 @@
 # Docs2Synth Configuration File
+#
+# Setup:
+#   1. Copy this file: cp config.example.yml config.yml
+#   2. Add your API keys in the 'agent.keys' section
+#   3. config.yml is in .gitignore (safe to commit this repo)
+#
+# You can add API keys directly in config.yml or use environment variables
 
 # Data folder settings - where to save all files
 data:
@@ -75,13 +82,14 @@ agent:
   # Choose active provider here: openai | anthropic | gemini | doubao | ollama | huggingface | vllm
   provider: openai
 
-  # Centralized API keys used to backfill per-provider configs
+  # API Keys - Add your real keys here (config.yml is in .gitignore)
+  # Or use environment variables: "${OPENAI_API_KEY}"
   keys:
     openai_api_key: "sk-proj-YOUR-OPENAI-API-KEY"
     anthropic_api_key: "sk-ant-YOUR-ANTHROPIC-API-KEY"
     google_api_key: "YOUR-GOOGLE-API-KEY"
     doubao_api_key: "YOUR-DOUBAO-API-KEY"
-    huggingface_token: "YOUR-HF-TOKEN" # For gated models on Hugging Face
+    huggingface_token: "YOUR-HF-TOKEN"
 
   # Provider-specific configuration blocks. Switch provider by changing agent.provider.
   openai:
