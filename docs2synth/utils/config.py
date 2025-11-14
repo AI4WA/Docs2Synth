@@ -36,6 +36,38 @@ class Config:
                 "models_dir": "./models",
                 "logs_dir": "./logs",
             },
+            "rag": {
+                "embedding": {
+                    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+                    "device": None,
+                    "normalize": True,
+                },
+                "vector_store": {
+                    "type": "faiss",
+                    "persist_path": "./data/rag/index.faiss",
+                    "normalize": True,
+                },
+                "strategies": {
+                    "naive": {
+                        "type": "naive",
+                        "top_k": 5,
+                        "prompt": {
+                            "system": "You are a helpful assistant that answers using the provided context.",
+                            "user": "Question:\\n{query}\\n\\nContext:\\n{context}\\n\\nAnswer concisely.",
+                        },
+                    },
+                    "enhanced": {
+                        "type": "enhanced",
+                        "top_k": 5,
+                        "max_iterations": 3,
+                        "similarity_threshold": 0.9,
+                        "prompt": {
+                            "system": "You are a careful assistant. Refine answers iteratively using retrieved context.",
+                            "user": "Question:\\n{query}\\n\\nContext:\\n{context}\\n\\nProvide a well-grounded answer.",
+                        },
+                    },
+                },
+            },
         }
 
     @classmethod

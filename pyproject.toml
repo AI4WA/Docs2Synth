@@ -42,6 +42,9 @@ dependencies = [
     "streamlit>=1.51.0",
     "plotly>=6.4.0",
     "matplotlib>=3.10.7",
+    "sentence-transformers>=0.6",
+    "faiss-cpu>=1.8.0",
+    "typing_extensions>=4.5",
 ]
 authors = [{ name = "AI4WA" }]
 license = { text = "MIT" }
