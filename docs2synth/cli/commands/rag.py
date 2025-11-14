@@ -117,7 +117,8 @@ def list_strategies(ctx: click.Context) -> None:
         ["docling", "paddleocr", "pdfplumber", "easyocr"], case_sensitive=False
     ),
     default=None,
-    help="Filter processed JSON files by processor suffix (e.g., docling, paddleocr, pdfplumber, easyocr).",
+    help="Filter processed JSON files by processor suffix "
+    "(defaults to preprocess.processor in config.yml).",
 )
 @click.option(
     "--include-context/--exclude-context",
@@ -137,15 +138,22 @@ def ingest_documents(
     texts: List[str] = []
     metadatas: List[dict] = []
 
+    cfg = ctx.obj.get("config")
+
     # Process JSON outputs
     if processed_dir is None:
-        cfg = ctx.obj.get("config")
         default_dir = None
         if cfg is not None:
             default_path = cfg.get("preprocess.output_dir")
             if default_path:
                 default_dir = Path(default_path)
         processed_dir = default_dir
+
+    effective_processor = processor_filter
+    if effective_processor is None and cfg is not None:
+        cfg_processor = cfg.get("preprocess.processor")
+        if isinstance(cfg_processor, str) and cfg_processor.strip():
+            effective_processor = cfg_processor.strip()
 
     if processed_dir and processed_dir.exists():
         suffixes = {
@@ -155,11 +163,18 @@ def ingest_documents(
             "easyocr": "_easyocr.json",
         }
         for json_path in sorted(processed_dir.glob("*.json")):
-            if processor_filter:
-                processor_filter_lower = processor_filter.lower()
+            if effective_processor:
+                processor_filter_lower = effective_processor.lower()
                 expected_suffix = suffixes.get(processor_filter_lower)
-                if expected_suffix and not json_path.name.endswith(expected_suffix):
-                    continue
+                if expected_suffix:
+                    if not json_path.name.endswith(expected_suffix):
+                        continue
+                else:
+                    logger.warning(
+                        "Unknown processor '%s' specified; ingesting all files.",
+                        effective_processor,
+                    )
+                    effective_processor = None
             chunks = _ingest_processed_file(
                 json_path,
                 include_context=include_context,

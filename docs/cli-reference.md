@@ -496,6 +496,471 @@ Summary:
   Question: In the 'Personal Details' section, what value is provided for the name field?
 ```
 
+### Single Document QA Generation
+
+Generate QA pairs for a single document (auto-pairs JSON with image):
+
+```bash
+# Using JSON file
+docs2synth qa run data/processed/dev/document_docling.json
+
+# Using image file (finds corresponding JSON)
+docs2synth qa run data/images/document.png
+
+# Use specific strategy only
+docs2synth qa run data/processed/document.json --strategy semantic
+```
+
+### Batch QA Processing
+
+Generate QA pairs for multiple documents using strategies from `config.yml`:
+
+```bash
+# Process all images from config.preprocess.input_dir
+docs2synth qa batch
+
+# Process specific directory
+docs2synth qa batch data/raw/my_documents/
+
+# Process single image
+docs2synth qa batch data/images/document.png
+
+# Use specific output directory and processor
+docs2synth qa batch data/images/ \
+  --output-dir data/processed/ \
+  --processor docling
+```
+
+**What it does:**
+1. Reads image files from input path
+2. Finds corresponding preprocessed JSON files
+3. Generates QA pairs for each text object using ALL configured strategies
+4. Saves results back to JSON files with "qa" field added
+
+**Example Output:**
+```
+Input: data/raw/my_documents/
+Output dir: data/processed/
+Processor: docling
+Strategies from config.yml: semantic, layout_aware
+
+Processing document_001.png...
+  Generated 12 QA pairs
+
+Processing document_002.png...
+  Generated 8 QA pairs
+
+Done! Processed 2 files, 45 objects, generated 20 questions
+```
+
+### Clean QA Pairs
+
+Remove generated QA pairs from JSON outputs:
+
+```bash
+# Clean all files from config.preprocess.output_dir
+docs2synth qa clean
+
+# Clean specific directory
+docs2synth qa clean data/processed/dev
+
+# Clean specific JSON file
+docs2synth qa clean data/processed/dev/document_docling.json
+
+# Clean by image path
+docs2synth qa clean data/images/document.png
+```
+
+---
+
+## QA Verification Commands
+
+Automatically verify the quality of generated QA pairs.
+
+### List Available Verifiers
+
+```bash
+docs2synth verify list
+```
+
+**Output:**
+```
+Available verification strategies:
+  - meaningful
+  - correctness
+```
+
+### Verify Single Document
+
+Verify QA pairs in a single JSON file:
+
+```bash
+# Using JSON file
+docs2synth verify run data/processed/dev/document_docling.json
+
+# Using image file
+docs2synth verify run data/images/document.png
+
+# Use specific verifier only
+docs2synth verify run data/processed/document.json --verifier-type meaningful
+```
+
+**Output:**
+```
+Done! Processed 23 objects, verified 18 QA pairs, 15 passed all verifiers
+```
+
+### Batch Verification
+
+Verify QA pairs in multiple JSON files:
+
+```bash
+# Verify all files from config.preprocess.output_dir
+docs2synth verify batch
+
+# Verify specific directory
+docs2synth verify batch data/processed/dev
+
+# Verify single file
+docs2synth verify batch data/processed/dev/document.json
+
+# Use specific verifier only
+docs2synth verify batch --verifier-type meaningful
+
+# Specify image search directories
+docs2synth verify batch --image-dir data/images --image-dir data/raw
+```
+
+**Output:**
+```
+Input: data/processed/dev
+Verifiers: meaningful, correctness
+Image search dirs: data/raw/my_documents/
+
+Processing document_001_docling.json...
+Processing document_002_docling.json...
+
+Done! Processed 10 files, 234 objects, verified 187 QA pairs
+Pass rate: 156/187 (83.4%) passed all verifiers
+```
+
+### Clean Verification Results
+
+Remove verification results from JSON outputs:
+
+```bash
+# Clean all files
+docs2synth verify clean
+
+# Clean specific directory
+docs2synth verify clean data/processed/dev
+
+# Clean specific file
+docs2synth verify clean data/processed/dev/document_docling.json
+```
+
+---
+
+## Human Annotation Commands
+
+Launch interactive interface for manual QA pair annotation.
+
+### Launch Annotation Tool
+
+```bash
+# Launch with default settings (from config)
+docs2synth annotate
+
+# Launch with specific directory
+docs2synth annotate data/processed/dev
+
+# Specify custom image directory
+docs2synth annotate data/processed/dev --image-dir data/images
+
+# Use custom port
+docs2synth annotate --port 8502
+```
+
+**Access:** Opens at `http://localhost:8501`
+
+**Features:**
+- Visual document display with bounding boxes
+- Review automatic verifier results
+- Manual approve/reject QA pairs
+- Add explanation notes
+- Progress tracking and statistics
+- Navigate between documents and QA pairs
+
+---
+
+## Retriever Training Commands
+
+Train custom document retriever models on annotated QA pairs.
+
+### Preprocess Training Data
+
+Convert annotated JSON files into training format:
+
+```bash
+# Use defaults from config
+docs2synth retriever preprocess
+
+# Specify all parameters
+docs2synth retriever preprocess \
+  --json-dir data/processed/ \
+  --image-dir data/raw/my_documents/ \
+  --output data/retriever/preprocessed_train.pkl \
+  --processor docling \
+  --batch-size 8 \
+  --max-length 512 \
+  --num-objects 50 \
+  --require-all-verifiers
+```
+
+**Parameters:**
+- `--json-dir`: Directory with processed JSON files (default: config.preprocess.output_dir)
+- `--image-dir`: Directory with images (default: config.preprocess.input_dir)
+- `--output`: Output pickle file path
+- `--processor`: Processor name to filter JSON files (default: docling)
+- `--batch-size`: Training batch size (default: 8)
+- `--max-length`: Maximum sequence length (default: 512)
+- `--num-objects`: Max objects per document (default: 50)
+- `--require-all-verifiers`: Only include QA pairs passing all verifiers (default: true)
+
+**Output:**
+```
+Preprocessing JSON QA pairs → DataLoader pickle...
+  JSON directory: data/processed/
+  Image directory: data/raw/my_documents/
+  Output: data/retriever/preprocessed_train.pkl
+  Processor: docling
+  Batch size: 8
+  Max sequence length: 512
+  Max objects: 50
+  Require all verifiers: True
+
+✓ Preprocessing complete!
+  Saved: data/retriever/preprocessed_train.pkl
+  QA pairs: 1,234
+  Batches: 155
+
+  Use with:
+    docs2synth retriever train --data-path data/retriever/preprocessed_train.pkl
+```
+
+### Train Retriever Model
+
+```bash
+# Basic training (uses config defaults)
+docs2synth retriever train --mode standard --lr 1e-5 --epochs 10
+
+# With all options
+docs2synth retriever train \
+  --data-path data/retriever/preprocessed_train.pkl \
+  --val-data-path data/retriever/preprocessed_val.pkl \
+  --output-dir models/retriever/checkpoints/ \
+  --mode standard \
+  --base-model microsoft/layoutlmv3-base \
+  --lr 1e-5 \
+  --epochs 10 \
+  --batch-size 8 \
+  --save-every 2 \
+  --device cuda
+
+# Resume from checkpoint
+docs2synth retriever train \
+  --resume models/retriever/checkpoints/checkpoint_epoch_5.pth \
+  --mode standard
+
+# Use different base model
+docs2synth retriever train \
+  --base-model microsoft/layoutlmv3-large \
+  --mode layout \
+  --lr 1e-5
+```
+
+**Training Modes:**
+- `standard`: Standard span-based QA training
+- `layout`: Layout-aware training with grid representations
+- `layout-gemini`: Gemini variant with grid representations
+- `layout-coarse-grained`: Coarse-grained training
+- `pretrain-layout`: Layout pretraining using grid embeddings
+
+**Output:**
+```
+Training retriever model in 'standard' mode...
+  Base model: microsoft/layoutlmv3-base
+  Data: data/retriever/preprocessed_train.pkl
+  Output: models/retriever/checkpoints/
+  Learning rate: 1e-5
+  Epochs: 10
+  Device: cuda:0 (auto-detected: NVIDIA GeForce RTX 3090)
+
+Loading model...
+  Creating custom QA model from HuggingFace: microsoft/layoutlmv3-base
+
+Epoch 1/10
+  Train ANLS: 0.7234 | Train Loss: 0.4567
+  Val ANLS: 0.6891 | Val Loss: 0.5123
+  Saved checkpoint: models/retriever/checkpoints/checkpoint_epoch_1.pth
+
+...
+
+✓ Training complete!
+  Final model saved: models/retriever/final_model.pth
+  Best ANLS: 0.8456
+  Checkpoints saved in: models/retriever/checkpoints/
+```
+
+### Validate Retriever Model
+
+Evaluate trained model performance:
+
+```bash
+# Auto-discover model and data from config
+docs2synth retriever validate
+
+# Specify model and data explicitly
+docs2synth retriever validate \
+  --model models/retriever/final_model.pth \
+  --data data/retriever/preprocessed_val.pkl
+
+# With custom output directory
+docs2synth retriever validate \
+  --model models/retriever/final_model.pth \
+  --data data/retriever/preprocessed_val.pkl \
+  --output models/retriever/validation_reports/ \
+  --mode standard \
+  --device cuda
+```
+
+**Output:**
+```
+Validating retriever training results...
+  Model: models/retriever/final_model.pth
+  Data:  data/retriever/preprocessed_val.pkl
+  Mode:  standard
+
+✓ Evaluation complete
+    ANLS: 0.8234 | Loss: 0.3456
+
+======================================================================
+VALIDATION RESULTS
+======================================================================
+
+ANLS Score:
+  Mean:            0.8234
+  Std:             0.1567
+  Median:          0.8456
+  Perfect matches: 45 (23.4%)
+  Zero matches:    12 (6.2%)
+
+✅ Empty predictions: 3 (1.6%) - Good
+✅ Prediction diversity: 156 unique (81.2%) - Good
+
+OUTPUT FILES
+  Detailed analysis: models/retriever/validation_reports/detailed_analysis.txt
+  Metrics plot:      models/retriever/validation_reports/validation_metrics.png
+```
+
+---
+
+## RAG Deployment Commands
+
+Deploy retrieval-augmented generation systems.
+
+### List RAG Strategies
+
+```bash
+docs2synth rag strategies
+```
+
+**Output:**
+```
+Available RAG strategies:
+- naive
+- iterative
+```
+
+### Ingest Documents
+
+Index documents into the vector store:
+
+```bash
+# Ingest from config.preprocess.output_dir
+docs2synth rag ingest
+
+# Specify directory and processor
+docs2synth rag ingest \
+  --processed-dir data/processed/ \
+  --processor docling \
+  --include-context
+```
+
+**Output:**
+```
+Ingested 1,234 document chunks into the vector store.
+```
+
+### Query RAG System
+
+Ask questions using the RAG system:
+
+```bash
+# Basic query
+docs2synth rag run -q "What is the total amount on invoice INV-2024-001?"
+
+# Use specific strategy
+docs2synth rag run \
+  -s iterative \
+  -q "What is the total amount?"
+
+# Show iteration details
+docs2synth rag run \
+  -s iterative \
+  -q "What is the invoice date?" \
+  --show-iterations
+```
+
+**Output:**
+```
+Final answer:
+The total amount on invoice INV-2024-001 is $1,234.56
+
+Iterations:
+Step 1
+  Answer: The total amount is $1,234.56
+  Retrieved context:
+    - score=0.891 source=data/processed/invoice_docling.json object_id=obj_23
+```
+
+### Launch RAG Demo App
+
+Start interactive Streamlit interface:
+
+```bash
+# Launch with defaults
+docs2synth rag app
+
+# Custom host and port
+docs2synth rag app --host localhost --port 8501
+
+# Headless mode (no browser)
+docs2synth rag app --no-browser
+```
+
+**Access:** Opens at `http://localhost:8501`
+
+### Reset Vector Store
+
+Clear all indexed documents:
+
+```bash
+docs2synth rag reset
+```
+
+**Note:** This requires confirmation prompt.
+
 ---
 
 ## Common Patterns
@@ -893,7 +1358,10 @@ docs2synth preprocess document.png --device cpu
 
 ## See Also
 
-- [QA Generation Workflow](workflow/qa-generation.md)
+- [Complete Workflow Guide](workflow/complete-workflow.md) - End-to-end workflow from documents to RAG deployment
 - [Document Processing Workflow](workflow/document-processing.md)
+- [QA Generation Workflow](workflow/qa-generation.md)
+- [Retriever Training Workflow](workflow/retriever-training.md)
+- [RAG Path Workflow](workflow/rag-path.md)
 - [API Reference](api-reference.md)
 - [MCP Integration](mcp-integration.md)
