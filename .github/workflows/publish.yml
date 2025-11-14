@@ -1,0 +1,109 @@
+name: Publish to PyPI
+
+on:
+  # Trigger on version tags (e.g., v0.1.0, v1.2.3)
+  push:
+    tags:
+      - 'v*'
+
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      publish_to:
+        description: 'Publish to (testpypi/pypi/both)'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+          - testpypi
+          - pypi
+          - both
+
+jobs:
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install build tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Build package
+      run: python -m build
+
+    - name: Check package
+      run: twine check dist/*
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Run if: manual dispatch with testpypi/both OR tag push (always test first)
+    if: |
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.publish_to == 'testpypi' || github.event.inputs.publish_to == 'both')) ||
+      github.event_name == 'push'
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/docs2synth
+
+    permissions:
+      id-token: write  # For trusted publishing
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+    - name: Publish to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        # If using API token instead of trusted publishing:
+        # password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build, publish-testpypi]
+    runs-on: ubuntu-latest
+    # Run if: manual dispatch with pypi/both OR tag push AND testpypi succeeded
+    if: |
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.publish_to == 'pypi' || github.event.inputs.publish_to == 'both')) ||
+      (github.event_name == 'push' && needs.publish-testpypi.result == 'success')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/docs2synth
+
+    permissions:
+      id-token: write  # For trusted publishing
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      # If using API token instead of trusted publishing:
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
