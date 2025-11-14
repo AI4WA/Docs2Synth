@@ -138,6 +138,20 @@ graph LR
     F --> G[RAG Deployment]
 ```
 
+### 🚀 Quick Start: Automated Pipeline
+
+Run the complete end-to-end pipeline with a single command:
+
+```bash
+docs2synth run
+```
+
+This automatically chains: preprocessing → QA generation → verification → retriever training → validation → RAG deployment.
+
+### Manual Step-by-Step Workflow
+
+For more control, run each step individually:
+
 ```bash
 # 1. Preprocess documents
 docs2synth preprocess data/raw/my_documents/
