@@ -1,8 +1,0 @@
-# CPU-only PyTorch installation
-# This file defines the top-level PyTorch dependencies for CPU-only systems
-# Use: uv pip compile requirements-cpu.in -o requirements-cpu.txt
-
---index-url https://download.pytorch.org/whl/cpu
-torch
-torchvision
-torchaudio

@@ -104,18 +104,16 @@ REM Activate virtual environment
 echo [INFO] Activating virtual environment...
 call .venv\Scripts\activate.bat
 
-REM Sync dependencies with uv (excluding torch which will be installed separately)
-echo [INFO] Syncing dependencies with uv (all extras)...
-uv sync --all-extras
-
-REM Install PyTorch based on GPU detection
-echo [INFO] Installing PyTorch...
+REM Install package with appropriate extras
 IF "!INSTALL_GPU!"=="true" (
-    echo [INFO] Installing GPU-enabled PyTorch from requirements-gpu.in...
-    uv pip install -r requirements-gpu.in
+    echo [INFO] Installing GPU-enabled PyTorch (CUDA 12.8^)...
+    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+    echo [INFO] Installing Docs2Synth with GPU extras and dev tools...
+    uv pip install -e ".[gpu,dev]"
 ) ELSE (
-    echo [INFO] Installing CPU-only PyTorch from requirements-cpu.in...
-    uv pip install -r requirements-cpu.in
+    echo [INFO] Installing Docs2Synth with CPU extras and dev tools...
+    uv pip install -e ".[cpu,dev]"
 )
 
 REM Uninstall paddlex if it was installed

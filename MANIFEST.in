@@ -3,12 +3,6 @@ include README.md
 include LICENSE
 include config.example.yml
 
-# Include requirement files for reference
-include requirements-cpu.txt
-include requirements-gpu.txt
-include requirements-cpu.in
-include requirements-gpu.in
-
 # Exclude unnecessary files
 global-exclude __pycache__
 global-exclude *.py[co]
