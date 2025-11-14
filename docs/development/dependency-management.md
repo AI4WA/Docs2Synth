@@ -35,7 +35,7 @@ cpu = [
 # GPU installation (excludes PyTorch, includes all features + MCP)
 gpu = [
     "vllm>=0.11.0",  # GPU-only
-    "faiss-gpu>=1.8.0",
+    "faiss-cpu>=1.8.0",
     "transformers>=4.30.0",
     # ... all ML/OCR/MCP dependencies
 ]

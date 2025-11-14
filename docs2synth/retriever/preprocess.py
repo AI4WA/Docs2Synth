@@ -206,16 +206,23 @@ class PreprocessedQADataset(Dataset):
             return None
 
         # 6. Build result dictionary
+        # Get bbox from encoding or create zeros
+        bbox_tensor = encoding.get(
+            "bbox",
+            torch.zeros_like(encoding["input_ids"].squeeze(0))
+            .unsqueeze(-1)
+            .repeat(1, 4),
+        ).squeeze(0)
+
+        # Ensure bbox is properly normalized to 0-1000 range for LayoutLMv3
+        # LayoutLMv3 expects bbox coordinates in range [0, 1000]
+        bbox_tensor = torch.clamp(bbox_tensor, 0, 1000).long()
+
         result = {
             "input_ids": encoding["input_ids"].squeeze(0),
             "attention_mask": encoding["attention_mask"].squeeze(0),
             "pixel_values": encoding["pixel_values"].squeeze(0),
-            "bbox": encoding.get(
-                "bbox",
-                torch.zeros_like(encoding["input_ids"].squeeze(0))
-                .unsqueeze(-1)
-                .repeat(1, 4),
-            ).squeeze(0),
+            "bbox": bbox_tensor,
             "start_id": torch.tensor(start_idx[0], dtype=torch.long),
             "end_id": torch.tensor(end_idx[0], dtype=torch.long),
         }
@@ -250,7 +257,7 @@ class PreprocessedQADataset(Dataset):
             qa: QA pair dictionary with json_file path
 
         Returns:
-            Dictionary with 'words' and 'boxes' lists, or None if not found
+            Dictionary with 'words' and 'boxes' lists (boxes normalized to 0-1000), or None if not found
         """
         import json
 
@@ -266,6 +273,17 @@ class PreprocessedQADataset(Dataset):
             # JSON has structure: {"objects": {"0": {"text": "...", "bbox": [...]}, ...}}
             words = []
             boxes = []
+
+            # Get image dimensions for normalization
+            # Handle both dict and string context formats
+            context = data.get("context", {})
+            if isinstance(context, dict):
+                image_width = context.get("size", {}).get("width", 1000)
+                image_height = context.get("size", {}).get("height", 1000)
+            else:
+                # Context is a string (actual OCR text), use default dimensions
+                image_width = 1000
+                image_height = 1000
 
             if "objects" in data:
                 # Sort by object ID to maintain reading order
@@ -283,7 +301,20 @@ class PreprocessedQADataset(Dataset):
                         for word in text_words:
                             words.append(word)
                             if len(bbox) == 4:
-                                boxes.append(bbox)
+                                # Normalize bbox to 0-1000 range for LayoutLMv3
+                                # bbox format is [x0, y0, x1, y1]
+                                normalized_bbox = [
+                                    int((bbox[0] / image_width) * 1000),
+                                    int((bbox[1] / image_height) * 1000),
+                                    int((bbox[2] / image_width) * 1000),
+                                    int((bbox[3] / image_height) * 1000),
+                                ]
+                                # Clamp to valid range
+                                normalized_bbox = [
+                                    max(0, min(1000, coord))
+                                    for coord in normalized_bbox
+                                ]
+                                boxes.append(normalized_bbox)
                             else:
                                 boxes.append([0, 0, 0, 0])
 
@@ -470,6 +501,13 @@ def create_preprocessed_dataloader(
 
     from docs2synth.retriever.dataset import load_verified_qa_pairs
 
+    # Validate and set default batch_size if None
+    if batch_size is None:
+        batch_size = 8
+        logger.warning(f"batch_size was None, using default: {batch_size}")
+    elif batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got: {batch_size}")
+
     logger.info("=" * 70)
     logger.info("Starting preprocessing: JSON → DataLoader")
     logger.info("=" * 70)
@@ -508,38 +546,47 @@ def create_preprocessed_dataloader(
     )
     logger.info("✓ Dataset created")
 
-    # 4. Create dataloader
-    logger.info(f"\n[4/5] Creating DataLoader (batch_size={batch_size})")
-    dataloader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=0,  # Use 0 for debugging, can increase later
-        collate_fn=collate_fn_filter_none,  # Filter None samples
-    )
-    logger.info("✓ DataLoader created")
+    # 4. Create dataloader configuration
+    logger.info(f"\n[4/5] Preparing dataset configuration (batch_size={batch_size})")
+    dataloader_config = {
+        "dataset": dataset,
+        "batch_size": batch_size,
+        "shuffle": True,
+        "num_workers": 0,  # Use 0 for debugging, can increase later
+        "collate_fn": collate_fn_filter_none,  # Filter None samples
+    }
+    logger.info("✓ Configuration prepared")
 
     # 5. Save to pickle
-    logger.info(f"\n[5/5] Saving DataLoader to {output_path}")
+    logger.info(f"\n[5/5] Saving dataset configuration to {output_path}")
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "wb") as f:
-        pickle.dump(dataloader, f)
+        pickle.dump(dataloader_config, f)
 
-    logger.info("✓ DataLoader saved successfully!")
+    logger.info("✓ Dataset configuration saved successfully!")
     logger.info("\n" + "=" * 70)
     logger.info("Preprocessing complete!")
     logger.info("=" * 70)
     logger.info(f"Output: {output_path}")
     logger.info(f"QA pairs: {len(qa_pairs)}")
     logger.info(f"Batch size: {batch_size}")
-    logger.info(f"Batches: {len(dataloader)}")
+    # Only calculate estimated batches if batch_size is valid
+    if batch_size is not None and batch_size > 0:
+        logger.info(
+            f"Estimated batches per epoch: {(len(qa_pairs) + batch_size - 1) // batch_size}"
+        )
+    else:
+        logger.warning(
+            "Batch size is None or invalid, cannot estimate batches per epoch"
+        )
     logger.info("\nUse with:")
     logger.info(f"  docs2synth retriever train --data-path {output_path}")
     logger.info("=" * 70)
 
-    return dataloader
+    # Return a fresh DataLoader for immediate use if needed
+    return DataLoader(**dataloader_config)
 
 
 def test_preprocessing(json_dir: Path, image_dir: Path, num_samples: int = 3):
