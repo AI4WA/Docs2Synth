@@ -449,6 +449,8 @@ After processing documents, you can:
 2. **[Train Retrievers](retriever-training.md)**: Train custom retrieval models on your data
 3. **[Build RAG Systems](rag-path.md)**: Integrate into retrieval-augmented generation pipelines
 
+For the complete end-to-end workflow, see the **[Complete Workflow Guide](complete-workflow.md)**.
+
 ## API Reference
 
 For detailed API documentation, see:

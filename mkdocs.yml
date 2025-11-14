@@ -157,6 +157,7 @@ extra_css:
 nav:
   - Home: index.md
   - Workflow:
+      - Complete Workflow Guide: workflow/complete-workflow.md
       - Document Processing: workflow/document-processing.md
       - QA Generation: workflow/qa-generation.md
       - Retriever Training: workflow/retriever-training.md

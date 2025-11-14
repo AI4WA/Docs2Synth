@@ -187,14 +187,60 @@ docs2synth qa generate "Context" "Target" --image doc.png
 
 [View Full CLI Reference →](cli-reference.md){ .md-button .md-button--primary }
 
-## Workflow
+## Complete End-to-End Workflow
 
-The typical Docs2Synth workflow follows these stages:
+The typical Docs2Synth workflow consists of these stages:
 
-1. **[Document Processing](workflow/document-processing.md)**: OCR and preprocessing
-2. **[QA Generation](workflow/qa-generation.md)**: Generate and verify question-answer pairs
-3. **[Retriever Training](workflow/retriever-training.md)**: Train custom retrieval models
-4. **[RAG Path](workflow/rag-path.md)**: Deploy without training using pre-built strategies
+```mermaid
+graph LR
+    A[Documents] --> B[Preprocess]
+    B --> C[QA Generation]
+    C --> D[Verification]
+    D --> E[Human Annotation]
+    E --> F[Retriever Training]
+    F --> G[RAG Deployment]
+```
+
+### Step-by-Step Guide
+
+1. **Setup Data Folder** - Organize documents and configure `config.yml`
+2. **[Document Processing](workflow/document-processing.md)** - Extract text and layout with OCR
+   ```bash
+   docs2synth preprocess data/raw/my_documents/
+   ```
+
+3. **[QA Generation](workflow/qa-generation.md)** - Generate question-answer pairs with LLMs
+   ```bash
+   docs2synth qa batch
+   ```
+
+4. **Verification** - Automatically verify QA quality
+   ```bash
+   docs2synth verify batch
+   ```
+
+5. **Human Annotation** - Manual review via Streamlit interface
+   ```bash
+   docs2synth annotate
+   ```
+
+6. **[Retriever Training](workflow/retriever-training.md)** - Train custom retrieval models
+   ```bash
+   docs2synth retriever preprocess
+   docs2synth retriever train --mode standard --lr 1e-5 --epochs 10
+   docs2synth retriever validate
+   ```
+
+7. **[RAG Deployment](workflow/rag-path.md)** - Deploy RAG system
+   ```bash
+   docs2synth rag ingest
+   docs2synth rag run -q "Your question"
+   docs2synth rag app
+   ```
+
+[**View Complete Workflow Guide →**](workflow/complete-workflow.md){ .md-button .md-button--primary }
+
+This comprehensive guide covers all steps from data preparation to RAG deployment with detailed examples, configuration options, and troubleshooting tips.
 
 ## Architecture
 

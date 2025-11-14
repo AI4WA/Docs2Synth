@@ -6,29 +6,76 @@
 
 **Docs2Synth** is a Python package aimed at helping you convert, synthesise and train a retriever for your document datasets.
 
-The workflow typically involves:
+## Quick Start Workflow
 
-- Document processing
-  - MinerU or Other OCR methods
-- Agent based QA generation
-  - QA Pair generation
-    - For now, given content, generate a question and answer
-    - Later we can extend to multiple page contexts in a single QA pair.
-  - Two step verification
-    - Meaningful verifier
-    - Correctness checker
-  - Human judgement
-    - Human quickly annotate keep/discard
-- Retriever training
-  - Train LayoutLMv3 as a retriever
-  - Extend to bert, etc
-- RAG Path
-  - Other out-of-box retriever strageties without training
-- Framework pipeline
-  - Combine all the above steps into a single pipeline and control flow based on parameters
-  - Benchmarking
-    - Retrieveral Hit@K Performance
-    - End to end latency metrics
+The typical Docs2Synth workflow consists of these stages:
+
+```
+Documents → Preprocess → QA Generation → Verification →
+Human Annotation → Retriever Training → RAG Deployment
+```
+
+### Complete Workflow Steps
+
+1. **Setup Data Folder**
+   - Organize documents in a dedicated directory
+   - Configure `config.yml` with paths and API keys
+
+2. **Preprocess Documents**
+   ```bash
+   # Single document or batch processing
+   docs2synth preprocess data/raw/my_documents/
+   ```
+   Extracts structured text and layout information using OCR (Docling, PaddleOCR, etc.)
+
+3. **Generate QA Pairs**
+   ```bash
+   # Batch generate using configured strategies
+   docs2synth qa batch
+   ```
+   Uses LLMs to generate question-answer pairs for each text object
+
+4. **Verify QA Quality**
+   ```bash
+   # Automatic verification with meaningful and correctness checkers
+   docs2synth verify batch
+   ```
+   Validates generated QA pairs using configured verifiers
+
+5. **Human Annotation**
+   ```bash
+   # Launch interactive annotation interface
+   docs2synth annotate
+   ```
+   Manual review and approval of QA pairs via Streamlit UI
+
+6. **Train Retriever Model**
+   ```bash
+   # Preprocess annotated data
+   docs2synth retriever preprocess
+
+   # Train the model
+   docs2synth retriever train --mode standard --lr 1e-5 --epochs 10
+
+   # Validate results
+   docs2synth retriever validate
+   ```
+   Train custom LayoutLMv3-based retriever on annotated QA pairs
+
+7. **Deploy RAG System**
+   ```bash
+   # Ingest documents into vector store
+   docs2synth rag ingest
+
+   # Query via CLI
+   docs2synth rag run -q "Your question here"
+
+   # Launch interactive demo
+   docs2synth rag app
+   ```
+   Deploy retrieval-augmented generation system with trained retriever
+
+For detailed instructions, see the [Complete Workflow Guide](https://ai4wa.github.io/Docs2Synth/workflow/complete-workflow/).
 
 ## Installation
 
@@ -367,7 +414,7 @@ Full documentation is available at: **https://ai4wa.github.io/Docs2Synth/**
 
 Topics covered:
 - [Quick Start Guide](https://ai4wa.github.io/Docs2Synth/)
-- [CLI Reference](https://ai4wa.github.io/Docs2Synth/cli-reference/) - Complete command-line interface documentation with examples
+- [CLI Reference](https://ai4wa.github.io/Docs2Synth/cli-reference/)
 - [Document Processing](https://ai4wa.github.io/Docs2Synth/workflow/document-processing/)
 - [QA Generation](https://ai4wa.github.io/Docs2Synth/workflow/qa-generation/)
 - [Retriever Training](https://ai4wa.github.io/Docs2Synth/workflow/retriever-training/)
