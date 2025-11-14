@@ -94,29 +94,23 @@ FROM system-${BUILD_TYPE} AS final
 # Re-declare build arg for this stage
 ARG BUILD_TYPE=cpu
 
-# Copy all requirements files
-COPY requirements*.txt ./
-
 # Copy source code
 COPY pyproject.toml README.md ./
 COPY docs2synth/ ./docs2synth/
 COPY tests/ ./tests/
 COPY scripts/ ./scripts/
 
-# Install Python dependencies
-# Select the appropriate torch requirements based on BUILD_TYPE
+# Install Python dependencies based on BUILD_TYPE
 RUN pip install --upgrade pip && \
     if [ "$BUILD_TYPE" = "gpu" ]; then \
         echo "Installing PyTorch with CUDA 11.8 support"; \
         pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118; \
-    elif [ -f "requirements-${BUILD_TYPE}.txt" ]; then \
-        echo "Using requirements-${BUILD_TYPE}.txt for PyTorch"; \
-        pip install -r "requirements-${BUILD_TYPE}.txt"; \
+        echo "Installing Docs2Synth with GPU extras"; \
+        pip install -e ".[gpu,dev]"; \
     else \
-        echo "Using requirements-cpu.txt for PyTorch (fallback)"; \
-        pip install -r requirements-cpu.txt; \
-    fi && \
-    pip install -e ".[dev]"
+        echo "Installing Docs2Synth with CPU extras"; \
+        pip install -e ".[cpu,dev]"; \
+    fi
 
 # Create directories for data, logs, and PaddleX cache
 # Set permissions to allow any user to write (for non-root users)
