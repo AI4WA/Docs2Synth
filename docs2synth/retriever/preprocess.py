@@ -227,14 +227,38 @@ class PreprocessedQADataset(Dataset):
             "end_id": torch.tensor(end_idx[0], dtype=torch.long),
         }
 
-        seq_len = result["input_ids"].size(0)
+        # Validate input_ids shape
+        input_ids = result["input_ids"]
+        if input_ids is None or input_ids.numel() == 0:
+            logger.warning(
+                f"Empty input_ids for question: {qa.get('question', 'N/A')[:50]}"
+            )
+            return None
+
+        seq_len = input_ids.size(0)
+        if seq_len is None or seq_len == 0:
+            logger.warning(
+                f"Invalid seq_len ({seq_len}) for question: {qa.get('question', 'N/A')[:50]}"
+            )
+            return None
 
         # 7. Add additional fields (simplified for Stage 1)
+        # Handle token_type_ids - may not exist or may have wrong shape
+        token_type_ids = encoding.get("token_type_ids")
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids.squeeze(0)
+            # Ensure it has the correct length
+            if token_type_ids.size(0) != seq_len:
+                logger.debug(
+                    f"token_type_ids length mismatch, creating zeros: {token_type_ids.size(0)} != {seq_len}"
+                )
+                token_type_ids = torch.zeros(seq_len, dtype=torch.long)
+        else:
+            token_type_ids = torch.zeros(seq_len, dtype=torch.long)
+
         result.update(
             {
-                "token_type_ids": encoding.get(
-                    "token_type_ids", torch.zeros(seq_len, dtype=torch.long)
-                ).squeeze(0),
+                "token_type_ids": token_type_ids,
                 "token_objt_ids": torch.zeros(seq_len, dtype=torch.long),
                 "visual_feat": torch.zeros(
                     self.num_objects, DEFAULT_HIDDEN_SIZE, dtype=torch.float
