@@ -181,10 +181,86 @@ class TrainingValidator:
         Returns:
             Dictionary with analysis results
         """
+        # Check for empty inputs
+        if not pred_texts or not gt_texts:
+            logger.warning(
+                "Empty predictions or ground truth provided, returning empty analysis"
+            )
+            return {
+                "anls": {
+                    "mean": 0.0,
+                    "std": 0.0,
+                    "median": 0.0,
+                    "min": 0.0,
+                    "max": 0.0,
+                    "perfect_matches": 0,
+                    "zero_matches": 0,
+                    "quartiles": {"q25": 0.0, "q75": 0.0},
+                },
+                "error_patterns": {
+                    "empty_predictions": len(pred_texts) if pred_texts else 0,
+                    "empty_percentage": 100.0 if not pred_texts else 0.0,
+                    "partial_matches": 0,
+                    "partial_percentage": 0.0,
+                },
+                "by_length": {
+                    "short": {"count": 0, "mean_anls": 0.0},
+                    "medium": {"count": 0, "mean_anls": 0.0},
+                    "long": {"count": 0, "mean_anls": 0.0},
+                },
+                "worst_predictions": [],
+                "best_predictions": [],
+                "length": {
+                    "pred_mean": 0.0,
+                    "gt_mean": 0.0,
+                    "pred_std": 0.0,
+                    "gt_std": 0.0,
+                    "pred_max": 0,
+                    "gt_max": 0,
+                },
+            }
+
         analysis = {}
 
         # 1. ANLS score distribution
         anls_scores = [calculate_anls(p, g) for p, g in zip(pred_texts, gt_texts)]
+
+        # Additional check: ensure anls_scores is not empty after calculation
+        if not anls_scores:
+            logger.warning("No ANLS scores calculated, returning empty analysis")
+            return {
+                "anls": {
+                    "mean": 0.0,
+                    "std": 0.0,
+                    "median": 0.0,
+                    "min": 0.0,
+                    "max": 0.0,
+                    "perfect_matches": 0,
+                    "zero_matches": 0,
+                    "quartiles": {"q25": 0.0, "q75": 0.0},
+                },
+                "error_patterns": {
+                    "empty_predictions": len(pred_texts),
+                    "empty_percentage": 100.0,
+                    "partial_matches": 0,
+                    "partial_percentage": 0.0,
+                },
+                "by_length": {
+                    "short": {"count": 0, "mean_anls": 0.0},
+                    "medium": {"count": 0, "mean_anls": 0.0},
+                    "long": {"count": 0, "mean_anls": 0.0},
+                },
+                "worst_predictions": [],
+                "best_predictions": [],
+                "length": {
+                    "pred_mean": 0.0,
+                    "gt_mean": 0.0,
+                    "pred_std": 0.0,
+                    "gt_std": 0.0,
+                    "pred_max": 0,
+                    "gt_max": 0,
+                },
+            }
         analysis["anls"] = {
             "mean": np.mean(anls_scores),
             "std": np.std(anls_scores),
@@ -205,9 +281,13 @@ class TrainingValidator:
 
         analysis["error_patterns"] = {
             "empty_predictions": empty_preds,
-            "empty_percentage": empty_preds / len(pred_texts) * 100,
+            "empty_percentage": (
+                (empty_preds / len(pred_texts) * 100) if pred_texts else 0.0
+            ),
             "partial_matches": partial_matches,
-            "partial_percentage": partial_matches / len(anls_scores) * 100,
+            "partial_percentage": (
+                (partial_matches / len(anls_scores) * 100) if anls_scores else 0.0
+            ),
         }
 
         # 3. Error analysis by answer length
@@ -249,12 +329,12 @@ class TrainingValidator:
         pred_lengths = [len(p.split()) for p in pred_texts]
         gt_lengths = [len(g.split()) for g in gt_texts]
         analysis["length"] = {
-            "pred_mean": np.mean(pred_lengths),
-            "gt_mean": np.mean(gt_lengths),
-            "pred_std": np.std(pred_lengths),
-            "gt_std": np.std(gt_lengths),
-            "pred_max": np.max(pred_lengths),
-            "gt_max": np.max(gt_lengths),
+            "pred_mean": np.mean(pred_lengths) if pred_lengths else 0.0,
+            "gt_mean": np.mean(gt_lengths) if gt_lengths else 0.0,
+            "pred_std": np.std(pred_lengths) if pred_lengths else 0.0,
+            "gt_std": np.std(gt_lengths) if gt_lengths else 0.0,
+            "pred_max": np.max(pred_lengths) if pred_lengths else 0,
+            "gt_max": np.max(gt_lengths) if gt_lengths else 0,
         }
 
         # 7. Save detailed report
