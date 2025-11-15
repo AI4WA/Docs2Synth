@@ -2,8 +2,13 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["docs2synth", "docs2synth.datasets", "docs2synth.qa", "docs2synth.retriever", "docs2synth.utils", "docs2synth.rag"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["docs2synth*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"docs2synth.mcp.static" = ["*"]
 
 [project]
 name = "docs2synth"
