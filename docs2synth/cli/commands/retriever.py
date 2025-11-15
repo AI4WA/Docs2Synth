@@ -909,6 +909,11 @@ def _print_validation_summary(analysis: Dict[str, Any], pred_texts: List[str]) -
         analysis: Analysis results dictionary
         pred_texts: List of predicted texts
     """
+    # Check for empty predictions
+    if not pred_texts:
+        click.echo(click.style("\n⚠ Warning: No predictions to analyze", fg="yellow"))
+        return
+
     # ANLS Score
     click.echo("\n" + click.style("ANLS Score:", bold=True))
     anls = analysis["anls"]
@@ -916,8 +921,10 @@ def _print_validation_summary(analysis: Dict[str, Any], pred_texts: List[str]) -
     click.echo(f"  Std:             {anls['std']:.4f}")
     click.echo(f"  Median:          {anls['median']:.4f}")
     click.echo(f"  Range:           [{anls['min']:.4f}, {anls['max']:.4f}]")
-    perfect_pct = anls["perfect_matches"] / len(pred_texts) * 100
-    zero_pct = anls["zero_matches"] / len(pred_texts) * 100
+    perfect_pct = (
+        (anls["perfect_matches"] / len(pred_texts) * 100) if pred_texts else 0.0
+    )
+    zero_pct = (anls["zero_matches"] / len(pred_texts) * 100) if pred_texts else 0.0
     click.echo(f"  Perfect matches: {anls['perfect_matches']} ({perfect_pct:.1f}%)")
     click.echo(f"  Zero matches:    {anls['zero_matches']} ({zero_pct:.1f}%)")
 
@@ -939,8 +946,13 @@ def _print_sanity_checks(checks: Dict[str, Any], pred_texts: List[str]) -> None:
     click.echo(click.style("SANITY CHECKS", fg="blue", bold=True))
     click.echo(click.style("=" * 70, fg="blue") + "\n")
 
+    # Check for empty predictions list
+    if not pred_texts:
+        click.echo(click.style("⚠ Warning: No predictions to check", fg="yellow"))
+        return
+
     # Check 1: Empty predictions
-    empty_ratio = checks["empty_predictions"] / len(pred_texts)
+    empty_ratio = checks["empty_predictions"] / len(pred_texts) if pred_texts else 0.0
     if empty_ratio < 0.05:
         status = click.style("✅", fg="green")
         msg = "Good"
@@ -955,7 +967,9 @@ def _print_sanity_checks(checks: Dict[str, Any], pred_texts: List[str]) -> None:
     )
 
     # Check 2: Prediction diversity
-    diversity_ratio = checks["unique_predictions"] / len(pred_texts)
+    diversity_ratio = (
+        checks["unique_predictions"] / len(pred_texts) if pred_texts else 0.0
+    )
     if diversity_ratio > 0.5:
         status = click.style("✅", fg="green")
         msg = "Good"
