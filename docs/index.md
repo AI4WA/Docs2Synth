@@ -91,16 +91,41 @@ Modular architecture with pluggable components. Easy customization of QA strateg
 
 ## Installation
 
-### From GitHub
+### PyPI Installation (Recommended)
+
+**CPU Version (includes all features + MCP server):**
+```bash
+pip install docs2synth[cpu]
+```
+
+**GPU Version (includes all features + MCP server):**
+```bash
+# Standard GPU installation (no vLLM)
+pip install docs2synth[gpu]
+
+# With vLLM for local LLM inference (requires CUDA GPU)
+# 1. Install PyTorch with CUDA first:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+# 2. Install docs2synth with vLLM:
+pip install docs2synth[gpu,vllm]
+
+# 3. Uninstall paddlex to avoid conflicts with vLLM:
+pip uninstall -y paddlex
+```
+
+!!! warning "vLLM and PaddleX Conflict"
+    PaddleX conflicts with vLLM. If you need vLLM support for local LLM inference, you **must** uninstall paddlex after installation: `pip uninstall -y paddlex`
+
+**Minimal Install (CLI only, no ML/MCP features):**
+```bash
+pip install docs2synth
+```
+
+### From GitHub (Development)
 
 ```bash
 pip install git+https://github.com/AI4WA/Docs2Synth.git
-```
-
-### From PyPI (once released)
-
-```bash
-pip install docs2synth
 ```
 
 ## Quick Start
