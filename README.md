@@ -231,9 +231,9 @@ If you use Docs2Synth in your research, please cite:
 
 ```bibtex
 @software{docs2synth2024,
-  title = {Docs2Synth: Document Processing and Retriever Training},
+  title = {Docs2Synth: A Synthetic Data Tuned Retriever Framework for \\ Scanned Visually Rich Documents Understanding},
   author = {AI4WA Team},
-  year = {2024},
+  year = {2025},
   url = {https://github.com/AI4WA/Docs2Synth}
 }
 ```
