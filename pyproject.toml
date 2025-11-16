@@ -137,6 +137,7 @@ gpu = [
 # Prerequisites:
 #   1. CUDA-capable GPU
 #   2. PyTorch with CUDA: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# Note: vLLM conflicts with paddlex. After installing, run: pip uninstall -y paddlex
 vllm = [
     "vllm>=0.11.0",  # High-performance LLM inference (requires CUDA PyTorch)
 ]
