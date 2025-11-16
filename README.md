@@ -64,11 +64,14 @@ pip install docs2synth[cpu]
 
 **GPU Version (includes all features + MCP server):**
 ```bash
-# First install PyTorch with CUDA support
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-
-# Then install Docs2Synth with GPU extras
+# Install with PyTorch CPU (upgrade to CUDA version if needed)
 pip install docs2synth[gpu]
+
+# Optional: Add vLLM support (requires CUDA GPU)
+# First install PyTorch with CUDA:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# Then install vLLM:
+pip install docs2synth[gpu,vllm]
 ```
 
 **Minimal Install (CLI only, no ML/MCP features):**

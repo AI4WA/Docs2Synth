@@ -90,12 +90,15 @@ cpu = [
 ]
 
 # GPU installation - Full featured GPU version with MCP server
-# Requires manual PyTorch GPU install first:
-# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-# Then: pip install docs2synth[gpu]
+# Note: This installs CPU versions of PyTorch. For GPU support:
+#   1. Install PyTorch GPU first: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+#   2. Then install: pip install docs2synth[gpu]
+#   3. For vLLM support: pip install docs2synth[gpu,vllm]
 gpu = [
-    # GPU-specific packages (PyTorch GPU should be pre-installed)
-    "vllm>=0.11.0",  # High-performance LLM inference (GPU only)
+    # PyTorch (CPU version from PyPI - users should install GPU version separately if needed)
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "torchaudio>=2.0.0",
     "faiss-cpu>=1.8.0",  # Using CPU version (faiss-gpu lacks Python 3.11+ support)
     # ML/Transformers
     "transformers>=4.30.0",
@@ -127,6 +130,15 @@ gpu = [
     "pyjwt[crypto]>=2.8.0",
     "httpx>=0.27.0",
     "sse-starlette>=2.0.0",
+]
+
+# vLLM support (optional, requires GPU and CUDA PyTorch pre-installed)
+# Install with: pip install docs2synth[gpu,vllm]
+# Prerequisites:
+#   1. CUDA-capable GPU
+#   2. PyTorch with CUDA: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+vllm = [
+    "vllm>=0.11.0",  # High-performance LLM inference (requires CUDA PyTorch)
 ]
 
 # Development tools
