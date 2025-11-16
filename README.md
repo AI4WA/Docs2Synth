@@ -64,15 +64,21 @@ pip install docs2synth[cpu]
 
 **GPU Version (includes all features + MCP server):**
 ```bash
-# Install with PyTorch CPU (upgrade to CUDA version if needed)
+# Standard GPU installation (no vLLM)
 pip install docs2synth[gpu]
 
-# Optional: Add vLLM support (requires CUDA GPU)
-# First install PyTorch with CUDA:
+# With vLLM for local LLM inference (requires CUDA GPU)
+# 1. Install PyTorch with CUDA first:
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-# Then install vLLM:
+
+# 2. Install docs2synth with vLLM:
 pip install docs2synth[gpu,vllm]
+
+# 3. Uninstall paddlex to avoid conflicts with vLLM:
+pip uninstall -y paddlex
 ```
+
+> **Note**: PaddleX conflicts with vLLM. If you need vLLM support, you must uninstall paddlex after installation.
 
 **Minimal Install (CLI only, no ML/MCP features):**
 ```bash
