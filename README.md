@@ -1,10 +1,13 @@
 # Docs2Synth
 
 [![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://ai4wa.github.io/Docs2Synth/)
+[![Video Tutorial](https://img.shields.io/badge/video-tutorial-red.svg)](https://youtu.be/K_2fwvH1Ef4)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-**Docs2Synth** converts, synthesizes, and trains retrievers for document datasets.
+**A Synthetic Data Tuned Retriever Framework for Visually Rich Documents Understanding**
+
+![Docs2Synth Framework](docs/assets/docs2synth_framework.png)
 
 ## Workflow
 
@@ -230,8 +233,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 If you use Docs2Synth in your research, please cite:
 
 ```bibtex
-@software{docs2synth2024,
-  title = {Docs2Synth: A Synthetic Data Tuned Retriever Framework for \\ Scanned Visually Rich Documents Understanding},
+@software{docs2synth2025,
+  title = {Docs2Synth: A Synthetic Data Tuned Retriever Framework for Visually Rich Documents Understanding},
   author = {AI4WA Team},
   year = {2025},
   url = {https://github.com/AI4WA/Docs2Synth}
