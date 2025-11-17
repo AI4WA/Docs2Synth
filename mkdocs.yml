@@ -155,6 +155,7 @@ extra_css:
 
 nav:
   - Home: index.md
+  - Video Tutorials: video.md
   - Workflow:
       - Complete Workflow Guide: workflow/complete-workflow.md
       - Document Processing: workflow/document-processing.md
