@@ -2,12 +2,14 @@
 
 <div style="text-align: center; margin: 2rem 0;">
   <h2 style="font-size: 2rem; font-weight: 700; margin-bottom: 1rem;">
-    Document Processing & Retriever Training Toolkit
+    A Synthetic Data Tuned Retriever Framework for Visually Rich Documents Understanding
   </h2>
   <p style="font-size: 1.2rem; color: var(--md-default-fg-color--light);">
     A complete pipeline for converting, synthesizing, and training retrievers for your document datasets
   </p>
 </div>
+
+![Docs2Synth Framework](assets/docs2synth_framework.png)
 
 ---
 

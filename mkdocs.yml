@@ -1,4 +1,4 @@
-site_name: Docs2Synth
+site_name: Docs2Synth by AI4WA
 site_description: A Python package for synthesizing and working with document data
 site_author: AI4WA
 site_url: https://ai4wa.github.io/Docs2Synth/
@@ -155,6 +155,7 @@ extra_css:
 
 nav:
   - Home: index.md
+  - Video Tutorials: video.md
   - Workflow:
       - Complete Workflow Guide: workflow/complete-workflow.md
       - Document Processing: workflow/document-processing.md
